@@ -417,6 +417,24 @@ mod tests {
     }
 
     #[test]
+    fn digest_matches_a_reference_computed_outside_this_crate() {
+        // Issue #2 adds a per-file inventory to the lockfile. It must not move
+        // the aggregate digest: adding information must never invalidate every
+        // existing lockfile. This value was computed independently (a separate
+        // Python implementation of sgdir-v1 over the same bytes) *before* the
+        // change, so it is a genuine regression anchor, not a snapshot of
+        // whatever the code happens to produce now.
+        let d = tmp("reference");
+        write(&d, "SKILL.md", "hello\n");
+        write(&d, "scripts/run.sh", "echo hi\n");
+        let (digest, _) = digest_dir(&d).unwrap_or_default();
+        assert_eq!(
+            digest.as_str(),
+            "sha256:aa78c78a63cec427720cd295cc00f21789fdf69530587c1c775db634b7dd5128"
+        );
+    }
+
+    #[test]
     fn digest_is_not_a_self_referential_loop() {
         // Writing the digest into the tree must not invalidate it, otherwise
         // `lock` could never converge.

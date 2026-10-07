@@ -77,6 +77,7 @@ fn skill_section(s: &crate::report::SkillReport, color: bool) -> String {
             "    {}\n\n",
             paint("no findings", Severity::Low, color, true)
         ));
+        o.push_str(&injection_note(s));
         o.push_str(&skipped_block(s));
         return o;
     }
@@ -130,8 +131,19 @@ fn skill_section(s: &crate::report::SkillReport, color: bool) -> String {
         o.push('\n');
     }
 
+    o.push_str(&injection_note(s));
     o.push_str(&skipped_block(s));
     o
+}
+
+/// A clean scan must not be read as "no prompt injection". The note is printed
+/// whenever no `PI_*` finding was produced, which is exactly when the reader is
+/// most likely to draw that conclusion (issue #8).
+fn injection_note(s: &crate::report::SkillReport) -> String {
+    if s.injection.findings > 0 {
+        return String::new();
+    }
+    format!("    note: {}\n\n", clean(&s.injection.caveat))
 }
 
 /// Display-sanitize on the way out. Idempotent, so it is safe to apply to
@@ -225,6 +237,7 @@ mod tests {
             capabilities: Default::default(),
             dependencies: vec![],
             counts: Counts::of(&findings),
+            injection: crate::report::InjectionCoverage::of(&findings),
             findings,
             skipped: vec![crate::models::SkippedFile {
                 file: "big.js".into(),
@@ -270,6 +283,25 @@ mod tests {
         let out = to_text_with(&r, false);
         assert!(out.contains("PASS"));
         assert!(out.contains("no findings"));
+    }
+
+    #[test]
+    fn a_clean_scan_states_the_injection_gap() {
+        // Issue #8: `no findings` must not be read as `no prompt injection`.
+        let r = Report::new(vec![skill("clean", vec![])]);
+        let out = to_text_with(&r, false);
+        assert!(out.contains("heuristic and incomplete"), "{out}");
+        assert!(out.contains("issue #8"), "{out}");
+    }
+
+    #[test]
+    fn the_injection_caveat_is_absent_once_an_injection_was_found() {
+        let r = Report::new(vec![skill(
+            "s",
+            vec![f(Severity::High, "PI_CONCEALMENT", 3)],
+        )]);
+        let out = to_text_with(&r, false);
+        assert!(!out.contains("heuristic and incomplete"), "{out}");
     }
     #[test]
     fn low_severity_is_review_not_block() {

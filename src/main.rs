@@ -125,7 +125,9 @@ enum Command {
         paths: Vec<PathBuf>,
 
         /// Lockfile path. Defaults to SKILLGUARD.lock beside each skill.
-        #[arg(long, short)]
+        ///
+        /// Long form only: the short `-o` belongs to the global `--output`.
+        #[arg(long)]
         out: Option<PathBuf>,
     },
 
@@ -142,6 +144,14 @@ enum Command {
         #[arg(long)]
         reason: String,
 
+        /// Record the approval even though the policy denies the skill.
+        ///
+        /// Required to override a `deny`: a denial is never rewritten into an
+        /// `allow`, the lockfile keeps `policy_decision: deny` and records the
+        /// violations the approval accepted.
+        #[arg(long)]
+        force: bool,
+
         #[arg(long, short)]
         lockfile: Option<PathBuf>,
     },
@@ -155,7 +165,8 @@ enum Command {
         #[arg(value_name = "FILE", required = true)]
         file: PathBuf,
 
-        #[arg(long, short)]
+        /// Long form only: the short `-o` belongs to the global `--output`.
+        #[arg(long)]
         out: Option<PathBuf>,
     },
 
@@ -199,8 +210,9 @@ fn main() -> ExitCode {
             path,
             reviewer,
             reason,
+            force,
             lockfile,
-        } => run_approve(path, reviewer, reason, lockfile.as_deref(), &cli),
+        } => run_approve(path, reviewer, reason, *force, lockfile.as_deref(), &cli),
         Command::Import { file, out } => run_import(file, out.as_deref(), &cli),
         Command::Rules { format } => run_rules(*format, &cli, color),
     };
@@ -430,6 +442,7 @@ fn run_lock(paths: &[PathBuf], out: Option<&std::path::Path>, cli: &Cli) -> Resu
                 repository: collected.provenance.repository.clone(),
                 commit: collected.provenance.commit.clone(),
                 content_digest: collected.digest.as_str().to_owned(),
+                files: collected.files.clone(),
                 legacy_digest: None,
                 version: None,
                 license: scan.license_declared.clone(),
@@ -475,6 +488,7 @@ fn run_approve(
     path: &std::path::Path,
     reviewer: &str,
     reason: &str,
+    force: bool,
     lockfile: Option<&std::path::Path>,
     cli: &Cli,
 ) -> Result<i32, String> {
@@ -492,13 +506,69 @@ fn run_approve(
         .map(Path::to_path_buf)
         .unwrap_or_else(|| default_lockfile(&dir));
 
-    let mut lock = skillguard::policy::Lockfile::load(&lock_path)?;
+    // A missing lockfile is fine (this is the first approval); an existing but
+    // malformed one is not, because silently replacing it would discard the
+    // audit trail.
+    let mut lock = if lock_path.exists() {
+        skillguard::policy::Lockfile::load(&lock_path)?
+    } else {
+        skillguard::policy::Lockfile::new()
+    };
     let digest = skillguard::hash::digest_dir(&dir)?.0;
 
     // Approve what is on disk *now*, not what the lockfile claims: the whole
     // point of an approval is that a human looked at these bytes.
     let scan = scan_skill(&dir);
     let collected = skillguard::hash::collect(&dir, scan.license_declared.as_deref())?;
+
+    // Evaluate the policy *before* anything is written. Recording `allow` for a
+    // skill the engine denies is not an audit trail; it is a record of the
+    // outcome with the reason stripped out (issue #7).
+    let policy_path = dir.join("SKILLGUARD.policy.yaml");
+    let policy = if policy_path.is_file() {
+        skillguard::policy::load_policy(&policy_path)?
+    } else {
+        skillguard::policy::Policy::new()
+    };
+    let decision = skillguard::policy::evaluate(
+        &policy,
+        &skillguard::policy::Subject {
+            name: &name,
+            capabilities: &scan.capabilities,
+            diff: &scan.diff,
+            findings: &scan.findings,
+            source: collected.provenance.source.as_deref(),
+            approved_digest: None,
+        },
+    );
+
+    // A human with context is the final authority, including over a CRITICAL
+    // denial -- but the override must be deliberate. A `deny` therefore needs
+    // `--force`, and either way the denial stays on the record. See
+    // docs/THREAT_MODEL.md T17 for the decision this settles.
+    if decision.decision.blocks() && !force {
+        let mut msg = format!("the policy denies {name}; refusing to record an approval");
+        for v in decision.violations.iter().take(5) {
+            msg.push_str(&format!(
+                "\n    {}  {:<18} {}",
+                v.severity,
+                v.capability,
+                text::sanitize_for_display(&v.detail)
+            ));
+        }
+        if decision.violations.is_empty() {
+            if let Some(w) = decision.worst_finding {
+                msg.push_str(&format!(
+                    "\n    {w}  finding at or above the deny threshold"
+                ));
+            }
+        }
+        msg.push_str(
+            "\n  Pass --force to record an approval that overrides the denial, or fix the skill.",
+        );
+        return Err(msg);
+    }
+
     let entry = lock
         .skills
         .entry(name.clone())
@@ -507,6 +577,7 @@ fn run_approve(
             repository: None,
             commit: None,
             content_digest: digest.as_str().to_owned(),
+            files: collected.files.clone(),
             legacy_digest: None,
             version: None,
             license: None,
@@ -520,6 +591,7 @@ fn run_approve(
         });
 
     entry.content_digest = digest.as_str().to_owned();
+    entry.files = collected.files.clone();
     entry.source = collected.provenance.source.clone();
     entry.repository = collected.provenance.repository.clone();
     entry.commit = collected.provenance.commit.clone();
@@ -528,12 +600,18 @@ fn run_approve(
     entry.observed_capabilities = scan.capabilities.clone();
     entry.mismatches = scan.diff.mismatches.clone();
     entry.observed_at = now_rfc3339();
+    // Never rewrite deny into allow: an approval is recorded *beside* the
+    // decision, not instead of it (issue #7, invariant I2).
+    entry.policy_decision = decision.decision;
     entry.approved_by = Some(skillguard::policy::Approval {
         reviewer: reviewer.to_owned(),
         reason: reason.to_owned(),
         approved_at: now_rfc3339(),
         content_digest: digest.as_str().to_owned(),
         note: None,
+        overrode_decision: (decision.decision != skillguard::policy::Decision::Allow)
+            .then_some(decision.decision),
+        overrode_violations: decision.violations.clone(),
     });
 
     lock.save(&lock_path)?;
@@ -541,6 +619,21 @@ fn run_approve(
     let mut o = String::new();
     o.push_str(&format!("\n  approved  {name}\n"));
     o.push_str(&format!("    digest:    {digest}\n"));
+    o.push_str(&format!(
+        "    decision:  {} (recorded, not rewritten)\n",
+        decision.decision.as_str()
+    ));
+    if !decision.violations.is_empty() {
+        o.push_str("    accepted (the approval overrides these):\n");
+        for v in &decision.violations {
+            o.push_str(&format!(
+                "      {}  {:<18} {}\n",
+                v.severity,
+                v.capability,
+                text::sanitize_for_display(&v.detail)
+            ));
+        }
+    }
     o.push_str(&format!("    file:      {}\n", lock_path.display()));
     o.push_str("\n  This approval is bound to that digest. If the content changes,\n");
     o.push_str("  the approval stops applying and must be granted again.\n\n");
@@ -575,6 +668,8 @@ fn run_import(
                 repository: None,
                 commit: e.commit.clone(),
                 content_digest: digest.clone(),
+                // Not recorded: a foreign lockfile has no per-file inventory.
+                files: vec![],
                 // Retained so the original tool's verification still works.
                 legacy_digest: e.digest.clone(),
                 version: e.version.clone(),

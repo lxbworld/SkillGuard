@@ -228,7 +228,23 @@ pub fn scan_walked(name: &str, walked: Walked) -> ScanOutcome {
                 if l.is_shebang() {
                     continue;
                 }
-                acc.add_text(&l.norm);
+                // A path whose access mode could not be resolved is surfaced as
+                // a finding rather than silently counted as a read (issue #3).
+                for note in acc.add_text(&l.norm) {
+                    findings.push(Finding::new(
+                        RuleId::from("FS_MODE_UNRESOLVED"),
+                        Severity::Info,
+                        Confidence::Low,
+                        f.rel.clone(),
+                        note,
+                        vec![Evidence {
+                            line: l.line,
+                            text: text::truncate_chars(&l.raw, 200),
+                            secondary: None,
+                            note: Some("unresolved-mode".to_owned()),
+                        }],
+                    ));
+                }
             }
         }
     }

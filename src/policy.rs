@@ -185,7 +185,7 @@ impl Decision {
 }
 
 /// One reason a decision went the way it did.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Violation {
     pub capability: String,
     pub detail: String,
@@ -428,15 +428,40 @@ pub struct Approval {
     /// Free-form record of what was waved through.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// The policy decision that was in force when this approval was granted.
+    ///
+    /// Recorded so the lockfile answers "what did this person accept", not just
+    /// "did someone approve". An approval never rewrites `deny` into `allow`:
+    /// the decision stays as the engine computed it, and this field is the
+    /// record that a human chose to proceed anyway (issue #7).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overrode_decision: Option<Decision>,
+    /// The violations that were on the record at approval time.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overrode_violations: Vec<Violation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct LockSkill {
     pub source: Option<String>,
     pub repository: Option<String>,
     pub commit: Option<String>,
     pub content_digest: String,
+    /// Per-file inventory as it stood when the lock was written.
+    ///
+    /// `content_digest` says *that* something changed; this says *what*. It is
+    /// additional information only: the aggregate digest is computed exactly as
+    /// before, so an existing lockfile keeps verifying and its digest does not
+    /// move (issue #2). `default` also means a lockfile written before this
+    /// field existed still loads, and `verify` reports "no inventory recorded"
+    /// rather than failing.
+    ///
+    /// Measured on a 10,000-file tree: `lock` 0.77 s and a 1.97 MB lockfile,
+    /// `verify` 0.27 s (release, one core). That is small enough that capping or
+    /// compressing would add a format decision for no benefit, so the inventory
+    /// is stored verbatim.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<crate::hash::FileDigest>,
     /// Digest from a foreign lockfile, kept so its own verification still works.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub legacy_digest: Option<String>,
@@ -464,8 +489,15 @@ pub struct LockSkill {
     pub observed_at: String,
 }
 
+/// The lockfile format is deliberately **open** to unknown fields.
+///
+/// `deny_unknown_fields` would mean an older binary refused to read a lockfile
+/// written by a newer one, which turns every additive schema change into a hard
+/// break for anyone who has not upgraded. For an audit artifact that people
+/// commit and share, forward compatibility is worth more than rejecting a typo
+/// (a typo here cannot silently disable a control the way it can in a policy
+/// file, which keeps `deny_unknown_fields`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Lockfile {
     pub lockfile_version: u32,
     pub generated_by: String,
@@ -668,18 +700,87 @@ impl VerifyReport {
     }
 }
 
-/// Best-effort explanation of which files differ from what was locked.
-fn describe_changes(files: &[crate::hash::FileDigest], entry: &LockSkill) -> Option<String> {
-    if entry.mismatches.is_empty() && entry.content_digest.is_empty() {
-        return None;
+/// Explain which files differ from what was locked.
+///
+/// A verification failure that cannot say *what* changed forces the reader to
+/// diff the tree by hand, which is the work the tool exists to remove
+/// (issue #2).
+fn describe_changes(actual: &[crate::hash::FileDigest], entry: &LockSkill) -> Option<String> {
+    if entry.files.is_empty() {
+        // A lockfile from before the per-file inventory existed, or one written
+        // by a tool that chose not to record it.
+        let total: u64 = actual.iter().map(|f| f.size).sum();
+        return Some(format!(
+            "content digest does not match, but this lockfile records no per-file \
+             inventory ({} file(s), {} byte(s) on disk); re-run `skillguard lock` to \
+             record one so the changed files can be named",
+            actual.len(),
+            total
+        ));
     }
-    let total: u64 = files.iter().map(|f| f.size).sum();
-    Some(format!(
-        "{} file(s), {} byte(s) on disk; the lockfile records no per-file digests, \
-         so the changed files cannot be named",
-        files.len(),
-        total
-    ))
+
+    let recorded: std::collections::BTreeMap<&str, &crate::hash::FileDigest> =
+        entry.files.iter().map(|f| (f.path.as_str(), f)).collect();
+    let on_disk: std::collections::BTreeMap<&str, &crate::hash::FileDigest> =
+        actual.iter().map(|f| (f.path.as_str(), f)).collect();
+
+    let mut added: Vec<String> = Vec::new();
+    let mut removed: Vec<String> = Vec::new();
+    let mut modified: Vec<String> = Vec::new();
+    for (path, f) in &on_disk {
+        match recorded.get(path) {
+            None => added.push((*path).to_owned()),
+            Some(r) if r.digest != f.digest || r.executable != f.executable => {
+                // The executable bit is hashed, so a mode change is a real
+                // change to the digest and must be named as one.
+                modified.push((*path).to_owned());
+            }
+            Some(_) => {}
+        }
+    }
+    for path in recorded.keys() {
+        if !on_disk.contains_key(path) {
+            removed.push((*path).to_owned());
+        }
+    }
+
+    if added.is_empty() && removed.is_empty() && modified.is_empty() {
+        // The aggregate digest differed but every file matches: the digest and
+        // the inventory disagree, which is itself worth saying.
+        return Some(
+            "content digest does not match, but every recorded file matches; the \
+             lockfile is internally inconsistent"
+                .to_owned(),
+        );
+    }
+
+    let mut parts: Vec<String> = Vec::new();
+    if !modified.is_empty() {
+        parts.push(format!("modified: {}", list_capped(&modified)));
+    }
+    if !added.is_empty() {
+        parts.push(format!("added: {}", list_capped(&added)));
+    }
+    if !removed.is_empty() {
+        parts.push(format!("removed: {}", list_capped(&removed)));
+    }
+    let count = added.len() + removed.len() + modified.len();
+    Some(format!("{count} file(s) changed - {}", parts.join("; ")))
+}
+
+/// Join names, sanitized for the terminal and capped so one hostile 10k-file
+/// rename cannot flood the output.
+fn list_capped(names: &[String]) -> String {
+    const MAX: usize = 8;
+    let mut out: Vec<String> = names
+        .iter()
+        .take(MAX)
+        .map(|n| text::sanitize_for_display(n))
+        .collect();
+    if names.len() > MAX {
+        out.push(format!("... and {} more", names.len() - MAX));
+    }
+    out.join(", ")
 }
 
 /// Human-readable policy decision.
@@ -948,6 +1049,7 @@ mod tests {
                 repository: None,
                 commit: None,
                 content_digest: "sha256:aaa".to_owned(),
+                files: vec![],
                 legacy_digest: None,
                 version: None,
                 license: None,
@@ -962,6 +1064,8 @@ mod tests {
                     approved_at: "2026-10-07T00:00:00Z".to_owned(),
                     content_digest: "sha256:aaa".to_owned(),
                     note: None,
+                    overrode_decision: None,
+                    overrode_violations: vec![],
                 }),
                 observed_at: "2026-10-07T00:00:00Z".to_owned(),
             },
@@ -991,6 +1095,7 @@ mod tests {
                 repository: Some("o/r".to_owned()),
                 commit: Some("a".repeat(40)),
                 content_digest: "sha256:abc".to_owned(),
+                files: vec![],
                 legacy_digest: None,
                 version: None,
                 license: Some("MIT".to_owned()),
@@ -1031,5 +1136,98 @@ mod tests {
         let out = render_decision(&d);
         assert!(!out.contains('\u{1B}'));
         assert!(out.contains("BLOCKED"));
+    }
+
+    // ── issue #2: naming the files that changed ───────────────────────────
+
+    fn fd(path: &str, digest: &str, exec: bool) -> crate::hash::FileDigest {
+        crate::hash::FileDigest {
+            path: path.to_owned(),
+            digest: digest.to_owned(),
+            executable: exec,
+            size: 1,
+        }
+    }
+
+    fn entry_with(files: Vec<crate::hash::FileDigest>) -> LockSkill {
+        LockSkill {
+            source: None,
+            repository: None,
+            commit: None,
+            content_digest: "sha256:old".to_owned(),
+            files,
+            legacy_digest: None,
+            version: None,
+            license: None,
+            declared_permissions: Default::default(),
+            observed_capabilities: Default::default(),
+            mismatches: vec![],
+            dependencies: vec![],
+            policy_decision: Decision::Allow,
+            approved_by: None,
+            observed_at: "2026-10-07T00:00:00Z".to_owned(),
+        }
+    }
+
+    #[test]
+    fn changed_files_are_named_by_kind() {
+        let entry = entry_with(vec![
+            fd("SKILL.md", "sha256:same", false),
+            fd("scripts/gone.sh", "sha256:x", false),
+            fd("scripts/edited.py", "sha256:before", false),
+        ]);
+        let actual = vec![
+            fd("SKILL.md", "sha256:same", false),
+            fd("scripts/edited.py", "sha256:after", false),
+            fd("scripts/new.sh", "sha256:new", false),
+        ];
+        let d = describe_changes(&actual, &entry).expect("a description");
+        assert!(d.contains("modified: scripts/edited.py"), "{d}");
+        assert!(d.contains("added: scripts/new.sh"), "{d}");
+        assert!(d.contains("removed: scripts/gone.sh"), "{d}");
+        assert!(d.contains("3 file(s) changed"), "{d}");
+    }
+
+    #[test]
+    fn executable_bit_change_is_a_modification() {
+        // The executable bit is part of the digest, so a mode change is a real
+        // change and must not be reported as "no files changed".
+        let entry = entry_with(vec![fd("scripts/x.sh", "sha256:same", false)]);
+        let actual = vec![fd("scripts/x.sh", "sha256:same", true)];
+        let d = describe_changes(&actual, &entry).expect("a description");
+        assert!(d.contains("modified: scripts/x.sh"), "{d}");
+    }
+
+    #[test]
+    fn a_lockfile_without_an_inventory_says_so_instead_of_failing() {
+        let entry = entry_with(vec![]);
+        let actual = vec![fd("SKILL.md", "sha256:x", false)];
+        let d = describe_changes(&actual, &entry).expect("a description");
+        assert!(d.contains("no per-file"), "{d}");
+    }
+
+    #[test]
+    fn unknown_lockfile_fields_still_load() {
+        // Forward compatibility: a lockfile written by a newer SkillGuard must
+        // stay readable, otherwise every additive schema change is a hard break
+        // for anyone who has not upgraded (issue #2).
+        let json = r#"{
+            "lockfile_version": 1,
+            "generated_by": "skillguard 9.9.9",
+            "rule_set_version": "9.9.9",
+            "future_field": {"a": 1},
+            "skills": {
+                "s": {
+                    "source": null, "repository": null, "commit": null,
+                    "content_digest": "sha256:aaa",
+                    "policy_decision": "allow",
+                    "observed_at": "2026-10-07T00:00:00Z",
+                    "future_per_file_thing": [1, 2, 3]
+                }
+            }
+        }"#;
+        let lock: Lockfile = serde_json::from_str(json).expect("must load");
+        assert!(lock.skills.contains_key("s"));
+        assert!(lock.skills["s"].files.is_empty());
     }
 }

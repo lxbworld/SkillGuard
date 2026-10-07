@@ -40,6 +40,50 @@ pub struct SkillReport {
     pub counts: Counts,
     pub findings: Vec<Finding>,
     pub skipped: Vec<SkippedFile>,
+    /// What prompt-injection detection does and does not cover (issue #8).
+    #[serde(default)]
+    pub injection: InjectionCoverage,
+}
+
+/// The honest coverage note for prompt-injection detection.
+///
+/// Snyk attributes 91% of confirmed malicious skills to prompt injection, and
+/// SkillGuard's detection is a small set of regexes over normalized text. The
+/// miss rate is unknown, and an unknown gap a reader cannot see is worse than a
+/// bad one, because `no findings` reads as `no injection`. This travels with
+/// every skill report so that inference is never available (issue #8).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InjectionCoverage {
+    /// How detection is performed, so the reader can judge it.
+    pub method: String,
+    /// Always false, and kept explicit so nothing can quietly flip it.
+    pub detection_is_complete: bool,
+    /// Number of `PI_*` findings in this skill.
+    pub findings: usize,
+    pub caveat: String,
+}
+
+pub const INJECTION_METHOD: &str = "deterministic regular expressions over normalized text";
+pub const INJECTION_CAVEAT: &str = "prompt-injection detection is heuristic and incomplete: it matches known phrasings, not intent. A clean scan is not proof that a skill is free of injection; the miss rate is unmeasured (issue #8)";
+
+impl InjectionCoverage {
+    pub fn of(findings: &[Finding]) -> Self {
+        InjectionCoverage {
+            method: INJECTION_METHOD.to_owned(),
+            detection_is_complete: false,
+            findings: findings
+                .iter()
+                .filter(|f| f.rule.as_str().starts_with("PI_"))
+                .count(),
+            caveat: INJECTION_CAVEAT.to_owned(),
+        }
+    }
+}
+
+impl Default for InjectionCoverage {
+    fn default() -> Self {
+        Self::of(&[])
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -112,6 +156,7 @@ impl SkillReport {
             capabilities: out.capabilities.clone(),
             dependencies: out.dependencies.clone(),
             counts: Counts::of(&out.findings),
+            injection: InjectionCoverage::of(&out.findings),
             findings: out.findings.clone(),
             skipped: out.skipped.clone(),
         }
@@ -208,6 +253,7 @@ mod tests {
             capabilities: Default::default(),
             dependencies: vec![],
             counts: Counts::of(std::slice::from_ref(&f)),
+            injection: InjectionCoverage::of(std::slice::from_ref(&f)),
             findings: vec![f],
             skipped: vec![],
         }

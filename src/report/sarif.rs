@@ -83,6 +83,13 @@ pub fn to_sarif(report: &Report) -> String {
             "results": results,
             "properties": {
                 "ruleSetVersion": report.rule_set_version,
+                // The same honest coverage note the text report carries, so a
+                // Code Scanning reader is not left to infer coverage (#8).
+                "injectionDetection": {
+                    "method": crate::report::INJECTION_METHOD,
+                    "complete": false,
+                    "caveat": crate::report::INJECTION_CAVEAT,
+                },
                 "totals": {
                     "critical": report.totals.critical,
                     "high": report.totals.high,
@@ -155,6 +162,7 @@ mod tests {
             capabilities: Default::default(),
             dependencies: vec![],
             counts: Counts::of(std::slice::from_ref(&f)),
+            injection: crate::report::InjectionCoverage::of(std::slice::from_ref(&f)),
             findings: vec![f],
             skipped: vec![],
         }])

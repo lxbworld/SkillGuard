@@ -156,6 +156,23 @@ base64 块、零宽字符、同形字、HTML 注释中的指令、超长不可�
   若中途失败，**不留半成品**：写入临时目录 + 原子 rename
 - 拒绝安装到非预期目录（`agents.rs` 目录表为唯一真源，不从环境变量读取任意安装路径）
 
+### T17 审批洗白（approval laundering）
+**攻击**：用 `approve` 把一次 `deny` 写成 `allow`，使锁文件看起来像「策略允许」。
+更广义地说：审批记录只留下「有人批了」，却没留下「批的是哪条违规」，于是审计轨迹
+退化成一个没有理由的结果记录（issue #7）。
+
+**决策（有意选定，不是代码偶然）**：
+- **人可以覆盖任何决策，包括 CRITICAL。** 安全工具的目标是让决策**可读**，不是让决策
+  **不可能**。一个握有上下文的工程师是最终权威；把 CRITICAL 设成不可覆盖，只会把人
+  推向手改锁文件或跳过工具，反而更差。
+- **但覆盖必须是有意的。** 覆盖一次 `deny` 需要显式 `--force`；且无论是否 `--force`，
+  `policy_decision` 一律保持引擎算出的值（`deny`），审批以 `overrode_decision` +
+  `overrode_violations` 记录在**旁边**，绝不把 `deny` 改写成 `allow`。
+- 终端在写入前先列出被接受的违规，让审批者在落盘前看到自己签了什么。
+
+**缓解/测试**：`tests/cli.rs` 断言（无 `--force` 时拒绝且零写入；有 `--force` 时记录
+`deny` + 违规清单；干净 skill 记录 `allow` 且无覆盖记录）。
+
 ---
 
 ## 5. 威胁 → 规则 → 严重度映射
@@ -175,6 +192,7 @@ base64 块、零宽字符、同形字、HTML 注释中的指令、超长不可�
 | T11 | `PARSE_FAILED`, `RESOURCE_LIMIT_EXCEEDED` | INFO |
 | T12/13 | `FS_PATH_ESCAPE`, `FS_SYMLINK_OUTSIDE` | HIGH / MEDIUM |
 | T15 | `LOCK_DIGEST_MISMATCH`, `LOCK_HAND_EDITED` | HIGH / MEDIUM |
+| T17 | 审批记录（`overrode_decision` / `overrode_violations`，非文本规则） | 记录原决策，不重写 |
 | — | `MISMATCH_UNDECLARED_CAPABILITY`（diff 产生，非文本规则） | HIGH |
 | — | `POLICY_VIOLATION`（policy 产生） | 按违规能力 |
 
@@ -208,3 +226,4 @@ base64 块、零宽字符、同形字、HTML 注释中的指令、超长不可�
 | S6 | 任何读取磁盘的路径都经过 `resolve_safe_path` |
 | S7 | 扫描器对任意输入（含随机字节）不 panic |
 | S8 | lockfile 中的 `declared_permissions` 与 `observed_capabilities` 在类型层面不可互相赋值 |
+| S9 | 审批永不把 `policy_decision` 从 `deny` 改写为 `allow`；覆盖 `deny` 需显式 `--force`，且被覆盖的违规随审批一同记录（T17） |

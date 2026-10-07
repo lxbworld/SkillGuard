@@ -64,6 +64,22 @@ const MANIFEST_FILES: &[&str] = &[
 /// Returns `Err` with a human-readable reason rather than a path. Callers turn
 /// the `Err` into a finding; they must not read the file.
 pub fn resolve_safe_path(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    // Refuse Windows-style absolute paths even on Unix. `C:/Windows` is a valid
+    // *relative* path on Linux (a file literally named `C:` in a subdirectory),
+    // so `Path::is_absolute` returns false and the escape would slip through on
+    // one platform and be caught on another. A skill has no legitimate reason to
+    // name a drive or a UNC share, so a platform-independent refusal is both
+    // safer and reproducible (see issue #6: sgdir-v1 makes a portability
+    // promise, and path handling is part of it).
+    if looks_like_windows_absolute(rel) {
+        return Err(format!("absolute path is not readable: {rel}"));
+    }
+    // `..\..\etc` is one component on Unix and two on Windows. Normalise the
+    // separator for the escape check only, so the same tree is judged the same
+    // way everywhere. This never turns a safe path into an unsafe one.
+    if rel.split(['/', '\\']).any(|seg| seg == "..") {
+        return Err(format!("path escapes the skill root: {rel}"));
+    }
     let candidate = Path::new(rel);
     if candidate.is_absolute() {
         return Err(format!("absolute path is not readable: {rel}"));
@@ -85,6 +101,15 @@ pub fn resolve_safe_path(root: &Path, rel: &str) -> Result<PathBuf, String> {
         return Err(format!("path escapes the skill root: {rel}"));
     }
     Ok(out)
+}
+
+/// A drive-letter (`C:...`) or UNC (`\\server\share`) path, on any OS.
+fn looks_like_windows_absolute(rel: &str) -> bool {
+    let b = rel.as_bytes();
+    if b.len() >= 2 && b[1] == b':' && b[0].is_ascii_alphabetic() {
+        return true;
+    }
+    rel.starts_with("\\\\")
 }
 
 /// What the walker found, including things it refused to follow.
@@ -320,6 +345,20 @@ mod tests {
         assert!(resolve_safe_path(root, "../../etc/passwd").is_err());
         assert!(resolve_safe_path(root, "/etc/passwd").is_err());
         assert!(resolve_safe_path(root, "C:/Windows").is_err());
+    }
+
+    #[test]
+    fn rejects_windows_style_escapes_on_every_platform() {
+        // The same hostile input must be refused identically on Linux, macOS
+        // and Windows; #6 exists because it was not.
+        let root = Path::new("/tmp/skill");
+        assert!(resolve_safe_path(root, "C:/Windows/win.ini").is_err());
+        assert!(resolve_safe_path(root, "c:\\Windows\\win.ini").is_err());
+        assert!(resolve_safe_path(root, "\\\\server\\share\\x").is_err());
+        assert!(resolve_safe_path(root, "..\\..\\etc").is_err());
+        assert!(resolve_safe_path(root, "scripts\\..\\..\\etc").is_err());
+        // A backslash inside a legitimate filename is still allowed.
+        assert!(resolve_safe_path(root, "notes/weird\\name.txt").is_ok());
     }
 
     #[test]

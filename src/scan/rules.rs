@@ -904,6 +904,13 @@ pub fn structural_rules() -> &'static [StructuralRule] {
             message: "A dependency name closely resembles a popular package",
             remediation: "Verify the name character by character. Typosquats are the cheapest supply-chain attack.",
         },
+        StructuralRule {
+            id: "FS_MODE_UNRESOLVED",
+            severity: Info,
+            capability: "filesystem.read",
+            message: "An open() mode could not be resolved statically; the path is counted as a read",
+            remediation: "If this path is written, use a literal mode (`'w'`, `'a'`, `'x'`) or declare the write, so the capability is not under-reported.",
+        },
     ];
     S
 }

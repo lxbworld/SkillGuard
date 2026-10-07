@@ -78,6 +78,14 @@ pub fn to_markdown(report: &Report) -> String {
     o.push_str(&report.tool_version);
     o.push_str(".</sub>\n");
 
+    // A clean block must not read as "no prompt injection" (issue #8).
+    if report.skills.iter().any(|s| s.injection.findings == 0) {
+        o.push_str(&format!(
+            "\n> **Coverage note:** {}.\n",
+            crate::report::INJECTION_CAVEAT
+        ));
+    }
+
     o
 }
 
@@ -171,6 +179,7 @@ mod tests {
             capabilities: Default::default(),
             dependencies: vec![],
             counts: Counts::of(std::slice::from_ref(&f)),
+            injection: crate::report::InjectionCoverage::of(std::slice::from_ref(&f)),
             findings: vec![f],
             skipped: vec![],
         }])

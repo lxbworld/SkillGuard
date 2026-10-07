@@ -325,7 +325,13 @@ impl Accumulator {
         Self::default()
     }
 
-    pub fn add_text(&mut self, text: &str) {
+    /// Accumulate capabilities from one line of executable text.
+    ///
+    /// Returns notes for paths whose access mode could not be resolved. They are
+    /// returned rather than swallowed because a wrong answer that looks like
+    /// coverage is worse than an admitted unknown (issue #3): the caller turns
+    /// each one into an `FS_MODE_UNRESOLVED` finding.
+    pub fn add_text(&mut self, text: &str) -> Vec<String> {
         for h in outbound_hosts(text) {
             self.cap.network_outbound.push(h);
         }
@@ -342,41 +348,43 @@ impl Accumulator {
         if sensitive_re().is_match(text) {
             self.cap.secrets_read = true;
         }
-        self.collect_paths(text);
+        self.collect_paths(text)
     }
 
-    fn collect_paths(&mut self, text: &str) {
+    fn collect_paths(&mut self, text: &str) -> Vec<String> {
         let mut reads = BTreeSet::new();
         let mut writes = BTreeSet::new();
+        let mut notes = Vec::new();
         // URLs are masked out first, preserving length so offsets stay valid.
         // Otherwise the path regex reports `//cdn.example.net/install` as a
         // directory the skill reads.
         let masked = mask_urls(text);
         for m in path_re().find_iter(&masked) {
-            let p = normalize_path_token(m.as_str());
-            if p.is_empty() {
-                continue;
-            }
-            // A path on the right of a redirect, or next to a write verb, is a
-            // write. `open(` is deliberately absent: reading a file with `open`
-            // is far more common than writing one, and treating it as a write
-            // would misfile most reads.
-            let tail = &masked[m.end()..];
-            let head = &masked[..m.start()];
-            let tail_head = &tail[..tail.len().min(24)];
-            let writey = tail_head.trim_start().starts_with('>')
-                || head.contains("tee ")
-                || head.contains(".write_text")
-                || head.contains(".write_bytes")
-                || head.contains("writeFileSync")
-                || head.contains("f.write(")
-                || (head.contains("open(")
-                    && (tail_head.contains("\"w")
-                        || tail_head.contains("'w")
-                        || tail_head.contains("\"a")
-                        || tail_head.contains("'a")
-                        || tail_head.contains("\"x")));
-            if writey {
+            let raw = m.as_str();
+            let strong = normalize_path_token(raw);
+            let (io, ctx) = classify_path(&masked, m.start());
+            // A bare filename (`out.txt`) is too ambiguous to count on its own,
+            // so it only counts when the surrounding call makes it a file: a
+            // redirect, `tee`/`cat`, or an `open`-family call. `response.json()`
+            // stays out, which is what keeps the diff honest.
+            let p = if !strong.is_empty() {
+                strong
+            } else {
+                match bare_file_token(raw) {
+                    Some(b) if ctx != Ctx::None => b,
+                    _ => continue,
+                }
+            };
+            if ctx == Ctx::UnresolvedMode {
+                // Read is the conservative default (a missed write becomes a
+                // missing HIGH violation; a missed read is informational), but
+                // it is not silent: the note forces a human to look.
+                notes.push(format!(
+                    "{p}: access mode could not be resolved statically; \
+                     counted as a read, not a write"
+                ));
+                reads.insert(p);
+            } else if io == Io::Write {
                 writes.insert(p);
             } else {
                 reads.insert(p);
@@ -384,6 +392,7 @@ impl Accumulator {
         }
         self.cap.filesystem_read.extend(reads);
         self.cap.filesystem_write.extend(writes);
+        notes
     }
 
     pub fn finish(self) -> Capability {
@@ -467,6 +476,314 @@ fn is_config_file(t: &str) -> bool {
         ".config",
     ];
     CONFIG_FILES.contains(&t.to_ascii_lowercase().as_str())
+}
+
+// ── read vs write classification (issue #3) ───────────────────────────────
+//
+// The read/write split is not cosmetic: `policy.filesystem.write` is a HIGH
+// violation while a read is MEDIUM, so a write misclassified as a read is a
+// silently missed violation. The older check guessed from nearby text, which
+// could not see a redirect (the `>` is *before* the path, and it looked after)
+// and misfiled `open(p, mode)` when the mode was not a literal. This classifies
+// from the call that takes the path, without a parser.
+
+/// How a path token is used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Io {
+    Read,
+    Write,
+    /// A call the classifier recognises, but whose mode it cannot resolve
+    /// (usually a variable). Never silently promoted to `Read`.
+    Unknown,
+}
+
+/// What made the read/write call, so a bare filename can be accepted only when
+/// the context really is a file operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Ctx {
+    /// A redirect, `tee`/`cat`, or a recognised file call.
+    Definite,
+    /// An `open`-family call whose mode could not be resolved.
+    UnresolvedMode,
+    /// Not a file context (an unrecognised call, or nothing).
+    None,
+}
+
+fn classify_path(line: &str, start: usize) -> (Io, Ctx) {
+    // A redirect is a write, wherever the file is opened.
+    if is_redirect_target(line, start) {
+        return (Io::Write, Ctx::Definite);
+    }
+    // `tee` writes its argument, and its argument is not on the right of `>`.
+    if segment_runs(line, start, "tee") {
+        return (Io::Write, Ctx::Definite);
+    }
+    // `cat in.txt`: an explicit read command makes a bare filename a path.
+    if segment_runs(line, start, "cat") {
+        return (Io::Read, Ctx::Definite);
+    }
+    // Otherwise the innermost enclosing call that takes this path decides. If a
+    // call is recognised but its mode is unknown, keep looking outward, so
+    // `open(os.path.join(dir, 'x'), 'w')` still resolves to a write.
+    for (callee, args) in enclosing_calls(line, start) {
+        let (io, unresolved) = classify_call(&callee, &args);
+        match io {
+            Io::Write => return (Io::Write, Ctx::Definite),
+            Io::Read => return (Io::Read, Ctx::Definite),
+            Io::Unknown if unresolved => return (Io::Read, Ctx::UnresolvedMode),
+            Io::Unknown => {}
+        }
+    }
+    // No recognised file context: `cat`/redirects absent and no known call.
+    (Io::Read, Ctx::None)
+}
+
+/// A bare `name.ext` filename that is only a path when the context says so.
+///
+/// Deliberately excludes `.json`-style attribute access by requiring a
+/// non-empty stem, and caps the extension so `sha256.abcdef...` is not a file.
+fn bare_file_token(t: &str) -> Option<String> {
+    let t = t.trim();
+    if t.len() < 4 || t.len() > 128 {
+        return None;
+    }
+    let (stem, ext) = t.rsplit_once('.')?;
+    if stem.is_empty() || ext.is_empty() || ext.len() > 6 {
+        return None;
+    }
+    if !ext.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return None;
+    }
+    if !stem
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return None;
+    }
+    Some(t.to_owned())
+}
+
+/// `cmd > out.txt` and `cmd >> log.txt`: is `start` the target of a redirect?
+fn is_redirect_target(line: &str, start: usize) -> bool {
+    let b = line.as_bytes();
+    let mut i = start;
+    while i > 0 && (b[i - 1] == b' ' || b[i - 1] == b'\t') {
+        i -= 1;
+    }
+    i > 0 && b[i - 1] == b'>'
+}
+
+/// Is `cmd` the command of the pipeline/statement segment that contains the
+/// path at `start` (allowing a leading `sudo` / `doas` / `env`)?
+fn segment_runs(line: &str, start: usize, cmd: &str) -> bool {
+    let b = line.as_bytes();
+    let mut seg_start = 0usize;
+    let mut i = start;
+    while i > 0 {
+        i -= 1;
+        if matches!(b[i], b'\n' | b';' | b'|' | b'&' | b'(') {
+            seg_start = i + 1;
+            break;
+        }
+    }
+    let seg = line.get(seg_start..start).unwrap_or("");
+    let mut tokens = seg.split_whitespace();
+    let mut first = tokens.next().unwrap_or("");
+    if matches!(first, "sudo" | "doas" | "env") {
+        first = tokens.next().unwrap_or("");
+    }
+    first == cmd
+}
+
+/// Enclosing calls of the position `start`, innermost first.
+///
+/// Bounded: at most one line and a few hundred bytes, no AST. Each entry is
+/// `(callee, raw_argument_text)`.
+fn enclosing_calls(line: &str, start: usize) -> Vec<(String, String)> {
+    let b = line.as_bytes();
+    let mut calls = Vec::new();
+    let mut depth: i32 = 0;
+    let mut i = start;
+    let mut steps = 0usize;
+    while i > 0 {
+        i -= 1;
+        steps += 1;
+        if steps > 4000 {
+            break;
+        }
+        match b[i] {
+            b')' | b']' | b'}' => depth += 1,
+            b'(' | b'[' | b'{' => {
+                if depth > 0 {
+                    depth -= 1;
+                } else if b[i] == b'(' {
+                    if let Some(close) = matching_close(line, i) {
+                        if close > start {
+                            calls.push((callee_before(line, i), line[i + 1..close].to_owned()));
+                        }
+                    }
+                }
+            }
+            b'\n' | b';' if depth == 0 => break,
+            _ => {}
+        }
+    }
+    calls
+}
+
+/// The index of the close bracket matching the open one at `open`, skipping
+/// brackets and quotes inside string literals.
+fn matching_close(line: &str, open: usize) -> Option<usize> {
+    let b = line.as_bytes();
+    let mut depth: i32 = 0;
+    let mut quote: Option<u8> = None;
+    let mut i = open;
+    while i < b.len() {
+        let c = b[i];
+        match quote {
+            Some(q) => {
+                if c == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                if c == q {
+                    quote = None;
+                }
+            }
+            None => match c {
+                b'\'' | b'"' | b'`' => quote = Some(c),
+                b'(' | b'[' | b'{' => depth += 1,
+                b')' | b']' | b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(i);
+                    }
+                }
+                _ => {}
+            },
+        }
+        i += 1;
+    }
+    None
+}
+
+/// The identifier immediately before an opening paren, e.g. `open` or
+/// `os.path.join` in `open(` / `os.path.join(`.
+fn callee_before(line: &str, paren: usize) -> String {
+    let b = line.as_bytes();
+    let mut i = paren;
+    while i > 0 && (b[i - 1] == b' ' || b[i - 1] == b'\t') {
+        i -= 1;
+    }
+    let end = i;
+    while i > 0 {
+        let c = b[i - 1];
+        if c.is_ascii_alphanumeric() || c == b'_' || c == b'.' || c == b'$' {
+            i -= 1;
+        } else {
+            break;
+        }
+    }
+    line.get(i..end).unwrap_or("").to_owned()
+}
+
+fn classify_call(callee: &str, args: &str) -> (Io, bool) {
+    let lowered = callee.to_ascii_lowercase();
+    let base = lowered.rsplit('.').next().unwrap_or(lowered.as_str());
+    match base {
+        // Python file objects, Node, Go, Rust.
+        "write_text" | "write_bytes" | "writelines" | "writeln" | "writefile" | "writefilesync"
+        | "writefileutf8" | "createwritestream" | "write" => return (Io::Write, false),
+        "create" => return (Io::Write, false), // Go's os.Create
+        "open" | "openfile" | "fopen" => {
+            let io = mode_of(args);
+            // An unresolved mode is the one case the caller must report.
+            return (io, io == Io::Unknown);
+        }
+        // Explicit readers, so an outer writer cannot override a clear read.
+        "read_text" | "read_bytes" | "read_to_string" | "readlines" | "readfile"
+        | "readfilesync" | "readtoend" => return (Io::Read, false),
+        _ => {}
+    }
+    (Io::Unknown, false)
+}
+
+/// The mode of an `open`-family call, from its second argument.
+fn mode_of(args: &str) -> Io {
+    let parts = split_top_level_args(args);
+    if parts.len() < 2 {
+        // Python's default mode is read; `open(path)` cannot be a write.
+        return Io::Read;
+    }
+    let second = parts[1].trim();
+    if let Some(mode) = string_literal(second) {
+        // `r`, `rb`, `rt`, `r+` are reads; `w`, `a`, `x` (and their `+`/`b`
+        // variants) are writes.
+        return if mode.chars().any(|c| matches!(c, 'w' | 'a' | 'x')) {
+            Io::Write
+        } else {
+            Io::Read
+        };
+    }
+    // A Go flag expression is not a literal but is still decidable.
+    if second.contains("O_WRONLY")
+        || second.contains("O_RDWR")
+        || second.contains("O_CREATE")
+        || second.contains("O_TRUNC")
+        || second.contains("O_APPEND")
+    {
+        return Io::Write;
+    }
+    // A variable. Do not guess.
+    Io::Unknown
+}
+
+/// The contents of `s` if it is a single quoted string literal.
+fn string_literal(s: &str) -> Option<&str> {
+    let bytes = s.as_bytes();
+    let q = *bytes.first()?;
+    if matches!(q, b'\'' | b'"' | b'`') && bytes.len() >= 2 && bytes[bytes.len() - 1] == q {
+        return s.get(1..s.len() - 1);
+    }
+    None
+}
+
+/// Split a raw argument list on top-level commas, respecting quotes and
+/// nesting. A bounded scan, not a parser.
+fn split_top_level_args(args: &str) -> Vec<&str> {
+    let b = args.as_bytes();
+    let mut out = Vec::new();
+    let mut depth: i32 = 0;
+    let mut quote: Option<u8> = None;
+    let mut start = 0usize;
+    let mut i = 0usize;
+    while i < b.len() {
+        let c = b[i];
+        match quote {
+            Some(q) => {
+                if c == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                if c == q {
+                    quote = None;
+                }
+            }
+            None => match c {
+                b'\'' | b'"' | b'`' => quote = Some(c),
+                b'(' | b'[' | b'{' => depth += 1,
+                b')' | b']' | b'}' => depth -= 1,
+                b',' if depth == 0 => {
+                    out.push(args.get(start..i).unwrap_or(""));
+                    start = i + 1;
+                }
+                _ => {}
+            },
+        }
+        i += 1;
+    }
+    out.push(args.get(start..).unwrap_or(""));
+    out
 }
 
 /// Hosts a line contacts, for the declared-vs-observed diff.
@@ -617,6 +934,109 @@ mod tests {
             cap.filesystem_read.iter().any(|p| p == ".env"),
             ".env is a real path: {:#?}",
             cap.filesystem_read
+        );
+    }
+
+    // ── issue #3: read vs write from the call, not from proximity ─────────
+
+    #[test]
+    fn open_without_a_mode_is_a_read() {
+        let mut a = Accumulator::new();
+        a.add_text("f = open('x.txt')");
+        let cap = a.finish();
+        assert!(
+            cap.filesystem_read.iter().any(|p| p.ends_with("x.txt")),
+            "{:#?}",
+            cap.filesystem_read
+        );
+        assert!(
+            cap.filesystem_write.is_empty(),
+            "{:#?}",
+            cap.filesystem_write
+        );
+    }
+
+    #[test]
+    fn open_with_a_literal_write_mode_is_a_write() {
+        let mut a = Accumulator::new();
+        a.add_text("g = open('y.txt', 'w')");
+        a.add_text("with open('out.csv', 'w') as h:");
+        let cap = a.finish();
+        assert!(
+            cap.filesystem_write.iter().any(|p| p.ends_with("y.txt")),
+            "{:#?}",
+            cap.filesystem_write
+        );
+        assert!(
+            cap.filesystem_write.iter().any(|p| p.ends_with("out.csv")),
+            "a `with open(..., 'w')` is a write: {:#?}",
+            cap.filesystem_write
+        );
+    }
+
+    #[test]
+    fn open_with_a_variable_mode_is_a_read_plus_a_note() {
+        // Acceptance #2: do not silently claim it is a read. Count it as one
+        // (conservative) but say the mode could not be resolved.
+        let mut a = Accumulator::new();
+        let notes = a.add_text("f = open('data/x.csv', mode)");
+        let cap = a.finish();
+        assert!(
+            cap.filesystem_read.iter().any(|p| p.ends_with("x.csv")),
+            "{:#?}",
+            cap.filesystem_read
+        );
+        assert!(
+            cap.filesystem_write.is_empty(),
+            "{:#?}",
+            cap.filesystem_write
+        );
+        assert_eq!(notes.len(), 1, "exactly one unresolved mode: {notes:?}");
+        assert!(notes[0].contains("could not be resolved"), "{notes:?}");
+    }
+
+    #[test]
+    fn redirects_and_tee_are_writes() {
+        let mut a = Accumulator::new();
+        a.add_text("echo hi > out.txt");
+        a.add_text("cmd >> log.txt");
+        a.add_text("printf x | tee report.md");
+        let cap = a.finish();
+        for name in ["out.txt", "log.txt", "report.md"] {
+            assert!(
+                cap.filesystem_write.iter().any(|p| p.ends_with(name)),
+                "{name} must be a write: {:#?}",
+                cap.filesystem_write
+            );
+        }
+    }
+
+    #[test]
+    fn a_plain_read_command_is_a_read() {
+        let mut a = Accumulator::new();
+        a.add_text("cat in.txt");
+        let cap = a.finish();
+        assert!(
+            cap.filesystem_read.iter().any(|p| p.ends_with("in.txt")),
+            "{:#?}",
+            cap.filesystem_read
+        );
+        assert!(
+            cap.filesystem_write.is_empty(),
+            "{:#?}",
+            cap.filesystem_write
+        );
+    }
+
+    #[test]
+    fn a_nested_call_does_not_hide_the_mode() {
+        let mut a = Accumulator::new();
+        a.add_text("with open(os.path.join(dir, 'x.csv'), 'w') as f:");
+        let cap = a.finish();
+        assert!(
+            cap.filesystem_write.iter().any(|p| p.ends_with("x.csv")),
+            "an outer `open(..., 'w')` must win over the inner join: {:#?}",
+            cap.filesystem_write
         );
     }
 }

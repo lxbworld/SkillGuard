@@ -41,6 +41,7 @@ mod tests {
             capabilities: Default::default(),
             dependencies: vec![],
             counts: Counts::of(std::slice::from_ref(&f)),
+            injection: crate::report::InjectionCoverage::of(std::slice::from_ref(&f)),
             findings: vec![f],
             skipped: vec![],
         }])

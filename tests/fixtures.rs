@@ -270,6 +270,32 @@ fn typosquats_and_custom_index_are_caught() {
     );
 }
 
+#[test]
+fn read_write_classification_comes_from_the_call() {
+    // Issue #3: the read/write split decides whether a `filesystem.write` policy
+    // violation fires, so it must come from the call, not from nearby text.
+    let out = scan_fixture("suspicious", "io-classification");
+    let w = &out.capabilities.filesystem_write;
+    let r = &out.capabilities.filesystem_read;
+    for name in ["out.csv", "out.txt", "log.txt", "report.md"] {
+        assert!(w.iter().any(|p| p.ends_with(name)), "{name} write: {w:?}");
+    }
+    for name in ["input.txt", "in.txt", "data/x.csv"] {
+        assert!(r.iter().any(|p| p.ends_with(name)), "{name} read: {r:?}");
+    }
+    // The unresolved mode must be surfaced, not silently claimed as a read.
+    let note = out
+        .findings
+        .iter()
+        .find(|f| f.rule.as_str() == "FS_MODE_UNRESOLVED")
+        .expect("a variable mode must produce a finding");
+    assert!(note.message.contains("x.csv"), "{}", note.message);
+    assert!(
+        note.evidence.iter().all(|e| !e.text.is_empty()),
+        "invariant S3: no evidence, no finding"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // obfuscated: normalization must defeat it
 // ---------------------------------------------------------------------------
