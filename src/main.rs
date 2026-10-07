@@ -193,7 +193,7 @@ enum Command {
 
 #[derive(Subcommand)]
 enum CorpusCommand {
-    /// Index a local tree of skills into a manifest (the offline half of fetch).
+    /// Index a local tree of skills into a manifest (deterministic, offline).
     Index {
         /// Directory containing skills (searched recursively).
         source: PathBuf,
@@ -207,6 +207,32 @@ enum CorpusCommand {
         layer: String,
 
         /// Prefix for source ids that have no git repository, e.g. `local`.
+        #[arg(long, default_value = "local")]
+        source_prefix: String,
+
+        #[arg(long)]
+        out: PathBuf,
+    },
+
+    /// Ingest an already-downloaded tree into a manifest.
+    ///
+    /// Network fetching is deliberately absent until collection is cleared
+    /// (issue #5): only GitHub code search is permitted, and the registries
+    /// have not replied. This performs the deterministic half of `fetch`
+    /// deriving digests, commits and strata from a tree you obtained yourself,
+    /// which is the same work for every source.
+    Fetch {
+        /// Tree of skills that have already been downloaded.
+        #[arg(long)]
+        from_dir: PathBuf,
+
+        /// Directory the manifest paths are relative to. Defaults to `--from-dir`.
+        #[arg(long)]
+        tree: Option<PathBuf>,
+
+        #[arg(long, default_value = "L3")]
+        layer: String,
+
         #[arg(long, default_value = "local")]
         source_prefix: String,
 
@@ -1213,20 +1239,15 @@ fn run_corpus(command: &CorpusCommand, cli: &Cli) -> Result<i32, String> {
             layer,
             source_prefix,
             out,
-        } => {
-            let tree = tree.clone().unwrap_or_else(|| source.clone());
-            let entries = corpus::index_tree(source, &tree, layer, source_prefix)?;
-            corpus::write_manifest(out, &entries)?;
-            emit(
-                cli,
-                &format!(
-                    "\n  SkillGuard corpus index\n    {} skill(s) -> {}\n\n",
-                    entries.len(),
-                    out.display()
-                ),
-            )?;
-            Ok(exit::OK)
-        }
+        } => index_into(source, tree.as_ref(), layer, source_prefix, out, cli),
+
+        CorpusCommand::Fetch {
+            from_dir,
+            tree,
+            layer,
+            source_prefix,
+            out,
+        } => index_into(from_dir, tree.as_ref(), layer, source_prefix, out, cli),
 
         CorpusCommand::Scan {
             manifest,
@@ -1363,5 +1384,29 @@ fn run_labeling(paths: &[PathBuf], cli: &Cli) -> Result<i32, String> {
     }
 
     emit(cli, &o)?;
+    Ok(exit::OK)
+}
+
+/// Shared body of `corpus index` and `corpus fetch --from-dir`: the two differ
+/// only in where the tree came from.
+fn index_into(
+    source: &std::path::Path,
+    tree: Option<&PathBuf>,
+    layer: &str,
+    source_prefix: &str,
+    out: &std::path::Path,
+    cli: &Cli,
+) -> Result<i32, String> {
+    let tree = tree.cloned().unwrap_or_else(|| source.to_path_buf());
+    let entries = skillguard::corpus::index_tree(source, &tree, layer, source_prefix)?;
+    skillguard::corpus::write_manifest(out, &entries)?;
+    emit(
+        cli,
+        &format!(
+            "\n  SkillGuard corpus index\n    {} skill(s) -> {}\n\n",
+            entries.len(),
+            out.display()
+        ),
+    )?;
     Ok(exit::OK)
 }
