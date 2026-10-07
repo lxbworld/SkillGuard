@@ -109,6 +109,10 @@ fn the_rule_reference_matches_the_code() {
     let committed =
         std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/RULES.md"))
             .expect("docs/RULES.md must exist");
+    // Compare modulo line endings: a Windows checkout can hand back CRLF even
+    // though `.gitattributes` asks for LF, and a line ending is not drift.
+    let committed = committed.replace("\r\n", "\n");
+    let generated = generated.replace("\r\n", "\n");
     assert!(
         committed.contains(generated.trim()),
         "docs/RULES.md has drifted from the rule catalogue; \

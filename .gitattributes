@@ -1,0 +1,19 @@
+# Line endings.
+#
+# SkillGuard's whole reproducibility promise rests on the content digest, and
+# `sgdir-v1` hashes bytes. If a Windows checkout converts LF to CRLF, the same
+# commit produces a different digest — and a lockfile written on Linux would not
+# verify on Windows. Forcing LF on text files makes the checked-out bytes
+# identical on every platform.
+#
+# `text=auto` still lets Git detect binaries; only text files are normalised.
+* text=auto eol=lf
+
+# Explicitly binary: never touched by the normaliser.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.gz binary
+*.zip binary
+*.pdf binary
