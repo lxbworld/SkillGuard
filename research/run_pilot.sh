@@ -116,7 +116,13 @@ target/release/skillguard corpus report --findings "$FINDINGS" --out /tmp/sg-pil
 > that fired on ordinary text and file formats: lookalike characters in
 > legitimate non-Latin prose, npm/pip/cargo integrity hashes, shields.io badges,
 > the word "silently" in documentation, `regex.exec(`, file extensions that look
-> like TLDs (`.zip`, `.mov`), and XML namespaces. Each fix is a regression test.
+> like TLDs (`.zip`, `.mov`), XML namespaces, English-only keyword lists that
+> flagged every non-English `PI_DESCRIPTION_MISMATCH`, and unstemmed verbs
+> (`execution` did not match `execute`). Each fix is a regression test.
+>
+> The remaining `PI_*` heuristics are **unmeasured upper bounds**. A
+> single-annotator read-through is not `GOLD` (research/GOLD.md) and the report
+> publishes no precision until two independent annotators agree (kappa >= 0.75).
 
 HEADER
   echo "## Collection"

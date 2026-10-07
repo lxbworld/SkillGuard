@@ -942,9 +942,23 @@ pub fn rule_count() -> usize {
 /// rules, not only the content. Without this, editing a pattern returned the
 /// *old* findings for content already scanned, silently. Folding the
 /// fingerprint into the cache key makes a rule change invalidate the cache.
+/// Bump this when scanner behaviour changes without any rule's pattern
+/// changing: structural-rule logic, a suppression, a capability extractor.
+///
+/// The findings cache is keyed by the fingerprint below, which covers only rule
+/// ids, severities and patterns. Without this counter, editing non-pattern
+/// logic and re-running `corpus scan` silently returns the *previous* findings
+/// from the cache — the fix appears to have no effect.
+///
+/// rev 1: initial value. rev 2: `description_mismatch` admits Chinese and
+/// inflected verbs. rev 3: it also treats a capability declared in
+/// `allowed-tools` as admitted, instead of duplicating declared-vs-observed.
+pub const SCAN_LOGIC_REVISION: u32 = 3;
+
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};
     let mut h = Sha256::new();
+    h.update(SCAN_LOGIC_REVISION.to_le_bytes());
     for r in all() {
         h.update(r.spec.id.as_bytes());
         h.update(b"\0");

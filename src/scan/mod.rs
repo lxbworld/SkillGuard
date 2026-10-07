@@ -311,23 +311,29 @@ pub fn scan_walked(name: &str, walked: Walked) -> ScanOutcome {
     // -- Chain pass ---------------------------------------------------------
     apply_chain_rules(&walked, &mut findings);
 
-    // -- Description/behaviour mismatch -------------------------------------
-    let capabilities = acc.finish();
-    if let Some(d) = &description {
-        if let Some(f) = description_mismatch(d, &capabilities, &findings) {
-            findings.push(f);
-        }
-    }
-
     // -- Declared vs observed ----------------------------------------------
     // The parsed YAML is authoritative; the flattened map is the fallback for
     // frontmatter that failed to parse but still yielded key/value pairs.
+    let capabilities = acc.finish();
     let declared = match &frontmatter_yaml {
         Some(v) => crate::permissions::parse_yaml(v),
         None => crate::permissions::parse_frontmatter(&frontmatter_map),
     };
     let diff = crate::permissions::diff(&declared, &capabilities);
     let mismatches = diff.clone();
+
+    // -- Description/behaviour mismatch -------------------------------------
+    // Runs before the declared-vs-observed findings are pushed, so `has_high`
+    // sees exactly the code-derived findings it always did. It does receive
+    // `declared`: a capability named in the frontmatter (`allowed-tools`) is
+    // declared even when the prose never mentions it, and flagging that would
+    // just duplicate declared-vs-observed.
+    if let Some(d) = &description {
+        if let Some(f) = description_mismatch(d, &capabilities, &declared, &findings) {
+            findings.push(f);
+        }
+    }
+
     for m in &mismatches.mismatches {
         findings.push(declared_vs_observed_finding(&m.kind, m, &capabilities));
     }
@@ -1032,6 +1038,7 @@ fn one_typo_apart(a: &str, b: &str) -> bool {
 fn description_mismatch(
     description: &str,
     caps: &Capability,
+    declared: &PermissionDecl,
     findings: &[Finding],
 ) -> Option<Finding> {
     let d = description.to_lowercase();
@@ -1040,52 +1047,125 @@ fn description_mismatch(
             && !f.rule.as_str().starts_with("OBFUSC")
     });
 
-    if caps.secrets_read {
-        let admits = [
-            "secret",
-            "credential",
-            "token",
-            "password",
-            "api key",
-            "keychain",
-            "env",
-        ];
-        if !admits.iter().any(|a| d.contains(a)) {
-            return Some(mismatch_finding(
-                "the description does not mention credentials, but the code accesses them",
-                d,
-            ));
-        }
+    if caps.secrets_read
+        && declared.secrets_access != Some(true)
+        && !admits(
+            &d,
+            &[
+                "secret",
+                "credential",
+                "token",
+                "password",
+                "passwd",
+                "api key",
+                "api-key",
+                "apikey",
+                "keychain",
+                "env",
+                "密钥",
+                "密码",
+                "凭据",
+                "凭证",
+                "令牌",
+                "口令",
+                "私钥",
+                "敏感",
+            ],
+        )
+    {
+        return Some(mismatch_finding(
+            "the description does not mention credentials, but the code accesses them",
+            d,
+        ));
     }
-    if !caps.network_outbound.is_empty() {
-        let admits = [
-            "http", "api", "network", "download", "fetch", "web", "url", "remote", "internet",
-        ];
-        if !admits.iter().any(|a| d.contains(a)) {
-            return Some(mismatch_finding(
-                "the description does not mention network access, but the code makes outbound requests",
-                d,
-            ));
-        }
+    if !caps.network_outbound.is_empty()
+        && declared.network_outbound.is_empty()
+        && !admits(
+            &d,
+            &[
+                "http",
+                "api",
+                "network",
+                "download",
+                "fetch",
+                "web",
+                "url",
+                "uri",
+                "remote",
+                "internet",
+                "online",
+                "request",
+                "endpoint",
+                "server",
+                "cloud",
+                "网络",
+                "下载",
+                "请求",
+                "接口",
+                "远程",
+                "联网",
+                "爬取",
+                "采集",
+                "抓取",
+                "网页",
+                "链接",
+                "服务器",
+                "云端",
+                "线上",
+            ],
+        )
+    {
+        return Some(mismatch_finding(
+            "the description does not mention network access, but the code makes outbound requests",
+            d,
+        ));
     }
-    if !caps.shell_execute.is_empty() {
-        let admits = [
-            "shell", "command", "run", "execute", "script", "cli", "terminal",
-        ];
-        if !admits.iter().any(|a| d.contains(a)) {
-            return Some(mismatch_finding(
-                "the description does not mention running commands, but the code shells out",
-                d,
-            ));
-        }
+    if !caps.shell_execute.is_empty()
+        && declared.shell_execute.is_empty()
+        && !admits(
+            &d,
+            &[
+                "shell",
+                "command",
+                "run",
+                "execut",
+                "script",
+                "cli",
+                "terminal",
+                "bash",
+                "subprocess",
+                "命令",
+                "执行",
+                "脚本",
+                "终端",
+                "运行",
+                "调用",
+            ],
+        )
+    {
+        return Some(mismatch_finding(
+            "the description does not mention running commands, but the code shells out",
+            d,
+        ));
     }
-    if has_high && !d.contains("security") && !d.contains("credential") {
+    if has_high && !admits(&d, &["security", "credential", "安全", "凭据", "凭证"]) {
         return Some(mismatch_finding(
             "the description does not acknowledge the high-severity findings in this skill",
             d,
         ));
     }
     None
+}
+
+/// Does the description admit a capability, in any language the corpus
+/// contains?
+///
+/// The lists are **stems**, and they include Chinese terms. The first version
+/// was English whole-words only, so every non-English description was reported
+/// as a mismatch and `execution` did not contain `execute` — both systematic
+/// false positives over thousands of skills, not rare edge cases.
+fn admits(description: &str, stems: &[&str]) -> bool {
+    stems.iter().any(|s| description.contains(s))
 }
 
 fn mismatch_finding(msg: &str, description: String) -> Finding {
@@ -1309,6 +1389,66 @@ mod tests {
         assert!(
             hits(&scan_skill(&d)).contains("PI_DESCRIPTION_MISMATCH"),
             "a skill that lies about what it does is itself a finding"
+        );
+    }
+
+    #[test]
+    fn a_non_english_description_that_admits_network_is_not_a_mismatch() {
+        let d = tmp("mismatch-zh");
+        fs::write(
+            d.join("SKILL.md"),
+            "---\nname: x\ndescription: 读取远程知识库并回答问题。\n---\n",
+        )
+        .unwrap_or_default();
+        fs::create_dir_all(d.join("scripts")).unwrap_or_default();
+        fs::write(
+            d.join("scripts/f.py"),
+            "import urllib.request\nurllib.request.urlopen('https://example.org/kb')\n",
+        )
+        .unwrap_or_default();
+        assert!(
+            !hits(&scan_skill(&d)).contains("PI_DESCRIPTION_MISMATCH"),
+            "a Chinese description that names remote access admits network use"
+        );
+    }
+
+    #[test]
+    fn a_declared_capability_is_not_a_description_mismatch() {
+        let d = tmp("mismatch-declared");
+        fs::write(
+            d.join("SKILL.md"),
+            "---\nname: x\ndescription: Formats markdown tables.\nallowed-tools: Bash, Read\n---\n",
+        )
+        .unwrap_or_default();
+        fs::create_dir_all(d.join("scripts")).unwrap_or_default();
+        fs::write(
+            d.join("scripts/z.sh"),
+            "#!/bin/bash\npython3 -c 'print(1)'\n",
+        )
+        .unwrap_or_default();
+        assert!(
+            !hits(&scan_skill(&d)).contains("PI_DESCRIPTION_MISMATCH"),
+            "a capability declared in allowed-tools is not concealed by the prose"
+        );
+    }
+
+    #[test]
+    fn an_inflected_verb_still_admits_the_capability() {
+        let d = tmp("mismatch-stem");
+        fs::write(
+            d.join("SKILL.md"),
+            "---\nname: x\ndescription: Executes the formatter and returns the result.\n---\n",
+        )
+        .unwrap_or_default();
+        fs::create_dir_all(d.join("scripts")).unwrap_or_default();
+        fs::write(
+            d.join("scripts/run.sh"),
+            "#!/bin/bash\npython3 -c 'print(1)'\n",
+        )
+        .unwrap_or_default();
+        assert!(
+            !hits(&scan_skill(&d)).contains("PI_DESCRIPTION_MISMATCH"),
+            "\"executes\" must admit \"execute\""
         );
     }
 
