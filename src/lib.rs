@@ -26,13 +26,15 @@
 pub mod capability;
 pub mod models;
 pub mod parser;
+pub mod permissions;
 pub mod report;
 pub mod scan;
 pub mod text;
 pub mod walk;
 
 pub use models::{
-    Capability, CapabilitySet, Confidence, Finding, ParsedSkill, RuleId, Severity, Skill,
+    Capability, CapabilitySet, Confidence, DiffReport, Finding, Mismatch, MismatchKind,
+    ParsedSkill, PermissionDecl, RuleId, Severity, Skill,
 };
 
 /// Version of the scanner rule set. Bumping this invalidates cached findings,

@@ -95,13 +95,18 @@ fn body_from(src: &str, yaml_lines: usize) -> String {
     String::new()
 }
 
-/// Flatten YAML into `key -> value` pairs, one level deep is enough for
-/// frontmatter. Nested blocks are stored as indented raw text so the
-/// `permissions:` block can be re-scanned as text in Phase 1.
+/// Flatten YAML into `key -> value` pairs.
+///
+/// One level of nesting is enough for frontmatter. A nested block keeps its
+/// **lines** joined by `\n` rather than concatenated, so a consumer can still
+/// see where one nested key ended and the next began. Concatenating them was a
+/// real bug: `network: {outbound: a}` followed by `shell: {execute: b}` becomes
+/// the single line `network: outbound: a shell: execute: b`, which is
+/// unrecoverable.
 pub fn flatten_frontmatter(yaml: &str) -> BTreeMap<String, String> {
     let mut out: BTreeMap<String, String> = BTreeMap::new();
     let mut current_key: Option<String> = None;
-    let mut nested: BTreeMap<String, String> = BTreeMap::new();
+    let mut nested: Vec<(String, String)> = Vec::new();
 
     for raw in yaml.lines() {
         if raw.trim().is_empty() || raw.trim_start().starts_with('#') {
@@ -111,9 +116,12 @@ pub fn flatten_frontmatter(yaml: &str) -> BTreeMap<String, String> {
         let line = raw.trim_end();
 
         if indent == 0 {
-            // Flush the previous nested block.
             if let Some(k) = current_key.take() {
-                let v = nested.remove(&k).unwrap_or_default();
+                let v = nested
+                    .iter()
+                    .map(|(_, l)| l.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 if !v.is_empty() {
                     out.insert(k, v);
                 }
@@ -125,22 +133,33 @@ pub fn flatten_frontmatter(yaml: &str) -> BTreeMap<String, String> {
                 if v.is_empty() {
                     current_key = Some(k);
                 } else {
-                    out.insert(k, v.trim_matches('"').to_owned());
+                    out.insert(k, strip_quotes(&v));
                 }
             }
-        } else if let Some(k) = current_key.clone() {
-            let prev = nested.get(&k).cloned().unwrap_or_default();
-            nested.insert(k, format!("{prev}{}", line.trim()));
+        } else if let Some(k) = current_key.as_ref() {
+            nested.push((k.clone(), line.trim().to_owned()));
         }
     }
     if let Some(k) = current_key.take() {
-        if let Some(v) = nested.remove(&k) {
-            if !v.is_empty() {
-                out.insert(k, v);
-            }
+        let v = nested
+            .iter()
+            .map(|(_, l)| l.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        if !v.is_empty() {
+            out.insert(k, v);
         }
     }
     out
+}
+
+fn strip_quotes(v: &str) -> String {
+    v.trim()
+        .trim_start_matches(['[', '{'])
+        .trim_end_matches([']', '}'])
+        .trim()
+        .trim_matches(['"', '\''])
+        .to_owned()
 }
 
 /// Parse a YAML dependency list such as `[a, b]` or a block list.
@@ -299,7 +318,7 @@ pub fn declared_permissions_raw(fm: &BTreeMap<String, String>) -> Option<String>
     ] {
         if let Some(v) = fm.get(key) {
             if !v.trim().is_empty() {
-                return Some(format!("{key}: {v}"));
+                return Some(format!("{key}:\n{v}"));
             }
         }
     }

@@ -357,14 +357,25 @@ impl Accumulator {
             if p.is_empty() {
                 continue;
             }
-            // A path on the right of a redirect, or with a write verb, is a write.
+            // A path on the right of a redirect, or next to a write verb, is a
+            // write. `open(` is deliberately absent: reading a file with `open`
+            // is far more common than writing one, and treating it as a write
+            // would misfile most reads.
             let tail = &masked[m.end()..];
             let head = &masked[..m.start()];
-            let writey = tail.trim_start().starts_with('>')
+            let tail_head = &tail[..tail.len().min(24)];
+            let writey = tail_head.trim_start().starts_with('>')
                 || head.contains("tee ")
-                || head.contains("write")
-                || head.contains("open(")
-                || head.contains("w+");
+                || head.contains(".write_text")
+                || head.contains(".write_bytes")
+                || head.contains("writeFileSync")
+                || head.contains("f.write(")
+                || (head.contains("open(")
+                    && (tail_head.contains("\"w")
+                        || tail_head.contains("'w")
+                        || tail_head.contains("\"a")
+                        || tail_head.contains("'a")
+                        || tail_head.contains("\"x")));
             if writey {
                 writes.insert(p);
             } else {
@@ -383,7 +394,12 @@ impl Accumulator {
 fn path_re() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
     R.get_or_init(|| {
-        re(r"(?:~|\.{1,2})?/?(?:[\w.\-]+/){0,6}[\w.\-]+(?:\.[A-Za-z0-9]{1,6})?|\$\{?[A-Z_]{3,}\}?|/[A-Za-z0-9._\-/]{3,}")
+        // The last alternative catches separator-less dotfiles such as `.env`.
+        // It also matches attribute accesses like `.json`; those are filtered
+        // out downstream by `is_config_file`, which is why that check exists.
+        re(
+            r"(?:~|\.{1,2})?/?(?:[\w.\-]+/){0,6}[\w.\-]+(?:\.[A-Za-z0-9]{1,6})?|\$\{?[A-Z_]{3,}\}?|/[A-Za-z0-9._\-/]{3,}|\.[A-Za-z0-9_][A-Za-z0-9_.\-]{0,19}",
+        )
     })
 }
 
@@ -416,7 +432,7 @@ fn normalize_path_token(t: &str) -> String {
         return String::new();
     }
     // Skip bare words and version-like tokens that the path regex over-matches.
-    if !t.contains('/') && !t.starts_with('~') && !t.starts_with('.') && !t.starts_with('$') {
+    if !t.contains('/') && !t.starts_with('~') && !t.starts_with('$') && !is_config_file(t) {
         return String::new();
     }
     if t.matches('.').count() > 3 {
@@ -426,6 +442,31 @@ fn normalize_path_token(t: &str) -> String {
         return String::new();
     }
     t.replace('\\', "/")
+}
+
+/// Dotfiles that are genuinely paths.
+///
+/// A bare `.foo` token is ambiguous: in `response.json()` or `req.get(` the
+/// path regex sees `.json` and `.get`, which are attribute accesses rather than
+/// files. Reporting those as filesystem reads is how a capability diff loses all
+/// credibility, so a separator-less token only counts when it is a known config
+/// filename.
+fn is_config_file(t: &str) -> bool {
+    const CONFIG_FILES: &[&str] = &[
+        ".env",
+        ".envrc",
+        ".ssh",
+        ".aws",
+        ".gnupg",
+        ".kube",
+        ".npmrc",
+        ".netrc",
+        ".pypirc",
+        ".git-credentials",
+        ".docker",
+        ".config",
+    ];
+    CONFIG_FILES.contains(&t.to_ascii_lowercase().as_str())
 }
 
 /// Hosts a line contacts, for the declared-vs-observed diff.
@@ -551,5 +592,31 @@ mod tests {
             cap.filesystem_read
         );
         assert!(cap.network_outbound.contains(&"cdn.example.net".to_owned()));
+    }
+
+    #[test]
+    fn attribute_access_is_not_a_filesystem_path() {
+        // `response.json()` and `req.get(` look like `.json` and `.get` to a
+        // path regex. Reporting those as reads would poison the capability diff.
+        let mut a = Accumulator::new();
+        a.add_text("response = requests.get(url)\nbody = response.json()");
+        let cap = a.finish();
+        assert!(
+            cap.filesystem_read.is_empty(),
+            "attribute access is not a path: {:#?}",
+            cap.filesystem_read
+        );
+    }
+
+    #[test]
+    fn known_dotfiles_are_still_paths() {
+        let mut a = Accumulator::new();
+        a.add_text("token = open('.env').read()");
+        let cap = a.finish();
+        assert!(
+            cap.filesystem_read.iter().any(|p| p == ".env"),
+            ".env is a real path: {:#?}",
+            cap.filesystem_read
+        );
     }
 }

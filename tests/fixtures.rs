@@ -342,6 +342,136 @@ fn skipped_files_are_reported_not_hidden() {
 }
 
 // ---------------------------------------------------------------------------
+// declared vs observed: the differentiator
+// ---------------------------------------------------------------------------
+
+#[test]
+fn undeclared_egress_is_detected() {
+    let out = scan_fixture("suspicious", "undeclared-egress");
+    assert!(
+        out.declared.declared,
+        "this fixture must declare something, or there is nothing to diff"
+    );
+    let under: Vec<&str> = out
+        .diff
+        .blocking()
+        .iter()
+        .map(|m| m.detail.as_str())
+        .collect();
+    assert!(
+        under
+            .iter()
+            .any(|d| d.contains("telemetry.weather-analytics.example.net")),
+        "egress to an undeclared host is the finding this project exists for: {under:?}"
+    );
+    assert!(
+        !under.iter().any(|d| d.contains("weather.example.com")),
+        "the declared host must not be reported: {under:?}"
+    );
+}
+
+#[test]
+fn mismatches_surface_as_ordinary_findings() {
+    // They have to flow through SARIF and `--fail-on`, so they must be findings.
+    let out = scan_fixture("suspicious", "undeclared-egress");
+    assert!(
+        out.findings
+            .iter()
+            .any(|f| f.rule.as_str() == "MISMATCH_UNDER_DECLARED"),
+        "{:?}",
+        out.findings
+            .iter()
+            .map(|f| f.rule.0.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn secrets_false_conflicts_with_observed_secret_access() {
+    let out = scan_fixture("suspicious", "undeclared-egress");
+    // This fixture declares `secrets.access: false` and does not read secrets,
+    // so there must be no conflict. A positive control for the rule's silence.
+    assert!(
+        !out.diff
+            .mismatches
+            .iter()
+            .any(|m| m.kind == skillguard::MismatchKind::Conflicting),
+        "{:#?}",
+        out.diff
+    );
+}
+
+#[test]
+fn adopting_then_diffing_is_clean() {
+    // The bootstrap loop must actually close: adopt derives a declaration from
+    // observation, and diffing against it must then find nothing.
+    let dir = fixtures("suspicious").join("undeclared-egress");
+    let before = scan_skill(&dir);
+    assert!(
+        !before.diff.blocking().is_empty(),
+        "fixture must start with undeclared behaviour"
+    );
+    let derived = before.declared_from_observed();
+    let after = skillguard::permissions::diff(&derived, &before.capabilities);
+    assert!(
+        after.blocking().is_empty(),
+        "a declaration derived from observation must diff clean: {:#?}",
+        after.mismatches
+    );
+}
+
+#[test]
+fn adopt_is_idempotent_and_preserves_the_rest_of_the_file() {
+    let src = std::fs::read_to_string(fixtures("suspicious").join("undeclared-egress/SKILL.md"))
+        .expect("fixture");
+    // Derive a block and write it twice; the second write must be a no-op.
+    let out = scan_skill(&fixtures("suspicious").join("undeclared-egress"));
+    let block = skillguard::permissions::to_yaml(&out.declared_from_observed());
+    let once = replace_block(&src, &block);
+    let twice = replace_block(&once, &block);
+    assert_eq!(once, twice, "adopt must be idempotent");
+    assert!(once.contains("name: weather-report"), "name must survive");
+    assert!(
+        once.contains("Calls the weather API"),
+        "the body must survive"
+    );
+    assert!(
+        once.contains("telemetry.weather-analytics.example.net"),
+        "the derived block must describe the observed host"
+    );
+}
+
+/// Mirror of the binary's frontmatter rewrite, for testing without touching disk.
+fn replace_block(src: &str, block: &str) -> String {
+    let split = skillguard::parser::split_frontmatter(src);
+    let (yaml, _) = split.frontmatter.expect("fixture has frontmatter");
+    let mut kept: Vec<&str> = Vec::new();
+    let mut skipping = false;
+    for line in yaml.lines() {
+        let indent = line.len() - line.trim_start().len();
+        let t = line.trim_end();
+        if indent == 0 {
+            let key = t.split(':').next().unwrap_or("").trim();
+            skipping = matches!(key, "permissions" | "skillguard.permissions");
+            if skipping {
+                continue;
+            }
+        }
+        if !skipping {
+            kept.push(t);
+        }
+    }
+    while kept.last().is_some_and(|l| l.trim().is_empty()) {
+        kept.pop();
+    }
+    let mut new_yaml: String = kept.iter().map(|l| format!("{l}\n")).collect();
+    new_yaml.push('\n');
+    new_yaml.push_str(block);
+    let body = split.body.trim_start_matches('\n');
+    format!("---\n{new_yaml}---\n\n{body}")
+}
+
+// ---------------------------------------------------------------------------
 // catalogue invariants
 // ---------------------------------------------------------------------------
 

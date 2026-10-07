@@ -12,8 +12,8 @@ pub mod rules;
 
 use crate::capability::Accumulator;
 use crate::models::{
-    ArtifactKind, Capability, Confidence, Dependency, Evidence, Finding, RuleId, Severity,
-    SkippedFile,
+    ArtifactKind, Capability, Confidence, Dependency, DiffReport, Evidence, Finding, Mismatch,
+    MismatchKind, PermissionDecl, RuleId, Severity, SkippedFile,
 };
 use crate::text::{self, Normalized};
 use crate::walk::{self, Walked};
@@ -27,10 +27,14 @@ pub struct ScanOutcome {
     pub capabilities: Capability,
     pub dependencies: Vec<Dependency>,
     pub skipped: Vec<SkippedFile>,
+    pub declared: PermissionDecl,
+    pub diff: DiffReport,
     pub declared_permissions_raw: Option<String>,
     pub description: Option<String>,
     pub license_declared: Option<String>,
     pub license_file_found: bool,
+    /// Absolute path the scan was rooted at, when known.
+    pub root: Option<std::path::PathBuf>,
 }
 
 /// Scan one skill directory.
@@ -41,7 +45,9 @@ pub fn scan_skill(root: &std::path::Path) -> ScanOutcome {
         .unwrap_or_else(|| "skill".to_owned());
 
     let walked = walk::walk_skill(root);
-    scan_walked(&name, walked)
+    let mut out = scan_walked(&name, walked);
+    out.root = Some(root.to_path_buf());
+    out
 }
 
 /// Scan an already-walked tree. Split out so tests can build a `Walked` by hand.
@@ -57,6 +63,7 @@ pub fn scan_walked(name: &str, walked: Walked) -> ScanOutcome {
     let mut license_file_found = false;
     let mut declared_permissions_raw = None;
     let mut frontmatter_map: BTreeMap<String, String> = BTreeMap::new();
+    let mut frontmatter_yaml: Option<serde_yaml::Value> = None;
     let mut skill_md: Option<Normalized> = None;
 
     for f in &walked.files {
@@ -81,7 +88,10 @@ pub fn scan_walked(name: &str, walked: Walked) -> ScanOutcome {
             let split = crate::parser::split_frontmatter(textsrc);
             if let Some((yaml, _)) = &split.frontmatter {
                 match serde_yaml::from_str::<serde_yaml::Value>(yaml) {
-                    Ok(_) => frontmatter_map = crate::parser::flatten_frontmatter(yaml),
+                    Ok(v) => {
+                        frontmatter_map = crate::parser::flatten_frontmatter(yaml);
+                        frontmatter_yaml = Some(v);
+                    }
                     Err(e) => {
                         // Not fatal. Record it, because a skill whose
                         // declaration cannot be parsed cannot be validated.
@@ -245,6 +255,19 @@ pub fn scan_walked(name: &str, walked: Walked) -> ScanOutcome {
         }
     }
 
+    // -- Declared vs observed ----------------------------------------------
+    // The parsed YAML is authoritative; the flattened map is the fallback for
+    // frontmatter that failed to parse but still yielded key/value pairs.
+    let declared = match &frontmatter_yaml {
+        Some(v) => crate::permissions::parse_yaml(v),
+        None => crate::permissions::parse_frontmatter(&frontmatter_map),
+    };
+    let diff = crate::permissions::diff(&declared, &capabilities);
+    let mismatches = diff.clone();
+    for m in &mismatches.mismatches {
+        findings.push(declared_vs_observed_finding(&m.kind, m, &capabilities));
+    }
+
     dedupe(&mut findings);
     findings.sort_by(|a, b| {
         b.severity
@@ -260,10 +283,82 @@ pub fn scan_walked(name: &str, walked: Walked) -> ScanOutcome {
         capabilities,
         dependencies: deps,
         skipped,
+        declared,
+        diff,
         declared_permissions_raw,
         description,
         license_declared,
         license_file_found,
+        root: None,
+    }
+}
+
+impl ScanOutcome {
+    /// A declaration that describes exactly what was observed.
+    ///
+    /// This is the bootstrap for the whole idea. There is no manifest
+    /// convention in the ecosystem yet, so rather than wait for authors to
+    /// adopt one, `adopt` derives the first declaration from observation. The
+    /// author then reviews and commits it, and every later change has a
+    /// baseline to be measured against.
+    ///
+    /// It is explicitly *not* a recommendation: a declaration written this way
+    /// approves of whatever the skill already does, including the malicious
+    /// parts. That is why the output says "review this before committing".
+    pub fn declared_from_observed(&self) -> PermissionDecl {
+        let c = &self.capabilities;
+        PermissionDecl {
+            network_outbound: c.network_outbound.clone(),
+            shell_execute: c.shell_execute.clone(),
+            filesystem_read: c.filesystem_read.clone(),
+            filesystem_write: c.filesystem_write.clone(),
+            secrets_access: Some(c.secrets_read),
+            package_install: c.package_install.clone(),
+            declared: true,
+        }
+    }
+}
+
+/// Turn a mismatch into a regular finding, so it flows through
+/// SARIF, CI thresholds and `--fail-on` like everything else.
+fn declared_vs_observed_finding(kind: &MismatchKind, m: &Mismatch, caps: &Capability) -> Finding {
+    let message = match kind {
+        MismatchKind::UnderDeclared => format!(
+            "{} is used but not declared in the skill's permissions",
+            m.detail
+        ),
+        MismatchKind::OverDeclared => format!(
+            "{} is declared but never observed in executable code",
+            m.detail
+        ),
+        MismatchKind::Conflicting => m.detail.clone(),
+    };
+    Finding {
+        rule: RuleId::from(match kind {
+            MismatchKind::Conflicting => "MISMATCH_CONFLICTING",
+            MismatchKind::OverDeclared => "MISMATCH_OVER_DECLARED",
+            MismatchKind::UnderDeclared => "MISMATCH_UNDER_DECLARED",
+        }),
+        severity: m.severity,
+        confidence: Confidence::High,
+        file: "SKILL.md".to_owned(),
+        message,
+        evidence: vec![Evidence {
+            line: 0,
+            text: text::sanitize_for_display(&format!(
+                "declared vs observed: {} / {}",
+                m.capability,
+                if caps.is_empty() {
+                    "nothing observed".to_owned()
+                } else {
+                    "capabilities observed in code".to_owned()
+                }
+            )),
+            secondary: None,
+            note: Some(format!("kind: {kind:?}")),
+        }],
+        capability: Some(m.capability.clone()),
+        via_normalization: None,
     }
 }
 

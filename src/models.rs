@@ -243,6 +243,110 @@ pub struct Dependency {
     pub version_spec: Option<String>,
 }
 
+// ── Phase 2: declared permissions and the declared-vs-observed diff ────────
+
+/// What a skill claims it needs, read from frontmatter.
+///
+/// Deliberately a *separate type* from [`Capability`]. Invariant S8: a declared
+/// value and an observed value must never be assignable to each other, because
+/// conflating them is exactly how a scanner ends up "verifying" a skill against
+/// its own claims.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct PermissionDecl {
+    /// Hostnames the skill says it contacts.
+    pub network_outbound: Vec<String>,
+    /// Interpreters the skill says it runs.
+    pub shell_execute: Vec<String>,
+    /// Path globs the skill says it reads.
+    pub filesystem_read: Vec<String>,
+    pub filesystem_write: Vec<String>,
+    /// `Some(false)` is a meaningful declaration: "this skill touches no secrets".
+    pub secrets_access: Option<bool>,
+    /// Package managers the skill says it installs from.
+    pub package_install: Vec<String>,
+    /// True when the skill declared anything at all.
+    pub declared: bool,
+}
+
+impl PermissionDecl {
+    pub fn is_empty(&self) -> bool {
+        !self.declared
+            && self.network_outbound.is_empty()
+            && self.shell_execute.is_empty()
+            && self.filesystem_read.is_empty()
+            && self.filesystem_write.is_empty()
+            && self.secrets_access.is_none()
+            && self.package_install.is_empty()
+    }
+
+    /// Sort, dedup and lowercase hosts, so equality reflects content.
+    pub fn normalized(&self) -> PermissionDecl {
+        fn norm(v: &mut Vec<String>) {
+            v.sort();
+            v.dedup();
+        }
+        let mut d = self.clone();
+        norm(&mut d.network_outbound);
+        norm(&mut d.shell_execute);
+        norm(&mut d.filesystem_read);
+        norm(&mut d.filesystem_write);
+        norm(&mut d.package_install);
+        d.network_outbound = d
+            .network_outbound
+            .into_iter()
+            .map(|h| h.to_ascii_lowercase())
+            .collect();
+        d.network_outbound.sort();
+        d
+    }
+}
+
+/// Which side of the declared/observed line a value fell on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MismatchKind {
+    /// Declared but never observed: usually harmless over-declaration.
+    OverDeclared,
+    /// Observed but not declared: **this is the one that blocks installs**.
+    UnderDeclared,
+    /// The declaration contradicts itself.
+    Conflicting,
+}
+
+/// One difference between declared and observed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Mismatch {
+    pub kind: MismatchKind,
+    /// Capability path, e.g. `network.outbound`.
+    pub capability: String,
+    /// The value that is unaccounted for.
+    pub detail: String,
+    pub severity: Severity,
+}
+
+/// The result of comparing a declaration against observation.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiffReport {
+    /// No declaration was present, so no diff is possible.
+    pub no_declaration: bool,
+    pub mismatches: Vec<Mismatch>,
+}
+
+impl DiffReport {
+    /// Mismatches that should block an install.
+    pub fn blocking(&self) -> Vec<&Mismatch> {
+        self.mismatches
+            .iter()
+            .filter(|m| m.kind == MismatchKind::UnderDeclared)
+            .collect()
+    }
+
+    pub fn worst(&self) -> Option<Severity> {
+        self.mismatches.iter().map(|m| m.severity).max()
+    }
+}
+
 /// A file read from the skill tree.
 #[derive(Debug, Clone)]
 pub struct SourceFile {

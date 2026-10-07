@@ -7,7 +7,7 @@ use clap::{Parser, Subcommand};
 use skillguard::exit;
 use skillguard::models::Severity;
 use skillguard::report::{Format, Report, SkillReport};
-use skillguard::scan::{self, ScanOutcome};
+use skillguard::scan::{self, scan_skill, ScanOutcome};
 use skillguard::text;
 use skillguard::walk;
 use std::io::Write;
@@ -67,6 +67,33 @@ enum Command {
         format: Format,
     },
 
+    /// Compare the skill's declared permissions against observed behaviour.
+    ///
+    /// This is the check no other tool performs: it answers "does the skill do
+    /// anything it did not say it would do?"
+    Diff {
+        #[arg(value_name = "PATH", required = true)]
+        paths: Vec<PathBuf>,
+
+        /// Treat undeclared behaviour as a failure, not a warning.
+        #[arg(long)]
+        strict: bool,
+    },
+
+    /// Write a permissions block derived from observed behaviour into SKILL.md.
+    ///
+    /// Bootstrap tool: the ecosystem has no manifest convention yet, so this
+    /// creates one from what a skill actually does. Review it, commit it, and
+    /// every later `skillguard diff` has something to verify against.
+    Adopt {
+        #[arg(value_name = "PATH", required = true)]
+        paths: Vec<PathBuf>,
+
+        /// Print the block instead of writing it.
+        #[arg(long)]
+        dry_run: bool,
+    },
+
     /// Print the rule catalogue.
     Rules {
         #[arg(long, short, default_value = "text", value_enum)]
@@ -98,6 +125,8 @@ fn main() -> ExitCode {
             list_rules,
         } => run_scan(paths, *format, fail_on, *list_rules, &cli, color),
         Command::Inspect { paths, format } => run_inspect(paths, *format, &cli, color),
+        Command::Diff { paths, strict } => run_diff(paths, *strict, &cli),
+        Command::Adopt { paths, dry_run } => run_adopt(paths, *dry_run, &cli),
         Command::Rules { format } => run_rules(*format, &cli, color),
     };
 
@@ -108,6 +137,117 @@ fn main() -> ExitCode {
             ExitCode::from(exit::USAGE as u8)
         }
     }
+}
+
+fn run_diff(paths: &[PathBuf], strict: bool, cli: &Cli) -> Result<i32, String> {
+    let outcomes = scan_all(paths)?;
+    let mut o = String::from("\n  SkillGuard diff · declared permissions vs observed behaviour\n");
+    let mut blocking_total = 0usize;
+
+    for out in &outcomes {
+        o.push_str(&format!("\n  {}\n", out.skill_name));
+        o.push_str(&skillguard::permissions::render(&out.diff));
+        blocking_total += out.diff.blocking().len();
+    }
+
+    o.push_str("  Undeclared behaviour is the finding that matters: a skill doing\n");
+    o.push_str("  something it never declared is a skill whose author is not in control.\n\n");
+
+    emit(cli, &o)?;
+
+    if strict && blocking_total > 0 {
+        Ok(exit::FINDINGS)
+    } else {
+        Ok(exit::OK)
+    }
+}
+
+fn run_adopt(paths: &[PathBuf], dry_run: bool, cli: &Cli) -> Result<i32, String> {
+    let targets = resolve_targets(paths)?;
+    let mut o = String::from("\n  SkillGuard adopt · derive permissions from observed behaviour\n");
+
+    for t in &targets {
+        let out = scan_skill(t);
+        let block = skillguard::permissions::to_yaml(&out.declared_from_observed());
+
+        if dry_run {
+            o.push_str(&format!("\n  {}\n{block}", out.skill_name));
+            continue;
+        }
+
+        match adopt_into_skill_md(t, &block) {
+            Ok(action) => o.push_str(&format!("\n  {}  {action}\n", out.skill_name)),
+            Err(e) => o.push_str(&format!("\n  {}  skipped: {e}\n", out.skill_name)),
+        }
+    }
+
+    if !dry_run {
+        o.push_str("\n  Review the block before committing it. It describes what the skill\n");
+        o.push_str("  does today, not what it should do.\n");
+    }
+    o.push('\n');
+
+    emit(cli, &o)?;
+    Ok(exit::OK)
+}
+
+/// Insert or replace the `permissions:` block in a SKILL.md frontmatter.
+///
+/// An existing block is replaced rather than duplicated, and `adopt` is
+/// idempotent: running it twice produces the same file.
+fn adopt_into_skill_md(root: &std::path::Path, block: &str) -> Result<String, String> {
+    let skill_md = root.join("SKILL.md");
+    let src =
+        std::fs::read_to_string(&skill_md).map_err(|e| format!("cannot read SKILL.md: {e}"))?;
+    let split = skillguard::parser::split_frontmatter(&src);
+
+    let Some((yaml, _)) = &split.frontmatter else {
+        return Err(
+            "no YAML frontmatter to extend; a skill without frontmatter has nowhere to declare"
+                .to_owned(),
+        );
+    };
+
+    // Drop any existing permissions block from the YAML, then append the new one.
+    let mut kept: Vec<&str> = Vec::new();
+    let mut skipping = false;
+    for line in yaml.lines() {
+        let indent = line.len() - line.trim_start().len();
+        let t = line.trim_end();
+        if indent == 0 {
+            let key = t.split(':').next().unwrap_or("").trim();
+            skipping = matches!(key, "permissions" | "skillguard.permissions");
+            if skipping {
+                continue;
+            }
+        }
+        if !skipping {
+            kept.push(t);
+        }
+    }
+    while kept.last().is_some_and(|l| l.trim().is_empty()) {
+        kept.pop();
+    }
+
+    let mut new_yaml = String::new();
+    for l in &kept {
+        new_yaml.push_str(l);
+        new_yaml.push('\n');
+    }
+    if !new_yaml.is_empty() {
+        new_yaml.push('\n');
+    }
+    new_yaml.push_str(block);
+
+    let body = split.body.trim_start_matches('\n');
+    let out = if body.trim().is_empty() {
+        format!("---\n{new_yaml}---\n")
+    } else {
+        format!("---\n{new_yaml}---\n\n{body}")
+    };
+
+    std::fs::write(&skill_md, out).map_err(|e| format!("cannot write SKILL.md: {e}"))?;
+    Ok("wrote permissions block".to_owned())
 }
 
 /// Resolve user input to a list of skill directories.
