@@ -14,11 +14,10 @@
 > LICENSE, i.e. were false positives.
 >
 > A precision pass over the first real corpus also corrected several heuristics
-> that fired on ordinary text: `OBFUSC_HOMOGLYPH` 616 -> 5 findings (it flagged
-> Bulgarian/Russian/Chinese prose), `DL_BASE64_BLOB` 1398 -> 19 (npm integrity
-> hashes), `PI_CONCEALMENT` 530 -> 4 (the word "silently"), `SHELL_EVAL`
-> 103 -> 5 (`regex.exec(`), `OBFUSC_TRACKING_PIXEL` 187 -> 9 (shields.io
-> badges), and `NET_DOMAIN_LITERAL` now ignores ecosystem endpoints.
+> that fired on ordinary text and file formats: lookalike characters in
+> legitimate non-Latin prose, npm/pip/cargo integrity hashes, shields.io badges,
+> the word "silently" in documentation, `regex.exec(`, file extensions that look
+> like TLDs (`.zip`, `.mov`), and XML namespaces. Each fix is a regression test.
 
 ## Collection
 
@@ -91,15 +90,12 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | rule | hits | n | prevalence |
 |---|---|---|---|
 | `LICENSE_MISSING` | 461 | 1372 | 33.6% |
-| `PI_DESCRIPTION_MISMATCH` | 123 | 1372 | 9.0% |
-| `NET_DOMAIN_LITERAL` | 96 | 1372 | 7.0% |
+| `PI_DESCRIPTION_MISMATCH` | 114 | 1372 | 8.3% |
+| `NET_DOMAIN_LITERAL` | 86 | 1372 | 6.3% |
 | `FS_ABSOLUTE_PATH` | 53 | 1372 | 3.9% |
 | `NET_FETCH_CALL` | 37 | 1372 | 2.7% |
-| `DL_UNTRUSTED_DOMAIN` | 35 | 1372 | 2.6% |
 | `FS_RECURSIVE_WALK` | 32 | 1372 | 2.3% |
 | `FS_HOME_ACCESS` | 26 | 1372 | 1.9% |
-| `LICENSE_RESTRICTIVE` | 26 | 1372 | 1.9% |
-| `PI_EXFIL_INSTRUCTION` | 21 | 1372 | 1.5% |
 | `NET_HTTP_CLIENT` | 20 | 1372 | 1.5% |
 | `PARSE_FAILED` | 20 | 1372 | 1.5% |
 | `SHELL_EXEC` | 20 | 1372 | 1.5% |
@@ -107,9 +103,11 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | `MISMATCH_UNDER_DECLARED` | 19 | 1372 | 1.4% |
 | `PERSIST_AGENT_CONFIG` | 19 | 1372 | 1.4% |
 | `FS_PATH_ESCAPE` | 17 | 1372 | 1.2% |
+| `LICENSE_RESTRICTIVE` | 13 | 1372 | 0.9% |
 | `FS_SENSITIVE_PATH` | 11 | 1372 | 0.8% |
 | `OBFUSC_ZERO_WIDTH` | 11 | 1372 | 0.8% |
 | `PERSIST_HOOK` | 10 | 1372 | 0.7% |
+| `DL_UNTRUSTED_DOMAIN` | 9 | 1372 | 0.7% |
 | `OBFUSC_TRACKING_PIXEL` | 9 | 1372 | 0.7% |
 | `SECRET_ENV_DUMP` | 9 | 1372 | 0.7% |
 | `PERSIST_SHELL_RC` | 7 | 1372 | 0.5% |
@@ -120,6 +118,7 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | `DL_PASSWORD_ARCHIVE` | 3 | 1372 | 0.2% |
 | `MISMATCH_OVER_DECLARED` | 3 | 1372 | 0.2% |
 | `NET_DYNAMIC_URL` | 3 | 1372 | 0.2% |
+| `PI_EXFIL_INSTRUCTION` | 3 | 1372 | 0.2% |
 | `SECRET_PRIVATE_KEY` | 3 | 1372 | 0.2% |
 | `SHELL_DESTRUCTIVE` | 3 | 1372 | 0.2% |
 | `DEP_UNPINNED_SCRIPT` | 2 | 1372 | 0.1% |
@@ -154,35 +153,35 @@ Every headline figure must be reported per stratum (protocol §4.2); without str
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| L3 | 1372 | 0 | `LICENSE_MISSING` 33.6%, `PI_DESCRIPTION_MISMATCH` 9.0%, `NET_DOMAIN_LITERAL` 7.0%, `FS_ABSOLUTE_PATH` 3.9%, `NET_FETCH_CALL` 2.7% |
+| L3 | 1372 | 0 | `LICENSE_MISSING` 33.6%, `PI_DESCRIPTION_MISMATCH` 8.3%, `NET_DOMAIN_LITERAL` 6.3%, `FS_ABSOLUTE_PATH` 3.9%, `NET_FETCH_CALL` 2.7% |
 ### by `size`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| 32k_128k | 163 | 0 | `PI_DESCRIPTION_MISMATCH` 25.2%, `LICENSE_MISSING` 22.7%, `NET_DOMAIN_LITERAL` 22.7%, `FS_ABSOLUTE_PATH` 13.5%, `FS_HOME_ACCESS` 8.6% |
-| 8k_32k | 359 | 0 | `LICENSE_MISSING` 33.4%, `PI_DESCRIPTION_MISMATCH` 10.9%, `NET_DOMAIN_LITERAL` 6.4%, `FS_ABSOLUTE_PATH` 3.9%, `MISMATCH_UNDER_DECLARED` 3.3% |
-| gt_128k | 66 | 0 | `PI_DESCRIPTION_MISMATCH` 56.1%, `NET_DOMAIN_LITERAL` 50.0%, `NET_FETCH_CALL` 27.3%, `FS_ABSOLUTE_PATH` 24.2%, `FS_RECURSIVE_WALK` 24.2% |
-| lt_8k | 784 | 0 | `LICENSE_MISSING` 37.0%, `PARSE_FAILED` 1.4%, `PI_DESCRIPTION_MISMATCH` 0.8%, `PI_EXFIL_INSTRUCTION` 0.6%, `OBFUSC_ZERO_WIDTH` 0.5% |
+| 32k_128k | 163 | 0 | `PI_DESCRIPTION_MISMATCH` 24.5%, `LICENSE_MISSING` 22.7%, `NET_DOMAIN_LITERAL` 19.6%, `FS_ABSOLUTE_PATH` 13.5%, `FS_HOME_ACCESS` 8.6% |
+| 8k_32k | 359 | 0 | `LICENSE_MISSING` 33.4%, `PI_DESCRIPTION_MISMATCH` 10.0%, `NET_DOMAIN_LITERAL` 5.0%, `FS_ABSOLUTE_PATH` 3.9%, `MISMATCH_UNDER_DECLARED` 3.3% |
+| gt_128k | 66 | 0 | `PI_DESCRIPTION_MISMATCH` 53.0%, `NET_DOMAIN_LITERAL` 50.0%, `NET_FETCH_CALL` 27.3%, `FS_ABSOLUTE_PATH` 24.2%, `FS_RECURSIVE_WALK` 24.2% |
+| lt_8k | 784 | 0 | `LICENSE_MISSING` 37.0%, `PARSE_FAILED` 1.4%, `OBFUSC_ZERO_WIDTH` 0.5%, `NET_DOMAIN_LITERAL` 0.4%, `PI_DESCRIPTION_MISMATCH` 0.4% |
 ### by `scripts`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| js | 30 | 0 | `PI_DESCRIPTION_MISMATCH` 70.0%, `NET_DOMAIN_LITERAL` 56.7%, `NET_FETCH_CALL` 30.0%, `MISMATCH_UNDER_DECLARED` 26.7%, `DL_UNTRUSTED_DOMAIN` 20.0% |
-| none | 1214 | 0 | `LICENSE_MISSING` 34.7%, `PARSE_FAILED` 1.3%, `PI_DESCRIPTION_MISMATCH` 1.3%, `PI_EXFIL_INSTRUCTION` 1.1%, `LICENSE_RESTRICTIVE` 0.9% |
-| python | 74 | 0 | `PI_DESCRIPTION_MISMATCH` 55.4%, `NET_DOMAIN_LITERAL` 44.6%, `LICENSE_MISSING` 31.1%, `FS_RECURSIVE_WALK` 27.0%, `NET_FETCH_CALL` 27.0% |
-| shell | 54 | 0 | `NET_DOMAIN_LITERAL` 85.2%, `PI_DESCRIPTION_MISMATCH` 83.3%, `FS_ABSOLUTE_PATH` 77.8%, `DL_UNTRUSTED_DOMAIN` 31.5%, `NET_HTTP_CLIENT` 31.5% |
+| js | 30 | 0 | `PI_DESCRIPTION_MISMATCH` 66.7%, `NET_DOMAIN_LITERAL` 53.3%, `NET_FETCH_CALL` 30.0%, `MISMATCH_UNDER_DECLARED` 26.7%, `DL_BASE64_BLOB` 16.7% |
+| none | 1214 | 0 | `LICENSE_MISSING` 34.7%, `PARSE_FAILED` 1.3%, `PI_DESCRIPTION_MISMATCH` 0.7%, `OBFUSC_ZERO_WIDTH` 0.7%, `LICENSE_RESTRICTIVE` 0.5% |
+| python | 74 | 0 | `PI_DESCRIPTION_MISMATCH` 54.1%, `NET_DOMAIN_LITERAL` 41.9%, `LICENSE_MISSING` 31.1%, `FS_RECURSIVE_WALK` 27.0%, `NET_FETCH_CALL` 27.0% |
+| shell | 54 | 0 | `PI_DESCRIPTION_MISMATCH` 83.3%, `FS_ABSOLUTE_PATH` 77.8%, `NET_DOMAIN_LITERAL` 72.2%, `NET_HTTP_CLIENT` 31.5%, `SHELL_EXEC` 29.6% |
 ### by `declared`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| none | 1259 | 0 | `LICENSE_MISSING` 33.4%, `PI_DESCRIPTION_MISMATCH` 8.4%, `NET_DOMAIN_LITERAL` 6.8%, `FS_ABSOLUTE_PATH` 4.2%, `DL_UNTRUSTED_DOMAIN` 2.6% |
-| present | 113 | 0 | `LICENSE_MISSING` 36.3%, `MISMATCH_UNDER_DECLARED` 16.8%, `PI_DESCRIPTION_MISMATCH` 15.0%, `NET_DOMAIN_LITERAL` 9.7%, `FS_RECURSIVE_WALK` 4.4% |
+| none | 1259 | 0 | `LICENSE_MISSING` 33.4%, `PI_DESCRIPTION_MISMATCH` 7.9%, `NET_DOMAIN_LITERAL` 6.2%, `FS_ABSOLUTE_PATH` 4.2%, `NET_FETCH_CALL` 2.5% |
+| present | 113 | 0 | `LICENSE_MISSING` 36.3%, `MISMATCH_UNDER_DECLARED` 16.8%, `PI_DESCRIPTION_MISMATCH` 12.4%, `NET_DOMAIN_LITERAL` 7.1%, `FS_RECURSIVE_WALK` 4.4% |
 ### by `license`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| absent | 1197 | 0 | `LICENSE_MISSING` 38.5%, `PI_DESCRIPTION_MISMATCH` 6.7%, `NET_DOMAIN_LITERAL` 4.9%, `FS_ABSOLUTE_PATH` 2.8%, `DL_UNTRUSTED_DOMAIN` 1.8% |
-| present | 175 | 0 | `PI_DESCRIPTION_MISMATCH` 24.6%, `NET_DOMAIN_LITERAL` 21.1%, `FS_ABSOLUTE_PATH` 11.4%, `NET_FETCH_CALL` 10.3%, `FS_RECURSIVE_WALK` 9.1% |
+| absent | 1197 | 0 | `LICENSE_MISSING` 38.5%, `PI_DESCRIPTION_MISMATCH` 6.0%, `NET_DOMAIN_LITERAL` 4.3%, `FS_ABSOLUTE_PATH` 2.8%, `NET_FETCH_CALL` 1.6% |
+| present | 175 | 0 | `PI_DESCRIPTION_MISMATCH` 24.0%, `NET_DOMAIN_LITERAL` 20.0%, `FS_ABSOLUTE_PATH` 11.4%, `NET_FETCH_CALL` 10.3%, `FS_RECURSIVE_WALK` 9.1% |
 
 ## Precision and recall (GOLD)
 

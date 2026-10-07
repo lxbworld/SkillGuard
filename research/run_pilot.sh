@@ -91,11 +91,10 @@ target/release/skillguard corpus report --findings "$FINDINGS" --out /tmp/sg-pil
 > LICENSE, i.e. were false positives.
 >
 > A precision pass over the first real corpus also corrected several heuristics
-> that fired on ordinary text: `OBFUSC_HOMOGLYPH` 616 -> 5 findings (it flagged
-> Bulgarian/Russian/Chinese prose), `DL_BASE64_BLOB` 1398 -> 19 (npm integrity
-> hashes), `PI_CONCEALMENT` 530 -> 4 (the word "silently"), `SHELL_EVAL`
-> 103 -> 5 (`regex.exec(`), `OBFUSC_TRACKING_PIXEL` 187 -> 9 (shields.io
-> badges), and `NET_DOMAIN_LITERAL` now ignores ecosystem endpoints.
+> that fired on ordinary text and file formats: lookalike characters in
+> legitimate non-Latin prose, npm/pip/cargo integrity hashes, shields.io badges,
+> the word "silently" in documentation, `regex.exec(`, file extensions that look
+> like TLDs (`.zip`, `.mov`), and XML namespaces. Each fix is a regression test.
 
 HEADER
   echo "## Collection"

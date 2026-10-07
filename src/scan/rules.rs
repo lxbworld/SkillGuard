@@ -493,7 +493,10 @@ static TABLE: &[RuleSpec] = &[
         docs_confidence: Some(Low),
         kinds: CODE,
         patterns: &[
-            r"(?i)\b[a-z0-9-]+\.(?:tk|ml|ga|cf|gq|zip|mov|top|xyz|click|rest|lol|work|surf|quest)\b",
+            // A bare `word.tld` matched file names (`scan.gif`, `export.zip`),
+            // identifiers (`state.work`) and prose. Require URL context, and
+            // drop `zip`/`mov`, which are far more often file extensions.
+            r#"(?i)(?:https?://|ftp://|www\.)[^\s'"`<>]*\b[a-z0-9-]+\.(?:tk|ml|ga|cf|gq|top|xyz|click|rest|lol|work|surf|quest)\b"#,
             r"(?i)\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b",
             r"(?i)\b[a-z0-9]{20,}\.(?:com|net|org)\b",
         ],
@@ -563,8 +566,12 @@ static TABLE: &[RuleSpec] = &[
         kinds: ANY,
         patterns: &[
             r"(?i)\bsend\s+the\s+contents?\s+of\b",
-            r"(?i)\bexfiltrat\w*\b",
-            r"(?i)\bupload\s+(?:the\s+)?(?:contents?|files?|credentials?|keys?|tokens?|secrets?)",
+            // Documentation *about* exfiltration ("Data exfiltration patterns")
+            // is not an instruction to exfiltrate.
+            r"(?i)\bexfiltrate\s+(?:it|them|this|the\s+\w+)\b",
+            // A table row "Upload file" is not "upload the credentials". Require
+            // a determiner and a sensitive object.
+            r"(?i)\bupload\s+(?:the\s+|your\s+|all\s+)?(?:contents?|credentials?|keys?|tokens?|secrets?|private\s+keys?)\b",
             r"(?i)\btransmit\s+(?:the\s+)?(?:contents?|credentials?|secrets?|keys?)\b",
             r"(?i)\bsend\s+(?:the\s+)?(?:api[_ -]?key|token|credentials?|secrets?|ssh\s+key)\s+(?:to|toward)\b",
             r"(?i)\b(?:post|send)\s+[^\n]{0,60}(?:webhook\.site|ngrok\.io|ngrok-free|pipedream\.net|requestbin)",
@@ -715,7 +722,8 @@ static TABLE: &[RuleSpec] = &[
             r"(?i)\bCommons[- ]Clause\b",
             r"(?i)\bnon[- ]?commercial\b",
             r"(?i)\bnot\s+for\s+(?:commercial|resale)\b",
-            r"(?i)\ball\s+rights\s+reserved\b",
+            // `All rights reserved` is boilerplate in the header of permissive
+            // code and matched thousands of times for no signal.
             r"(?i)\bBUSL\b",
         ],
         message: "A restrictive or source-available license term is present",

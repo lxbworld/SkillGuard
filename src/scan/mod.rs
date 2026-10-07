@@ -582,9 +582,34 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
                 || m.contains("/dev/urandom")
                 || m.contains("/dev/random")
         }
-        "NET_DOMAIN_LITERAL" => SAFE_HOSTS
-            .iter()
-            .any(|h| m == *h || m.ends_with(&format!(".{h}"))),
+        "NET_DOMAIN_LITERAL" => {
+            let trimmed = raw_line.trim_start();
+            // XML namespaces (`xmlns="http://schemas..."`) are identifiers, not
+            // network calls, and a URL in a comment is documentation.
+            line.contains("xmlns")
+                || m.contains("w3.org")
+                || m.contains("openxmlformats.org")
+                || m.contains("schemas.")
+                || trimmed.starts_with('#')
+                || trimmed.starts_with("//")
+                || trimmed.starts_with('*')
+                || trimmed.starts_with("<!--")
+                || SAFE_HOSTS
+                    .iter()
+                    .any(|h| m == *h || m.ends_with(&format!(".{h}")))
+        }
+        // A loopback or private address is not an untrusted endpoint.
+        "DL_UNTRUSTED_DOMAIN" => {
+            m.starts_with("127.")
+                || m.starts_with("10.")
+                || m.starts_with("192.168.")
+                || m == "0.0.0.0"
+                || (m.starts_with("172.")
+                    && m.split('.')
+                        .nth(1)
+                        .and_then(|o| o.parse::<u8>().ok())
+                        .is_some_and(|o| (16..=31).contains(&o)))
+        }
         // A badge is a static image served by a badge service, not a tracking
         // pixel. They appear in most READMEs.
         "OBFUSC_TRACKING_PIXEL" => {
