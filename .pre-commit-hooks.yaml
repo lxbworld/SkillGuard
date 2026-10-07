@@ -11,11 +11,17 @@
 # `language: rust` means pre-commit builds the crate into its own cached
 # environment, so the hook needs no system install and no account. It runs
 # entirely offline: the scanner never opens a socket.
+#
+# `skillguard scan` accepts any file inside a skill and resolves it to the skill
+# directory, so this catches a changed script even when `SKILL.md` did not
+# change. pre-commit runs hooks from the *target* repository, which is why the
+# entry is the binary and not a script in this repository.
 - id: skillguard
   name: SkillGuard
   description: Scan changed Agent Skills for security findings (offline, deterministic).
-  entry: bash .pre-commit-hooks/skillguard-scan.sh
+  entry: skillguard scan
   language: rust
   pass_filenames: true
   require_serial: true
-  files: (^|/)(SKILL\.md|[^/]+\.(sh|bash|zsh|fish|py|js|mjs|cjs|ts|tsx|rb|pl|php|ps1|bat|cmd))$
+  args: [--fail-on, high]
+  files: (^|/)(SKILL\.md|[^/]+\.(sh|bash|zsh|fish|py|js|mjs|cjs|ts|tsx|jsx|rb|pl|php|ps1|bat|cmd))$

@@ -939,6 +939,19 @@ fn adopt_into_skill_md(root: &std::path::Path, block: &str) -> Result<String, St
     Ok("wrote permissions block".to_owned())
 }
 
+/// The nearest ancestor directory (including the file's own directory) that
+/// contains a `SKILL.md`.
+fn enclosing_skill(file: &std::path::Path) -> Option<PathBuf> {
+    let mut dir = file.parent();
+    while let Some(d) = dir {
+        if d.join("SKILL.md").is_file() {
+            return Some(d.to_path_buf());
+        }
+        dir = d.parent();
+    }
+    None
+}
+
 /// Resolve user input to a list of skill directories.
 fn resolve_targets(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
     let mut out: Vec<PathBuf> = Vec::new();
@@ -947,13 +960,18 @@ fn resolve_targets(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
             return Err(format!("path does not exist: {}", p.display()));
         }
         if p.is_file() {
-            // A single SKILL.md was named.
-            if p.file_name().map(|n| n == "SKILL.md").unwrap_or(false) {
-                if let Some(parent) = p.parent() {
-                    out.push(parent.to_path_buf());
+            // Accept a SKILL.md, or *any* file inside a skill. pre-commit hands
+            // hooks the changed files, and a script change must re-scan its
+            // skill even when SKILL.md did not change. This also makes
+            // `skillguard scan scripts/setup.sh` do the obvious thing.
+            match enclosing_skill(p) {
+                Some(dir) => out.push(dir),
+                None => {
+                    return Err(format!(
+                        "not a skill: {} (no SKILL.md in it or any parent directory)",
+                        p.display()
+                    ))
                 }
-            } else {
-                return Err(format!("not a skill: {}", p.display()));
             }
             continue;
         }
