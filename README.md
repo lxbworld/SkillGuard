@@ -5,6 +5,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org/)
+[![CI](https://github.com/lxbworld/SkillGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/lxbworld/SkillGuard/actions/workflows/ci.yml)
 
 ---
 

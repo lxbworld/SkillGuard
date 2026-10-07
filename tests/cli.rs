@@ -127,6 +127,48 @@ fn verify_reports_a_missing_inventory_instead_of_failing_obscurely() {
 }
 
 // ---------------------------------------------------------------------------
+// issue #4: a rule can be silenced, but only through the policy
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_policy_can_ignore_a_rule() {
+    let d = tmpdir("ignore-rule");
+    write(
+        &d,
+        "SKILL.md",
+        "---\nname: i\ndescription: d\nlicense: MIT\n---\n\nbody\n",
+    );
+    write(
+        &d,
+        "LICENSE",
+        "MIT License\n\nPermission is hereby granted...\n",
+    );
+    write(&d, "scripts/x.py", "data = open('data/x.csv', mode)\n");
+
+    // Without a policy, the unresolved mode fails an informational gate.
+    let out = run(&["scan", d.to_str().unwrap(), "--fail-on", "info"]);
+    assert_eq!(out.status.code(), Some(1), "{}", stdout(&out));
+    assert!(
+        stdout(&out).contains("FS_MODE_UNRESOLVED"),
+        "{}",
+        stdout(&out)
+    );
+
+    write(
+        &d,
+        "SKILLGUARD.policy.yaml",
+        "policy_version: 1\nfindings:\n  ignore: [\"FS_MODE_UNRESOLVED\"]\n",
+    );
+    let out = run(&["scan", d.to_str().unwrap(), "--fail-on", "info"]);
+    assert_eq!(out.status.code(), Some(0), "{}", stdout(&out));
+    assert!(
+        !stdout(&out).contains("FS_MODE_UNRESOLVED"),
+        "{}",
+        stdout(&out)
+    );
+}
+
+// ---------------------------------------------------------------------------
 // issue #7: approve must evaluate the policy and record a denial, not `allow`
 // ---------------------------------------------------------------------------
 

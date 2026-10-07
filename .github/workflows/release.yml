@@ -1,0 +1,108 @@
+# Release: prebuilt binaries for the five platforms.
+#
+# A single static binary is the whole point of the Rust choice; if installing
+# SkillGuard takes 20 minutes, that advantage is lost. Every asset ships with a
+# `.sha256` that the installer verifies before it runs anything (issue #4).
+#
+# Tag a commit `vX.Y.Z` to cut a release. The `publish` job collects every
+# matrix artifact and creates one release, so concurrent matrix jobs cannot race
+# on the release object.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.asset }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            asset: skillguard-linux-x86_64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            asset: skillguard-linux-aarch64
+            cross_linker: gcc-aarch64-linux-gnu
+          - os: macos-13
+            target: x86_64-apple-darwin
+            asset: skillguard-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            asset: skillguard-macos-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset: skillguard-windows-x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cross linker
+        if: matrix.cross_linker != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.cross_linker }}
+
+      - name: Configure cross linker
+        if: matrix.cross_linker != ''
+        run: |
+          mkdir -p .cargo
+          cat >> .cargo/config.toml <<EOF
+          [target.${{ matrix.target }}]
+          linker = "${{ matrix.cross_linker }}"
+          EOF
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin=skillguard
+          if [ "${{ runner.os }}" = "Windows" ]; then bin=skillguard.exe; fi
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/${bin}" "dist/${bin}"
+          archive="${{ matrix.asset }}.tar.gz"
+          tar -czf "${archive}" -C dist "${bin}"
+          hash="$(openssl dgst -sha256 "${archive}" | awk '{print $NF}')"
+          printf '%s  %s\n' "${hash}" "${archive}" > "${archive}.sha256"
+          cat "${archive}.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: |
+            ${{ matrix.asset }}.tar.gz
+            ${{ matrix.asset }}.tar.gz.sha256
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: List assets
+        run: ls -l assets
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: assets/*
+          generate_release_notes: true

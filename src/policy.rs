@@ -15,7 +15,7 @@
 // `curl` is already approved. Binding approvals to the digest closes that.
 
 use crate::hash::Digest;
-use crate::models::{Capability, DiffReport, MismatchKind, Severity};
+use crate::models::{Capability, DiffReport, Finding, MismatchKind, Severity};
 use crate::text;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -89,6 +89,15 @@ pub struct FindingsPolicy {
     pub deny_severity: Severity,
     #[serde(default = "default_approval_severity")]
     pub require_approval_severity: Severity,
+    /// Rule ids to suppress, e.g. `["LICENSE_MISSING"]`.
+    ///
+    /// Suppression is a *policy* decision, not a scanner one: the evidence is
+    /// still gathered and still available via `skillguard inspect`, but a
+    /// report that has been told to ignore a rule stops carrying it and stops
+    /// failing CI on it. Listing it here is the only supported way to silence a
+    /// rule, so `docs/RULES.md` can say exactly how.
+    #[serde(default)]
+    pub ignore: Vec<String>,
 }
 
 fn default_deny_severity() -> Severity {
@@ -103,6 +112,7 @@ impl Default for FindingsPolicy {
         FindingsPolicy {
             deny_severity: default_deny_severity(),
             require_approval_severity: default_approval_severity(),
+            ignore: Vec::new(),
         }
     }
 }
@@ -122,6 +132,25 @@ impl Policy {
     /// policy file cannot silently lock everyone out of their own tooling.
     pub fn new() -> Self {
         Policy::default()
+    }
+}
+
+impl Policy {
+    /// Drop findings for rules the policy explicitly ignores.
+    pub fn apply_ignores(&self, findings: Vec<Finding>) -> Vec<Finding> {
+        if self.findings.ignore.is_empty() {
+            return findings;
+        }
+        findings
+            .into_iter()
+            .filter(|f| {
+                !self
+                    .findings
+                    .ignore
+                    .iter()
+                    .any(|r| r.eq_ignore_ascii_case(f.rule.as_str()))
+            })
+            .collect()
     }
 }
 
@@ -983,10 +1012,42 @@ mod tests {
             findings: FindingsPolicy {
                 deny_severity: Severity::Critical,
                 require_approval_severity: Severity::High,
+                ignore: vec![],
             },
             ..Default::default()
         };
         assert_eq!(evaluate(&p, &subject(&c, &d, &f)).decision, Decision::Deny);
+    }
+
+    #[test]
+    fn policy_ignore_suppresses_only_the_listed_rule() {
+        let mk = |rule: &str| {
+            Finding::new(
+                rule,
+                Severity::Critical,
+                crate::models::Confidence::High,
+                "SKILL.md",
+                "x",
+                vec![crate::models::Evidence {
+                    line: 1,
+                    text: "e".to_owned(),
+                    secondary: None,
+                    note: None,
+                }],
+            )
+        };
+        let p = Policy {
+            findings: FindingsPolicy {
+                ignore: vec!["RULE_A".to_owned()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let kept = p.apply_ignores(vec![mk("RULE_A"), mk("RULE_B")]);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].rule.as_str(), "RULE_B");
+        // Rule ids are matched case-insensitively, so a typo in case still works.
+        assert!(p.apply_ignores(vec![mk("rule_a")]).is_empty());
     }
 
     #[test]

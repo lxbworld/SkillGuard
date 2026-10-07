@@ -1,0 +1,102 @@
+# SkillGuard composite GitHub Action.
+#
+# Usage:
+#
+#   - uses: lxbworld/SkillGuard/action@v1
+#     with:
+#       path: .
+#       fail-on: high
+#       upload-sarif: 'true'
+#
+# The action is offline and deterministic. It never sends skill content
+# anywhere; the only thing that leaves the runner is the SARIF file, which the
+# *caller* uploads via `github/codeql-action/upload-sarif`. Add
+# `permissions: security-events: write` to the calling job for that to work,
+# and do not expect a usage ping: there is none, by design.
+
+name: SkillGuard
+description: Offline, deterministic security scan for Agent Skills, with SARIF upload to Code Scanning.
+author: lxbworld
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  path:
+    description: File or directory to scan.
+    required: false
+    default: "."
+  fail-on:
+    description: Severity at or above which the job fails (info|low|medium|high|critical).
+    required: false
+    default: high
+  upload-sarif:
+    description: Upload the SARIF report to GitHub Code Scanning.
+    required: false
+    default: "true"
+  version:
+    description: Prebuilt SkillGuard version (e.g. v0.1.0). Empty builds from this action's commit.
+    required: false
+    default: ""
+
+outputs:
+  exit-code:
+    description: "SkillGuard exit code: 0 clean, 1 findings at/above fail-on."
+    value: ${{ steps.scan.outputs.exit-code }}
+  sarif:
+    description: Path to the generated SARIF report.
+    value: ${{ steps.scan.outputs.sarif }}
+
+runs:
+  using: composite
+  steps:
+    # Only used when no prebuilt release is available. Harmless otherwise.
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install SkillGuard
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        DEST: ${{ runner.temp }}/skillguard
+      run: |
+        set -euo pipefail
+        bash "${{ github.action_path }}/install.sh" "${VERSION}" "${DEST}"
+        echo "${DEST}/bin" >> "$GITHUB_PATH"
+
+    - name: Scan
+      id: scan
+      shell: bash
+      env:
+        TARGET: ${{ inputs.path }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        SARIF: ${{ runner.temp }}/skillguard.sarif
+      run: |
+        set -euo pipefail
+        # Generate the SARIF report but do not fail yet: the report has to be
+        # uploaded before the check goes red, or the finding is invisible in
+        # Code Scanning for exactly the commits that needed it. The final step
+        # fails the job.
+        code=0
+        skillguard scan "${TARGET}" --format sarif --output "${SARIF}" --fail-on "${FAIL_ON}" || code=$?
+        # A second, human-readable pass into the job log. `|| true` because the
+        # exit code is already captured above.
+        skillguard scan "${TARGET}" --fail-on "${FAIL_ON}" || true
+        echo "sarif=${SARIF}" >> "$GITHUB_OUTPUT"
+        echo "exit-code=${code}" >> "$GITHUB_OUTPUT"
+
+    - name: Upload SARIF
+      if: ${{ inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ runner.temp }}/skillguard.sarif
+        category: skillguard
+
+    - name: Fail if the gate failed
+      if: ${{ steps.scan.outputs.exit-code != '0' }}
+      shell: bash
+      env:
+        FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        echo "::error::SkillGuard found findings at or above '${FAIL_ON}'"
+        exit 1

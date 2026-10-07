@@ -1,0 +1,69 @@
+# CI for SkillGuard itself.
+#
+# The tool's whole pitch is deterministic, verifiable behaviour, so something
+# has to verify that a push to `main` still builds. Issue #6.
+#
+# The three-OS matrix is not optional: `sgdir-v1` promises the same content
+# produces the same digest on any machine, and two of its details (the
+# executable bit and path separators) only differ on non-Unix platforms. A
+# single-OS run cannot test that promise.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  # fmt does not depend on the OS, but running it everywhere keeps the matrix
+  # honest and is cheap.
+  check:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --all-targets
+
+      - name: Build (release)
+        run: cargo build --release
+
+  # Supply-chain policy for the tool that is itself a supply-chain tool.
+  # OS-independent, so one job.
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+      - name: Check licenses, advisories, bans and sources
+        run: cargo deny check

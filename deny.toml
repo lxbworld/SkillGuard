@@ -1,0 +1,54 @@
+# Supply-chain policy for SkillGuard.
+#
+# SkillGuard is itself a supply-chain security tool, so its own dependency tree
+# is part of the argument. The policy is deliberately narrow: crates.io only, a
+# license allowlist consistent with our own Apache-2.0, and no git or path
+# dependencies.
+
+[graph]
+all-features = false
+no-default-features = false
+
+[advisories]
+# A crate pulled from crates.io must have no known vulnerability. There are no
+# exceptions: if this fires, the fix is to upgrade or drop the crate, not to
+# silence the advisory.
+ignore = []
+
+[licenses]
+# The union of the licenses actually present in the tree. All are permissive
+# and compatible with redistributing SkillGuard under Apache-2.0.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "BSL-1.0",
+    "Unlicense",
+    "CC0-1.0",
+]
+confidence-threshold = 0.93
+# The allowlist is intentionally a superset: adding a permissive dependency
+# should not require editing this file. Do not warn about unused entries.
+unused-allowed-license = "allow"
+
+[licenses.private]
+ignore = false
+
+[bans]
+# Two versions of a crate can mean two sets of advisories. Warn rather than
+# fail: a transitive duplicate is not always actionable from here.
+multiple-versions = "warn"
+# A wildcard version requirement makes the build non-reproducible.
+wildcards = "deny"
+deny = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

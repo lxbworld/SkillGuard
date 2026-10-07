@@ -1,0 +1,21 @@
+# pre-commit hooks.
+#
+# One line in a user's .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/lxbworld/SkillGuard
+#       rev: v0.1.0
+#       hooks:
+#         - id: skillguard
+#
+# `language: rust` means pre-commit builds the crate into its own cached
+# environment, so the hook needs no system install and no account. It runs
+# entirely offline: the scanner never opens a socket.
+- id: skillguard
+  name: SkillGuard
+  description: Scan changed Agent Skills for security findings (offline, deterministic).
+  entry: bash .pre-commit-hooks/skillguard-scan.sh
+  language: rust
+  pass_filenames: true
+  require_serial: true
+  files: (^|/)(SKILL\.md|[^/]+\.(sh|bash|zsh|fish|py|js|mjs|cjs|ts|tsx|rb|pl|php|ps1|bat|cmd))$
