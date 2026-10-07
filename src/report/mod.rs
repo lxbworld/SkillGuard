@@ -1,0 +1,248 @@
+//! Report rendering.
+//!
+//! Four formats, one rule: **every finding carries its evidence**. The text
+//! renderer is the primary product surface; JSON is for tooling; SARIF is for
+//! GitHub Code Scanning; Markdown is for PR comments.
+
+pub mod json;
+pub mod markdown;
+pub mod sarif;
+pub mod text;
+
+use crate::models::{Confidence, Finding, Severity, SkippedFile};
+use crate::scan::ScanOutcome;
+use serde::{Deserialize, Serialize};
+
+pub use json::to_json;
+pub use markdown::to_markdown;
+pub use sarif::to_sarif;
+pub use text::{to_text, to_text_with};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
+pub enum Format {
+    Text,
+    Json,
+    Sarif,
+    Markdown,
+}
+
+/// One skill's complete result, as emitted to every renderer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillReport {
+    pub name: String,
+    pub rule_set_version: String,
+    pub description: Option<String>,
+    pub declared_permissions_raw: Option<String>,
+    pub license_declared: Option<String>,
+    pub license_file_found: bool,
+    pub capabilities: crate::models::Capability,
+    pub dependencies: Vec<crate::models::Dependency>,
+    pub counts: Counts,
+    pub findings: Vec<Finding>,
+    pub skipped: Vec<SkippedFile>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Counts {
+    pub info: usize,
+    pub low: usize,
+    pub medium: usize,
+    pub high: usize,
+    pub critical: usize,
+}
+
+impl Counts {
+    pub fn of(findings: &[Finding]) -> Counts {
+        let mut c = Counts::default();
+        for f in findings {
+            match f.severity {
+                Severity::Info => c.info += 1,
+                Severity::Low => c.low += 1,
+                Severity::Medium => c.medium += 1,
+                Severity::High => c.high += 1,
+                Severity::Critical => c.critical += 1,
+            }
+        }
+        c
+    }
+
+    pub fn total(&self) -> usize {
+        self.info + self.low + self.medium + self.high + self.critical
+    }
+
+    /// The highest severity present, or `None` when clean.
+    pub fn max_severity(&self) -> Option<Severity> {
+        if self.critical > 0 {
+            Some(Severity::Critical)
+        } else if self.high > 0 {
+            Some(Severity::High)
+        } else if self.medium > 0 {
+            Some(Severity::Medium)
+        } else if self.low > 0 {
+            Some(Severity::Low)
+        } else if self.info > 0 {
+            Some(Severity::Info)
+        } else {
+            None
+        }
+    }
+}
+
+/// A full run over one or more skills.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Report {
+    pub tool: String,
+    pub tool_version: String,
+    pub rule_set_version: String,
+    pub skills: Vec<SkillReport>,
+    pub totals: Counts,
+}
+
+pub const TOOL: &str = "skillguard";
+
+impl SkillReport {
+    pub fn from_outcome(out: &ScanOutcome) -> SkillReport {
+        SkillReport {
+            name: out.skill_name.clone(),
+            rule_set_version: crate::RULE_SET_VERSION.to_owned(),
+            description: out.description.clone(),
+            declared_permissions_raw: out.declared_permissions_raw.clone(),
+            license_declared: out.license_declared.clone(),
+            license_file_found: out.license_file_found,
+            capabilities: out.capabilities.clone(),
+            dependencies: out.dependencies.clone(),
+            counts: Counts::of(&out.findings),
+            findings: out.findings.clone(),
+            skipped: out.skipped.clone(),
+        }
+    }
+}
+
+impl Report {
+    pub fn new(skills: Vec<SkillReport>) -> Report {
+        let mut totals = Counts::default();
+        for s in &skills {
+            totals.info += s.counts.info;
+            totals.low += s.counts.low;
+            totals.medium += s.counts.medium;
+            totals.high += s.counts.high;
+            totals.critical += s.counts.critical;
+        }
+        Report {
+            tool: TOOL.to_owned(),
+            tool_version: env!("CARGO_PKG_VERSION").to_owned(),
+            rule_set_version: crate::RULE_SET_VERSION.to_owned(),
+            skills,
+            totals,
+        }
+    }
+
+    /// Overall verdict: the worst severity across every skill.
+    pub fn verdict(&self) -> Option<Severity> {
+        self.totals.max_severity()
+    }
+
+    /// All findings across all skills, flattened.
+    pub fn all_findings(&self) -> Vec<(&str, &Finding)> {
+        self.skills
+            .iter()
+            .flat_map(|s| s.findings.iter().map(move |f| (s.name.as_str(), f)))
+            .collect()
+    }
+
+    /// Findings at or above `sev`.
+    pub fn findings_at_or_above(&self, sev: Severity) -> Vec<(&str, &Finding)> {
+        self.all_findings()
+            .into_iter()
+            .filter(|(_, f)| f.severity >= sev)
+            .collect()
+    }
+
+    /// How many findings rest on analyst-grade evidence rather than a hint.
+    pub fn high_confidence_count(&self) -> usize {
+        self.all_findings()
+            .iter()
+            .filter(|(_, f)| f.confidence == Confidence::High)
+            .count()
+    }
+
+    pub fn render(&self, format: Format) -> String {
+        match format {
+            Format::Text => to_text(self),
+            Format::Json => to_json(self),
+            Format::Sarif => to_sarif(self),
+            Format::Markdown => to_markdown(self),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Evidence, RuleId};
+
+    fn finding(sev: Severity) -> Finding {
+        Finding::new(
+            RuleId::from("TEST_RULE"),
+            sev,
+            Confidence::High,
+            "SKILL.md",
+            "test",
+            vec![Evidence {
+                line: 1,
+                text: "evidence".to_owned(),
+                secondary: None,
+                note: None,
+            }],
+        )
+    }
+
+    fn skill_report(f: Finding) -> SkillReport {
+        SkillReport {
+            name: "a".into(),
+            rule_set_version: "0".into(),
+            description: None,
+            declared_permissions_raw: None,
+            license_declared: None,
+            license_file_found: false,
+            capabilities: Default::default(),
+            dependencies: vec![],
+            counts: Counts::of(std::slice::from_ref(&f)),
+            findings: vec![f],
+            skipped: vec![],
+        }
+    }
+
+    #[test]
+    fn counts_and_verdict() {
+        let r = Report::new(vec![skill_report(finding(Severity::Low))]);
+        assert_eq!(r.totals.low, 1);
+        assert_eq!(r.totals.total(), 1);
+        assert_eq!(r.verdict(), Some(Severity::Low));
+    }
+
+    #[test]
+    fn totals_accumulate_across_skills() {
+        let r = Report::new(vec![
+            skill_report(finding(Severity::Critical)),
+            skill_report(finding(Severity::Info)),
+        ]);
+        assert_eq!(r.totals.critical, 1);
+        assert_eq!(r.totals.info, 1);
+        assert_eq!(r.verdict(), Some(Severity::Critical));
+    }
+
+    #[test]
+    fn clean_report_has_no_verdict() {
+        let r = Report::new(vec![]);
+        assert_eq!(r.verdict(), None);
+        assert!(r.all_findings().is_empty());
+    }
+
+    #[test]
+    fn filtering_by_threshold() {
+        let r = Report::new(vec![skill_report(finding(Severity::Medium))]);
+        assert_eq!(r.findings_at_or_above(Severity::High).len(), 0);
+        assert_eq!(r.findings_at_or_above(Severity::Medium).len(), 1);
+    }
+}

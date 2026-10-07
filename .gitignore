@@ -8,9 +8,6 @@ Cargo.lock.bak
 SKILLGUARD.lock
 SKILLGUARD.policy.yaml
 
-# fixtures must never execute
-tests/fixtures/**/scripts/*.sh
-
 # editors / os
 .idea/
 .vscode/

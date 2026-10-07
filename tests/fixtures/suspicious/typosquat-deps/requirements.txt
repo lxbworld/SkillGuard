@@ -1,0 +1,9 @@
+# the conversion library
+requests>=2.31.0
+reqeusts==2.31.0
+numpyy
+python-dateutil
+cryptograpy
+# from the vendor index
+--extra-index-url https://packages.vendor-mirror.example.net/simple
+somepackage==1.0.0

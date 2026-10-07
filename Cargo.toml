@@ -1,0 +1,48 @@
+[package]
+name = "skillguard"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.78"
+authors = ["lxbworld <lxbworld@users.noreply.github.com>"]
+description = "Offline, deterministic verification layer for AI Agent Skills: evidence-grade scanning, declared-vs-observed permission diffing, and policy gating."
+license = "Apache-2.0"
+repository = "https://github.com/lxbworld/SkillGuard"
+homepage = "https://github.com/lxbworld/SkillGuard"
+readme = "README.md"
+keywords = ["security", "supply-chain", "agent-skills", "sarif", "static-analysis"]
+categories = ["command-line-utilities", "development-tools::debugging"]
+exclude = ["tests/fixtures/**"]
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_yaml = "0.9"
+regex = "1.11"
+sha2 = "0.10"
+unicode-normalization = "0.1"
+base64 = "0.22"
+walkdir = "2.5"
+globset = "0.4"
+path-slash = "0.2"
+path-clean = "1.0"
+owo-colors = "4"
+thiserror = "2"
+toml = "0.8"
+
+[dev-dependencies]
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[[bin]]
+name = "skillguard"
+path = "src/main.rs"
+
+[lib]
+name = "skillguard"
+path = "src/lib.rs"
