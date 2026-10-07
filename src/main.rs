@@ -11,7 +11,7 @@ use skillguard::scan::{self, scan_skill, ScanOutcome};
 use skillguard::text;
 use skillguard::walk;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 #[derive(Parser)]
@@ -94,6 +94,71 @@ enum Command {
         dry_run: bool,
     },
 
+    /// Evaluate a policy against what a skill actually does.
+    PolicyCheck {
+        #[arg(value_name = "PATH", required = true)]
+        paths: Vec<PathBuf>,
+
+        /// Policy file. Defaults to SKILLGUARD.policy.yaml next to the lockfile,
+        /// then to a permissive built-in policy.
+        #[arg(long, short = 'c')]
+        policy: Option<PathBuf>,
+    },
+
+    /// Recompute source, commit and content digest, and compare to the lockfile.
+    ///
+    /// Nothing recorded in the lockfile is trusted: every value is re-derived
+    /// from the bytes on disk.
+    Verify {
+        #[arg(value_name = "PATH")]
+        paths: Vec<PathBuf>,
+
+        /// Lockfile to verify against. Defaults to SKILLGUARD.lock in each
+        /// skill directory.
+        #[arg(long, short)]
+        lockfile: Option<PathBuf>,
+    },
+
+    /// Write or update SKILLGUARD.lock from the current state on disk.
+    Lock {
+        #[arg(value_name = "PATH", required = true)]
+        paths: Vec<PathBuf>,
+
+        /// Lockfile path. Defaults to SKILLGUARD.lock beside each skill.
+        #[arg(long, short)]
+        out: Option<PathBuf>,
+    },
+
+    /// Record an approval for a skill, bound to its current content digest.
+    Approve {
+        #[arg(value_name = "PATH", required = true)]
+        path: PathBuf,
+
+        /// Who is approving. Recorded in the audit trail.
+        #[arg(long)]
+        reviewer: String,
+
+        /// Why. Recorded in the audit trail and required.
+        #[arg(long)]
+        reason: String,
+
+        #[arg(long, short)]
+        lockfile: Option<PathBuf>,
+    },
+
+    /// Import a foreign lockfile (skills-lock.json) into SKILLGUARD.lock.
+    ///
+    /// Interoperability, not replacement: the imported digest is retained as
+    /// `legacy_digest` so the original tool's own verification still works.
+    Import {
+        /// The file to read, e.g. skills-lock.json.
+        #[arg(value_name = "FILE", required = true)]
+        file: PathBuf,
+
+        #[arg(long, short)]
+        out: Option<PathBuf>,
+    },
+
     /// Print the rule catalogue.
     Rules {
         #[arg(long, short, default_value = "text", value_enum)]
@@ -127,6 +192,16 @@ fn main() -> ExitCode {
         Command::Inspect { paths, format } => run_inspect(paths, *format, &cli, color),
         Command::Diff { paths, strict } => run_diff(paths, *strict, &cli),
         Command::Adopt { paths, dry_run } => run_adopt(paths, *dry_run, &cli),
+        Command::PolicyCheck { paths, policy } => run_policy_check(paths, policy.as_deref(), &cli),
+        Command::Verify { paths, lockfile } => run_verify(paths, lockfile.as_deref(), &cli),
+        Command::Lock { paths, out } => run_lock(paths, out.as_deref(), &cli),
+        Command::Approve {
+            path,
+            reviewer,
+            reason,
+            lockfile,
+        } => run_approve(path, reviewer, reason, lockfile.as_deref(), &cli),
+        Command::Import { file, out } => run_import(file, out.as_deref(), &cli),
         Command::Rules { format } => run_rules(*format, &cli, color),
     };
 
@@ -139,9 +214,396 @@ fn main() -> ExitCode {
     }
 }
 
+/// RFC 3339 to second precision. Nanosecond timestamps make every `lock` run a
+/// diff, which trains people to ignore the lockfile.
+fn now_rfc3339() -> String {
+    match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+        Ok(d) => {
+            let secs = d.as_secs();
+            // Days since epoch -> civil date (Howard Hinnant's algorithm).
+            let days = (secs / 86_400) as i64;
+            let rem = secs % 86_400;
+            let (h, mi, s) = (rem / 3600, (rem % 3600) / 60, rem % 60);
+            let (y, mo, dd) = civil_from_days(days);
+            format!("{y:04}-{mo:02}-{dd:02}T{h:02}:{mi:02}:{s:02}Z")
+        }
+        Err(_) => "1970-01-01T00:00:00Z".to_owned(),
+    }
+}
+
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+/// Locate a skill directory from a path that may be the skill or its SKILL.md.
+fn skill_dir_of(path: &std::path::Path) -> Result<PathBuf, String> {
+    if path.is_file() {
+        return path.parent().map(Path::to_path_buf).ok_or_else(|| {
+            format!(
+                "cannot determine the skill directory for {}",
+                path.display()
+            )
+        });
+    }
+    if path.join("SKILL.md").is_file() {
+        return Ok(path.to_path_buf());
+    }
+    Err(format!("no SKILL.md in {}", path.display()))
+}
+
+fn default_lockfile(dir: &std::path::Path) -> PathBuf {
+    skillguard::policy::Lockfile::path(dir)
+}
+
+fn run_policy_check(
+    paths: &[PathBuf],
+    policy_path: Option<&std::path::Path>,
+    cli: &Cli,
+) -> Result<i32, String> {
+    let targets = resolve_targets(paths)?;
+    let mut all_blocked = false;
+    let mut o = String::from("\n  SkillGuard policy\n");
+
+    for t in &targets {
+        let dir = skill_dir_of(t)?;
+        let policy_file = policy_path
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| dir.join("SKILLGUARD.policy.yaml"));
+        let policy = if policy_file.is_file() {
+            skillguard::policy::load_policy(&policy_file)?
+        } else {
+            skillguard::policy::Policy::new()
+        };
+
+        let out = scan_skill(&dir);
+        let subject = skillguard::policy::Subject {
+            name: &out.skill_name,
+            capabilities: &out.capabilities,
+            diff: &out.diff,
+            findings: &out.findings,
+            source: None,
+            approved_digest: None,
+        };
+        let decision = skillguard::policy::evaluate(&policy, &subject);
+
+        o.push_str(&format!("\n  {}\n", out.skill_name));
+        o.push_str(&skillguard::policy::render_decision(&decision));
+        o.push_str(&format!(
+            "    policy: {}\n",
+            if policy_file.is_file() {
+                policy_file.display().to_string()
+            } else {
+                "built-in default (no SKILLGUARD.policy.yaml found)".to_owned()
+            }
+        ));
+        if decision.decision.blocks() {
+            all_blocked = true;
+        }
+    }
+
+    o.push('\n');
+    emit(cli, &o)?;
+    Ok(if all_blocked {
+        exit::FINDINGS
+    } else {
+        exit::OK
+    })
+}
+
+fn run_verify(
+    paths: &[PathBuf],
+    lockfile: Option<&std::path::Path>,
+    cli: &Cli,
+) -> Result<i32, String> {
+    let targets = if paths.is_empty() {
+        vec![std::path::PathBuf::from(".")]
+    } else {
+        resolve_targets(paths)?
+    };
+
+    let mut o = String::from("\n  SkillGuard verify - source + commit + content digest\n");
+    let mut all_ok = true;
+
+    for t in &targets {
+        let dir = skill_dir_of(t)?;
+        let lock_path = lockfile
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| default_lockfile(&dir));
+        let lock = skillguard::policy::Lockfile::load(&lock_path)?;
+        let name = dir
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "skill".to_owned());
+
+        let Some(entry) = lock.skills.get(&name) else {
+            o.push_str(&format!(
+                "\n  {name}\n    [FAIL] not_locked     {} has no entry\n",
+                lock_path.display()
+            ));
+            all_ok = false;
+            continue;
+        };
+
+        let collected = skillguard::hash::collect(&dir, entry.license.as_deref())?;
+        match skillguard::policy::VerifyReport::run(&name, &dir, entry, &collected.provenance) {
+            Ok(report) => {
+                o.push_str(&report.render());
+                all_ok &= report.ok;
+            }
+            Err(e) => {
+                o.push_str(&format!("\n  {name}\n    [FAIL] {e}\n"));
+                all_ok = false;
+            }
+        }
+    }
+
+    o.push_str(if all_ok {
+        "  integrity verified\n\n"
+    } else {
+        "  INTEGRITY FAILURE\n\n"
+    });
+    emit(cli, &o)?;
+    Ok(if all_ok { exit::OK } else { exit::INTEGRITY })
+}
+
+fn run_lock(paths: &[PathBuf], out: Option<&std::path::Path>, cli: &Cli) -> Result<i32, String> {
+    let targets = resolve_targets(paths)?;
+    let mut o = String::from("\n  SkillGuard lock\n");
+
+    for t in &targets {
+        let dir = skill_dir_of(t)?;
+        let name = dir
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "skill".to_owned());
+        let lock_path = out
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| default_lockfile(&dir));
+
+        let scan = scan_skill(&dir);
+        let collected = skillguard::hash::collect(&dir, scan.license_declared.as_deref())?;
+        let policy_path = dir.join("SKILLGUARD.policy.yaml");
+        let policy = if policy_path.is_file() {
+            skillguard::policy::load_policy(&policy_path)?
+        } else {
+            skillguard::policy::Policy::new()
+        };
+        let decision = skillguard::policy::evaluate(
+            &policy,
+            &skillguard::policy::Subject {
+                name: &name,
+                capabilities: &scan.capabilities,
+                diff: &scan.diff,
+                findings: &scan.findings,
+                source: None,
+                approved_digest: None,
+            },
+        );
+
+        let mut lock = skillguard::policy::Lockfile::load(&lock_path)
+            .unwrap_or_else(|_| skillguard::policy::Lockfile::new());
+        // Preserve an existing approval only while the content it covers is
+        // unchanged; otherwise the entry is rebuilt without it.
+        let prior_approval = lock
+            .skills
+            .get(&name)
+            .and_then(|e| e.approved_by.clone())
+            .filter(|a| a.content_digest == collected.digest.as_str());
+
+        let existed = lock.skills.contains_key(&name);
+        lock.rule_set_version = skillguard::RULE_SET_VERSION.to_owned();
+        lock.generated_by = format!("{} {}", skillguard::policy::TOOL, env!("CARGO_PKG_VERSION"));
+        lock.verifier = lock.generated_by.clone();
+        lock.skills.insert(
+            name.clone(),
+            skillguard::policy::LockSkill {
+                source: collected.provenance.source.clone(),
+                repository: collected.provenance.repository.clone(),
+                commit: collected.provenance.commit.clone(),
+                content_digest: collected.digest.as_str().to_owned(),
+                legacy_digest: None,
+                version: None,
+                license: scan.license_declared.clone(),
+                declared_permissions: scan.declared.clone(),
+                observed_capabilities: scan.capabilities.clone(),
+                mismatches: scan.diff.mismatches.clone(),
+                dependencies: scan.dependencies.clone(),
+                policy_decision: decision.decision,
+                approved_by: prior_approval,
+                observed_at: now_rfc3339(),
+            },
+        );
+
+        lock.save(&lock_path)?;
+        o.push_str(&format!(
+            "    {}  {}  {}  -> {}\n",
+            name,
+            if existed { "updated" } else { "created" },
+            collected.digest,
+            lock_path.display()
+        ));
+        if collected.provenance.incomplete {
+            o.push_str(&format!(
+                "      note: {}\n",
+                collected
+                    .provenance
+                    .note
+                    .as_deref()
+                    .unwrap_or("provenance incomplete")
+            ));
+        }
+        if decision.decision.blocks() {
+            o.push_str("      BLOCKED by policy: this lock records state, not approval\n");
+        }
+    }
+
+    o.push_str("\n  Commit the lockfile. It is the audit trail.\n\n");
+    emit(cli, &o)?;
+    Ok(exit::OK)
+}
+
+fn run_approve(
+    path: &std::path::Path,
+    reviewer: &str,
+    reason: &str,
+    lockfile: Option<&std::path::Path>,
+    cli: &Cli,
+) -> Result<i32, String> {
+    if reason.trim().is_empty() {
+        return Err(
+            "--reason is required: an approval without a reason is not an audit trail".to_owned(),
+        );
+    }
+    let dir = skill_dir_of(path)?;
+    let name = dir
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "skill".to_owned());
+    let lock_path = lockfile
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| default_lockfile(&dir));
+
+    let mut lock = skillguard::policy::Lockfile::load(&lock_path)?;
+    let digest = skillguard::hash::digest_dir(&dir)?.0;
+
+    // Approve what is on disk *now*, not what the lockfile claims: the whole
+    // point of an approval is that a human looked at these bytes.
+    let scan = scan_skill(&dir);
+    let collected = skillguard::hash::collect(&dir, scan.license_declared.as_deref())?;
+    let entry = lock
+        .skills
+        .entry(name.clone())
+        .or_insert_with(|| skillguard::policy::LockSkill {
+            source: None,
+            repository: None,
+            commit: None,
+            content_digest: digest.as_str().to_owned(),
+            legacy_digest: None,
+            version: None,
+            license: None,
+            declared_permissions: Default::default(),
+            observed_capabilities: Default::default(),
+            mismatches: vec![],
+            dependencies: vec![],
+            policy_decision: skillguard::policy::Decision::Allow,
+            approved_by: None,
+            observed_at: now_rfc3339(),
+        });
+
+    entry.content_digest = digest.as_str().to_owned();
+    entry.source = collected.provenance.source.clone();
+    entry.repository = collected.provenance.repository.clone();
+    entry.commit = collected.provenance.commit.clone();
+    entry.license = scan.license_declared.clone();
+    entry.declared_permissions = scan.declared.clone();
+    entry.observed_capabilities = scan.capabilities.clone();
+    entry.mismatches = scan.diff.mismatches.clone();
+    entry.observed_at = now_rfc3339();
+    entry.approved_by = Some(skillguard::policy::Approval {
+        reviewer: reviewer.to_owned(),
+        reason: reason.to_owned(),
+        approved_at: now_rfc3339(),
+        content_digest: digest.as_str().to_owned(),
+        note: None,
+    });
+
+    lock.save(&lock_path)?;
+
+    let mut o = String::new();
+    o.push_str(&format!("\n  approved  {name}\n"));
+    o.push_str(&format!("    digest:    {digest}\n"));
+    o.push_str(&format!("    file:      {}\n", lock_path.display()));
+    o.push_str("\n  This approval is bound to that digest. If the content changes,\n");
+    o.push_str("  the approval stops applying and must be granted again.\n\n");
+    emit(cli, &o)?;
+    Ok(exit::OK)
+}
+
+fn run_import(
+    file: &std::path::Path,
+    out: Option<&std::path::Path>,
+    cli: &Cli,
+) -> Result<i32, String> {
+    let entries = skillguard::import::read_foreign_lock(file)?;
+    let dest = out
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| std::path::PathBuf::from("SKILLGUARD.lock"));
+    let mut lock = skillguard::policy::Lockfile::load(&dest)
+        .unwrap_or_else(|_| skillguard::policy::Lockfile::new());
+    lock.rule_set_version = skillguard::RULE_SET_VERSION.to_owned();
+
+    let mut o = String::from("\n  SkillGuard import\n");
+    for e in entries {
+        let digest = e
+            .digest
+            .clone()
+            .unwrap_or_else(|| "<no digest recorded>".to_owned());
+        o.push_str(&format!("    {:<32} {digest}\n", e.name));
+        lock.skills.insert(
+            e.name.clone(),
+            skillguard::policy::LockSkill {
+                source: Some(e.source.clone()),
+                repository: None,
+                commit: e.commit.clone(),
+                content_digest: digest.clone(),
+                // Retained so the original tool's verification still works.
+                legacy_digest: e.digest.clone(),
+                version: e.version.clone(),
+                license: None,
+                declared_permissions: Default::default(),
+                observed_capabilities: Default::default(),
+                mismatches: vec![],
+                dependencies: vec![],
+                policy_decision: skillguard::policy::Decision::Warn,
+                approved_by: None,
+                observed_at: now_rfc3339(),
+            },
+        );
+    }
+    lock.save(&dest)?;
+    o.push_str(&format!(
+        "\n  {} entr(ies) -> {}\n",
+        lock.skills.len(),
+        dest.display()
+    ));
+    o.push_str("  Imported digests are recorded as legacy_digest and are NOT verified\n");
+    o.push_str("  against content. Re-run `skillguard lock` after verifying on disk.\n\n");
+    emit(cli, &o)?;
+    Ok(exit::OK)
+}
+
 fn run_diff(paths: &[PathBuf], strict: bool, cli: &Cli) -> Result<i32, String> {
     let outcomes = scan_all(paths)?;
-    let mut o = String::from("\n  SkillGuard diff · declared permissions vs observed behaviour\n");
+    let mut o = String::from("\n  SkillGuard diff - declared permissions vs observed behaviour\n");
     let mut blocking_total = 0usize;
 
     for out in &outcomes {
@@ -164,7 +626,7 @@ fn run_diff(paths: &[PathBuf], strict: bool, cli: &Cli) -> Result<i32, String> {
 
 fn run_adopt(paths: &[PathBuf], dry_run: bool, cli: &Cli) -> Result<i32, String> {
     let targets = resolve_targets(paths)?;
-    let mut o = String::from("\n  SkillGuard adopt · derive permissions from observed behaviour\n");
+    let mut o = String::from("\n  SkillGuard adopt - derive permissions from observed behaviour\n");
 
     for t in &targets {
         let out = scan_skill(t);
@@ -422,7 +884,7 @@ fn run_inspect(paths: &[PathBuf], format: Format, cli: &Cli, _color: bool) -> Re
                 }
                 if s.dependencies.len() > 200 {
                     o.push_str(&format!(
-                        "      … and {} more\n",
+                        "      ... and {} more\n",
                         s.dependencies.len() - 200
                     ));
                 }
@@ -435,7 +897,7 @@ fn run_inspect(paths: &[PathBuf], format: Format, cli: &Cli, _color: bool) -> Re
     if format == Format::Text {
         o.insert_str(
             0,
-            "\n  SkillGuard inspect · capabilities only, no judgement\n",
+            "\n  SkillGuard inspect - capabilities only, no judgement\n",
         );
     }
     emit(cli, &o)?;

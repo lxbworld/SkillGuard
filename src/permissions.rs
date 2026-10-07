@@ -481,7 +481,14 @@ pub fn diff(declared: &PermissionDecl, observed: &Capability) -> DiffReport {
 }
 
 /// Does a declared host pattern cover an observed host?
-fn host_matches(pattern: &str, host: &str) -> bool {
+pub fn host_matches(pattern: &str, host: &str) -> bool {
+    host_pattern_matches(pattern, host)
+}
+
+/// Public alias so the policy engine shares exactly one implementation of host
+/// matching. Two copies of this logic would drift, and a policy that silently
+/// stops matching is a policy that silently stops working.
+pub fn host_pattern_matches(pattern: &str, host: &str) -> bool {
     let p = pattern.trim().to_ascii_lowercase();
     if p == "*" {
         return true;
@@ -499,6 +506,11 @@ fn host_matches(pattern: &str, host: &str) -> bool {
         return host.ends_with(&format!(".{base}"));
     }
     glob_match(&p, host)
+}
+
+/// Public alias, shared with the policy engine for the same reason as above.
+pub fn path_pattern_matches(pattern: &str, path: &str) -> bool {
+    path_matches(pattern, path)
 }
 
 /// Does a declared path pattern cover an observed path?

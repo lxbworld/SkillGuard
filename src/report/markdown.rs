@@ -16,7 +16,7 @@ pub fn to_markdown(report: &Report) -> String {
                 _ => "**REVIEW**",
             };
             o.push_str(&format!(
-                "{badge} — worst severity **{sev}** across {} skill(s).\n\n",
+                "{badge} - worst severity **{sev}** across {} skill(s).\n\n",
                 report.skills.len()
             ));
             o.push_str("| critical | high | medium | low | info |\n");
@@ -70,7 +70,7 @@ pub fn to_markdown(report: &Report) -> String {
 
     o.push_str(
         "---\n\n<sub>SkillGuard is offline and deterministic: no skill content leaves this machine \
-         and no language model is involved. Detection is not judgement — read the evidence before \
+         and no language model is involved. Detection is not judgement - read the evidence before \
          acting. Rule set ",
     );
     o.push_str(&report.rule_set_version);

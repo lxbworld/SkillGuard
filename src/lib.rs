@@ -24,9 +24,12 @@
 )]
 
 pub mod capability;
+pub mod hash;
+pub mod import;
 pub mod models;
 pub mod parser;
 pub mod permissions;
+pub mod policy;
 pub mod report;
 pub mod scan;
 pub mod text;

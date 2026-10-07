@@ -235,12 +235,18 @@ pub fn sanitize_for_display(input: &str) -> String {
     truncate_chars(&out, MAX_DISPLAY_CHARS)
 }
 
+/// Truncate to at most `max` characters, appending an ASCII `...` marker.
+///
+/// The marker is deliberately ASCII. A Unicode ellipsis here mojibakes the
+/// moment the output passes through a cp936 or cp1252 console, and this text
+/// ends up in CI logs.
 pub fn truncate_chars(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         return s.to_owned();
     }
-    let mut out: String = s.chars().take(max.saturating_sub(1)).collect();
-    out.push('\u{2026}');
+    let keep = max.saturating_sub(3);
+    let mut out: String = s.chars().take(keep).collect();
+    out.push_str("...");
     out
 }
 
@@ -351,7 +357,7 @@ mod tests {
     fn truncates_long_output() {
         let s = sanitize_for_display(&"a".repeat(500));
         assert!(s.chars().count() <= MAX_DISPLAY_CHARS);
-        assert!(s.ends_with('\u{2026}'));
+        assert!(s.ends_with("..."));
     }
 
     #[test]

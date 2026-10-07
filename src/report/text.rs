@@ -43,7 +43,7 @@ fn header(report: &Report, color: bool) -> String {
     s.push('\n');
     s.push_str(&paint("  SkillGuard", Severity::High, color, true));
     s.push_str(&format!(
-        " {}  ·  rules {}  ·  {} skill(s)\n\n",
+        " {}  |  rules {}  |  {} skill(s)\n\n",
         report.tool_version,
         report.rule_set_version,
         report.skills.len()
@@ -182,7 +182,7 @@ fn skipped_block(s: &crate::report::SkillReport) -> String {
 
 fn footer(report: &Report, color: bool) -> String {
     let mut o = String::new();
-    o.push_str("  ────────────────────────────────────────────\n");
+    o.push_str("  --------------------------------------------\n");
     match report.verdict() {
         None => {
             o.push_str(&format!(
@@ -196,7 +196,7 @@ fn footer(report: &Report, color: bool) -> String {
                 _ => "REVIEW",
             };
             o.push_str(&format!(
-                "  {}  worst severity {sev}  ·  {} critical, {} high  ·  {} finding(s) with analyst-grade evidence\n",
+                "  {}  worst severity {sev}  |  {} critical, {} high  |  {} finding(s) with analyst-grade evidence\n",
                 paint(word, sev, color, true),
                 report.totals.critical,
                 report.totals.high,
@@ -297,6 +297,24 @@ mod tests {
         assert!(
             !out.contains('\u{1B}'),
             "invariant S5: no ANSI reaches output"
+        );
+    }
+
+    #[test]
+    fn framing_output_is_pure_ascii() {
+        // Non-ASCII in the tool's own framing mojibakes in a cp936/cp1252
+        // console, and this output goes into CI logs and PR comments. Evidence
+        // may be Unicode; our framing must not be.
+        //
+        // The assert below is on a rendered report whose evidence is
+        // deliberately the hostile-Unicode case, so it also proves that
+        // sanitize_for_display keeps the framing readable.
+        let r = Report::new(vec![skill("s", vec![f(Severity::High, "SHELL_EXEC", 3)])]);
+        let out = to_text_with(&r, false);
+        let non_ascii: Vec<char> = out.chars().filter(|c| !c.is_ascii()).collect();
+        assert!(
+            non_ascii.is_empty(),
+            "framing must be ASCII, found {non_ascii:?}"
         );
     }
 

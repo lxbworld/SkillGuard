@@ -846,7 +846,7 @@ pub fn structural_rules() -> &'static [StructuralRule] {
             severity: SevMedium,
             capability: "agent.injection",
             message: "Non-ASCII lookalike characters are used to spell a command",
-            remediation: "Use ASCII. Folding is how `curl` becomes `сurl` to a human reader.",
+            remediation: "Use ASCII. A command spelled with lookalike characters from another script reads as the real command to a human.",
         },
         StructuralRule {
             id: "OBFUSC_BIDI_CONTROL",
