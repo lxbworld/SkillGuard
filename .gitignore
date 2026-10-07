@@ -1,0 +1,18 @@
+/target
+**/target
+Cargo.lock.bak
+
+# scan artifacts
+/scan-report.*
+*.sarif
+SKILLGUARD.lock
+SKILLGUARD.policy.yaml
+
+# fixtures must never execute
+tests/fixtures/**/scripts/*.sh
+
+# editors / os
+.idea/
+.vscode/
+.DS_Store
+*.swp

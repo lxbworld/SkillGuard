@@ -1,0 +1,64 @@
+SkillGuard
+Copyright 2026 lxbworld (SkillGuard contributors)
+
+This product includes software developed by the SkillGuard contributors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+--------------------------------------------------------------------------------
+
+ATTRIBUTION NOTICE (Apache-2.0 §4(d))
+
+In addition to the retention requirements of the Apache License 2.0, any
+distribution, sublicensing, resale, or hosted service built on this software
+MUST visibly and legibly acknowledge the following:
+
+    "Built with SkillGuard — https://github.com/lxbworld/SkillGuard"
+
+Suitable acknowledgement points are:
+
+  * the product's "About", "Credits" or "NOTICE" surface;
+  * the README of the distributing project;
+  * the documentation website footer;
+  * the command-line banner, when the distribution ships a CLI.
+
+Nothing in this NOTICE restricts the Apache License 2.0 grant itself.
+Commercial use, modification, and private redistribution are all permitted
+without royalty. This notice is an attribution obligation, not a copyleft
+or source-disclosure obligation.
+
+--------------------------------------------------------------------------------
+
+NAMING / NON-AFFILIATION
+
+SkillGuard is NOT affiliated with, endorsed by, or an official implementation
+of any academic or third-party project that shares this name. In particular:
+
+  * "SkillGuard: A Permission Framework for Agent Skills"
+    (arXiv:2606.03024) is an academic work proposing a runtime permission
+    framework for agent skills. This project implements an independent,
+    pre-install, fully static subset of the permission-manifest idea and
+    contains no code from that work.
+  * "Skill Drift Is Contract Violation: Proactive Maintenance for LLM Agent
+    Skill Libraries" (arXiv:2605.10990) is a separate research system.
+
+--------------------------------------------------------------------------------
+
+THIRD-PARTY WORK
+
+* skills-lock (https://github.com/skills-lock/skil-lock), Apache-2.0 —
+  consulted for the capability-lockfile problem space. No code was copied.
+  This project ships an independent lockfile schema and is NOT compatible
+  with skills.lock, though `skillguard import` can migrate its entries.
+* vercel-labs/skills (MIT) — its skills-lock.json format is read by
+  `skillguard import` for interoperability. No code was copied.
