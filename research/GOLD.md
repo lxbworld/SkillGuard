@@ -112,3 +112,47 @@ A GOLD version is frozen. Looking at the labels, changing a rule, and
 re-reporting the same version is prohibited (`research/PROTOCOL.md` §7) — that
 is how a precision number stops meaning anything. Rule changes go into a new
 labelled version, `GOLD-v2`, and both versions are reported independently.
+
+---
+
+## GOLD-v1 (constructed)
+
+| | |
+|---|---|
+| items | 193 findings (8 per rule, hash-ordered; one judgment per skill+rule) |
+| frame | all line-level findings in the 1372-skill pilot |
+| excluded | skill-level rules (`PARSE_FAILED`, `PI_DESCRIPTION_MISMATCH`) — no evidence line to judge |
+| annotator A | `opencode-go/deepseek-v4.1-flash`, blind to the other label set |
+| annotator B | the rule author |
+| agreement | 174/193 (90.2%), **Cohen's κ 0.784** (gate 0.75) |
+| disagreements | 19, adjudicated by the author |
+
+Neither annotator is human. Both saw only the matched line, its context and the
+rule's own `claim`. Annotator B wrote the rules, so this κ overstates what two
+strangers would agree on, and the author adjudication of the 19 disputes is
+biased the same way. It is a **screening** pass, not the protocol's human GOLD.
+
+### Result
+
+The precision column in `docs/CORPUS_REPORT.md` is the output. Most rules score
+far below the G4 threshold of 0.85, and the failures share one cause: **the
+patterns do not distinguish code from comments, documentation, docstrings and
+string literals.** `NET_FETCH_CALL` fires on `import urllib.request` (an import
+is not a request); `SHELL_EVAL` fires on `exec` inside `@app.command("eval")`;
+`PERSIST_AGENT_CONFIG` fires on a comment that mentions `~/.claude/`;
+`DL_UNTRUSTED_DOMAIN` fires on `Chrome/120.0.0.0` through its IPv4 pattern.
+
+That is why prevalence is published as an upper bound. The next step is a
+line-kind model (comment / string / code) and rules that require an *action*
+rather than a mention; those changes belong in `GOLD-v2`.
+
+### Reproduce
+
+```bash
+python3 research/build_gold.py        # rebuild the worksheet
+# two annotators label it independently -> GOLD-v1.annotator-{a,b}.jsonl
+skillguard corpus agreement research/gold/GOLD-v1.annotator-a.jsonl \
+                            research/gold/GOLD-v1.annotator-b.jsonl
+skillguard corpus report --findings research/raw-findings.jsonl \
+    --gold research/gold/GOLD-v1.jsonl --out docs/CORPUS_REPORT.md
+```

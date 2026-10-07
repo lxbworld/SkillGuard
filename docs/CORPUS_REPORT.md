@@ -26,6 +26,25 @@
 > flagged every non-English `PI_DESCRIPTION_MISMATCH`, and unstemmed verbs
 > (`execution` did not match `execute`). Each fix is a regression test.
 >
+> ## GOLD-v1
+>
+> The precision column below is measured against `research/gold/GOLD-v1.jsonl`:
+> a deterministic sample of 193 findings (8 per rule, hash-ordered), each judged
+> `tp`/`fp` by two annotators who saw only the matched line, its context and the
+> rule's own claim. **Both annotators are AI.** Annotator A is an independent
+> model (`opencode-go/deepseek-v4.1-flash`); annotator B is the rule author.
+> Cohen's kappa is **0.784** (gate: >= 0.75), so the labels are usable, but the
+> 19 disagreements were adjudicated by the author, which biases toward the
+> author. This is **not** the protocol's human GOLD; it is a scoped, reproducible
+> first pass. See `research/GOLD.md`.
+>
+> Its main result is uncomfortable and useful: **most heuristics over-fire on
+> comments, documentation, docstrings and string literals.** A rule that says
+> "performs an outbound request" fires on `import urllib.request`; `SHELL_EVAL`
+> fires on the word "eval" in a CLI subcommand name; `PERSIST_AGENT_CONFIG`
+> fires on a comment mentioning `~/.claude/`. Treat every prevalence below as an
+> upper bound, and the precision column as the real signal.
+>
 > The remaining `PI_*` heuristics are **unmeasured upper bounds**. A
 > single-annotator read-through is not `GOLD` (research/GOLD.md) and the report
 > publishes no precision until two independent annotators agree (kappa >= 0.75).
@@ -196,7 +215,50 @@ Every headline figure must be reported per stratum (protocol §4.2); without str
 
 ## Precision and recall (GOLD)
 
-No GOLD label set yet, so no precision or recall figure is reported. This is deliberate: a prevalence figure without a precision is not a result (`research/PROTOCOL.md` §4.3).
+Gate G4: precision >= 0.85 and recall >= 0.60, per rule (no micro-average).
+
+| rule | TP | FP | missed | precision | recall | G4 |
+|---|---|---|---|---|---|---|
+| `DEP_CUSTOM_REGISTRY` | 0 | 3 | 0 | 0.0% | n/a | below |
+| `DEP_UNPINNED_SCRIPT` | 2 | 0 | 0 | 100.0% | 100.0% | pass |
+| `DL_BASE64_BLOB` | 3 | 5 | 0 | 37.5% | 100.0% | below |
+| `DL_PASSWORD_ARCHIVE` | 0 | 3 | 0 | 0.0% | n/a | below |
+| `DL_PIPE_TO_SHELL` | 0 | 1 | 0 | 0.0% | n/a | below |
+| `DL_REMOTE_INSTALL` | 0 | 2 | 0 | 0.0% | n/a | below |
+| `DL_UNTRUSTED_DOMAIN` | 2 | 6 | 0 | 25.0% | 100.0% | below |
+| `FS_ABSOLUTE_PATH` | 2 | 6 | 0 | 25.0% | 100.0% | below |
+| `FS_HOME_ACCESS` | 2 | 6 | 0 | 25.0% | 100.0% | below |
+| `FS_PATH_ESCAPE` | 6 | 2 | 0 | 75.0% | 100.0% | below |
+| `FS_RECURSIVE_WALK` | 8 | 0 | 0 | 100.0% | 100.0% | pass |
+| `FS_SENSITIVE_PATH` | 3 | 5 | 0 | 37.5% | 100.0% | below |
+| `LICENSE_RESTRICTIVE` | 5 | 3 | 0 | 62.5% | 100.0% | below |
+| `NET_DOMAIN_LITERAL` | 2 | 6 | 0 | 25.0% | 100.0% | below |
+| `NET_DYNAMIC_URL` | 3 | 0 | 0 | 100.0% | 100.0% | pass |
+| `NET_FETCH_CALL` | 3 | 5 | 0 | 37.5% | 100.0% | below |
+| `NET_HTTP_CLIENT` | 4 | 4 | 0 | 50.0% | 100.0% | below |
+| `OBFUSC_HOMOGLYPH` | 0 | 5 | 0 | 0.0% | n/a | below |
+| `OBFUSC_TRACKING_PIXEL` | 6 | 2 | 0 | 75.0% | 100.0% | below |
+| `OBFUSC_ZERO_WIDTH` | 0 | 8 | 0 | 0.0% | n/a | below |
+| `PERSIST_AGENT_CONFIG` | 1 | 7 | 0 | 12.5% | 100.0% | below |
+| `PERSIST_CRON` | 1 | 1 | 0 | 50.0% | 100.0% | below |
+| `PERSIST_HOOK` | 1 | 7 | 0 | 12.5% | 100.0% | below |
+| `PERSIST_SHELL_RC` | 0 | 7 | 0 | 0.0% | n/a | below |
+| `PI_CONCEALMENT` | 0 | 4 | 0 | 0.0% | n/a | below |
+| `PI_EXFIL_INSTRUCTION` | 0 | 3 | 0 | 0.0% | n/a | below |
+| `PI_INJECTION_OVERRIDE` | 0 | 2 | 0 | 0.0% | n/a | below |
+| `PI_SYSTEM_IMPERSATION` | 0 | 2 | 0 | 0.0% | n/a | below |
+| `SECRET_AWS_ACCESS_KEY` | 0 | 1 | 0 | 0.0% | n/a | below |
+| `SECRET_ENV_DUMP` | 5 | 3 | 0 | 62.5% | 100.0% | below |
+| `SECRET_GENERIC_ASSIGN` | 1 | 1 | 0 | 50.0% | 100.0% | below |
+| `SECRET_PATH_READ` | 0 | 1 | 0 | 0.0% | n/a | below |
+| `SECRET_PRIVATE_KEY` | 2 | 1 | 0 | 66.7% | 100.0% | below |
+| `SECRET_PROVIDER_TOKEN` | 0 | 1 | 0 | 0.0% | n/a | below |
+| `SHELL_DESTRUCTIVE` | 1 | 2 | 0 | 33.3% | 100.0% | below |
+| `SHELL_EVAL` | 1 | 4 | 0 | 20.0% | 100.0% | below |
+| `SHELL_EXEC` | 4 | 4 | 0 | 50.0% | 100.0% | below |
+| `SHELL_PRIVILEGE_ESCALATION` | 1 | 1 | 0 | 50.0% | 100.0% | below |
+
+If precision falls short, publish the measured value as an upper bound on true prevalence rather than widening the definition to hit a target.
 
 ## Limitations
 

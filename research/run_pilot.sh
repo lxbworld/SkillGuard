@@ -88,7 +88,12 @@ target/release/skillguard corpus scan \
   --out "$FINDINGS" --cache research/.corpus-cache.json
 
 echo "== 6/6 report + reproduce =="
-target/release/skillguard corpus report --findings "$FINDINGS" --out /tmp/sg-pilot-body.md
+GOLD="research/gold/GOLD-v1.jsonl"
+if [ -f "$GOLD" ]; then
+  target/release/skillguard corpus report --findings "$FINDINGS" --gold "$GOLD" --out /tmp/sg-pilot-body.md
+else
+  target/release/skillguard corpus report --findings "$FINDINGS" --out /tmp/sg-pilot-body.md
+fi
 
 {
   cat <<'HEADER'
@@ -119,6 +124,25 @@ target/release/skillguard corpus report --findings "$FINDINGS" --out /tmp/sg-pil
 > like TLDs (`.zip`, `.mov`), XML namespaces, English-only keyword lists that
 > flagged every non-English `PI_DESCRIPTION_MISMATCH`, and unstemmed verbs
 > (`execution` did not match `execute`). Each fix is a regression test.
+>
+> ## GOLD-v1
+>
+> The precision column below is measured against `research/gold/GOLD-v1.jsonl`:
+> a deterministic sample of 193 findings (8 per rule, hash-ordered), each judged
+> `tp`/`fp` by two annotators who saw only the matched line, its context and the
+> rule's own claim. **Both annotators are AI.** Annotator A is an independent
+> model (`opencode-go/deepseek-v4.1-flash`); annotator B is the rule author.
+> Cohen's kappa is **0.784** (gate: >= 0.75), so the labels are usable, but the
+> 19 disagreements were adjudicated by the author, which biases toward the
+> author. This is **not** the protocol's human GOLD; it is a scoped, reproducible
+> first pass. See `research/GOLD.md`.
+>
+> Its main result is uncomfortable and useful: **most heuristics over-fire on
+> comments, documentation, docstrings and string literals.** A rule that says
+> "performs an outbound request" fires on `import urllib.request`; `SHELL_EVAL`
+> fires on the word "eval" in a CLI subcommand name; `PERSIST_AGENT_CONFIG`
+> fires on a comment mentioning `~/.claude/`. Treat every prevalence below as an
+> upper bound, and the precision column as the real signal.
 >
 > The remaining `PI_*` heuristics are **unmeasured upper bounds**. A
 > single-annotator read-through is not `GOLD` (research/GOLD.md) and the report
