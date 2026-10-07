@@ -8,14 +8,45 @@
 
 ---
 
-## ⚠️ Naming / Non-Affiliation
+## Naming, and what we cite
 
-**SkillGuard is not affiliated with arXiv:2606.03024** ("SkillGuard: A Permission
-Framework for Agent Skills"), which proposes a *runtime* permission framework.
-That work uses an LLM to generate manifests and requires a sandbox at execution
-time. **This project implements an independent, pre-install, fully deterministic
-subset of the permission-manifest idea** — no code from that work, no LLM, no
-sandbox. See [NOTICE](NOTICE) for full terms.
+This project keeps the name **SkillGuard** deliberately, and credits the academic
+work that shares it. Two papers independently use the name:
+
+- **arXiv:2606.03024 — "SkillGuard: A Permission Framework for Agent Skills"**
+  Proposes a *runtime* permission framework: a permission taxonomy, a baseline
+  policy, a session-state document, and sandbox-based enforcement, with an LLM
+  generating manifests (91.0% F1 at capability level, measured on 315 real skills).
+- **arXiv:2605.10990 — "Skill Drift Is Contract Violation"**
+  A separate research system that also goes by SkillGuard, monitoring
+  environment-contract drift in skill libraries.
+
+**SkillGuard is not affiliated with, endorsed by, or an official implementation of
+either work. No code from either is used here.** We implement an independent,
+*pre-install*, **fully deterministic** subset of the permission-manifest idea — no
+LLM, no sandbox, no runtime enforcement.
+
+| | arXiv:2606.03024 | This project |
+|---|---|---|
+| Enforcement point | runtime | before install |
+| Manifest generation | LLM-assisted | deterministic derivation |
+| Sandbox | required | none — scanner never executes what it scans |
+| Environment | model in the loop | fully offline |
+| Scope | permission taxonomy for mediation | verification, policy gating, lockfile |
+
+If you are citing the permission-manifest line of work, please cite both, so the
+distinction stays legible.
+
+Further work this project builds on, and cites:
+
+- **arXiv:2605.11418** — metadata-only skill registry poisoning (86% pairwise win rate)
+- **arXiv:2608.10906** — GitSkills: 3,797,117 skill files across 282,200 repositories
+- **USENIX Security 2026** — "Do Not Mention This to the User: Detecting and
+  Understanding Malicious Agent Skills in the Wild"
+- **skills-lock/skil-lock** (Apache-2.0) — capability lockfile problem space
+- **vercel-labs/skills** (MIT) — the `skills-lock.json` format we can import
+
+See [NOTICE](NOTICE) for full attribution terms.
 
 ---
 
@@ -79,19 +110,33 @@ Research and architecture complete. See [docs/](docs/).
 - [**Feasibility, Direction & GTM**](docs/VIABILITY.md) — **read this first.**
   Market data, why "package manager" is the wrong framing, where the real gap is,
   and the phased go-to-market plan.
+- [**Phase 0 Corpus Study**](docs/PHASE0_CORPUS_STUDY.md) — the plan to produce the
+  first large-scale empirical measurement of the skill ecosystem. High visibility,
+  near-zero cost, and it becomes our permanent regression benchmark.
 - [Competitive Analysis](docs/COMPETITIVE_ANALYSIS.md) — 13 projects surveyed,
   what each already does, and where the gaps actually are
 - [Architecture](docs/ARCHITECTURE.md) — crate layout, data flow, invariants
 - [Threat Model](docs/THREAT_MODEL.md) — T1–T16, including attacks on the scanner
 - [MVP Roadmap](docs/MVP.md) — phased scope with exit criteria
 
+## Where the ecosystem actually stands
+
+| | |
+|---|---|
+| 606,555 | tools across 55 directories (Sep 2026), +1,551/day |
+| 3,797,117 | skill files in 282,200 GitHub repos, **50.5% duplicated** |
+| 341 / 2,857 | **11.9% of ClawHub skills were malicious** (Koi Security, Feb 2026) |
+| 1,184+ | poisoned skills distributing Atomic Stealer, Feb–May 2026 |
+| 5 of top 7 | most-downloaded skills confirmed as malware (CSA, 2026-05) |
+
 | Phase | Scope | Status |
 |---|---|---|
-| 1 | Parser, finding model, scanner (44 rules) | planned |
-| 2 | Capability model, permissions, diff, policy engine | planned |
-| 3 | Hash, provenance, verify, lockfile | planned |
-| 4 | `add` / `install` / `update` | planned |
-| 5 | GitHub Action, SARIF, CI gates | planned |
+| **0** | 100k-skill corpus study, public dataset, benchmark | planned |
+| 1 | Parser, finding model, scanner | planned |
+| 2 | Capability model, declared vs observed | planned |
+| 3 | Policy engine, approval lockfile | planned |
+| 4 | CI / SARIF / GitHub Action / rule registry | planned |
+| 5 | `add` / `install` — **optional**, only on demonstrated demand | deferred |
 
 ## Roadmap (deliberately not doing)
 

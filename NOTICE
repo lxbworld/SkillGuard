@@ -44,13 +44,20 @@ NAMING / NON-AFFILIATION
 SkillGuard is NOT affiliated with, endorsed by, or an official implementation
 of any academic or third-party project that shares this name. In particular:
 
-  * "SkillGuard: A Permission Framework for Agent Skills"
-    (arXiv:2606.03024) is an academic work proposing a runtime permission
-    framework for agent skills. This project implements an independent,
-    pre-install, fully static subset of the permission-manifest idea and
-    contains no code from that work.
+  * "SkillGuard: A Permission Framework for Agent Skills" (arXiv:2606.03024)
+    is an academic work proposing a RUNTIME permission framework for agent
+    skills: a permission taxonomy, a baseline policy, a session-state document
+    and sandbox-based enforcement, with LLM-assisted manifest generation. This
+    project implements an independent, PRE-INSTALL, FULLY DETERMINISTIC subset
+    of the permission-manifest idea. It contains no code from that work, calls
+    no LLM, and requires no sandbox.
   * "Skill Drift Is Contract Violation: Proactive Maintenance for LLM Agent
-    Skill Libraries" (arXiv:2605.10990) is a separate research system.
+    Skill Libraries" (arXiv:2605.10990) is a separate research system that also
+    uses the name SkillGuard. It monitors environment-contract drift.
+
+This project deliberately retains the name SkillGuard and cites both works.
+Where the permission-manifest line of research is cited, please cite both so
+the two remain distinguishable.
 
 --------------------------------------------------------------------------------
 
