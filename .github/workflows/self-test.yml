@@ -1,0 +1,56 @@
+# Self-test for the composite action and the installer.
+#
+# CI (ci.yml) tests the crate. This tests the *distribution*: that
+# `uses: ./action` installs SkillGuard from source, scans, produces its outputs,
+# and fails the job when the gate fails. It is the cheapest way to keep the
+# action from silently rotting between releases.
+#
+# The SARIF upload is disabled here: on a private repository Code Scanning needs
+# GitHub Advanced Security, so an upload would fail for a reason unrelated to
+# the action. The scan and the gate are what this checks.
+
+name: Action self-test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A skill with a critical download-to-execute chain. `fail-on: critical`
+      # must fail the job, and `continue-on-error` keeps the workflow alive so
+      # the next step can assert that it did.
+      - name: Run the action against a malicious fixture
+        id: skillguard
+        continue-on-error: true
+        uses: ./action
+        with:
+          path: tests/fixtures/malicious/download-execute
+          fail-on: critical
+          upload-sarif: "false"
+          version: ""
+
+      - name: The action must report its exit code and a SARIF path
+        run: |
+          set -euo pipefail
+          test -n "${{ steps.skillguard.outputs.exit-code }}" \
+            -a -n "${{ steps.skillguard.outputs.sarif }}"
+          test -s "${{ steps.skillguard.outputs.sarif }}"
+
+      - name: The gate must have failed
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.skillguard.outcome }}" != "failure" ]; then
+            echo "::error::the action did not fail on a critical finding"
+            exit 1
+          fi
+          echo "action failed as expected on a critical finding"
