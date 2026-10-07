@@ -101,8 +101,13 @@ its actual behaviour.** That is where this project lives.
 
 ## Status
 
-Research and architecture complete. **Phase 1 scanner is working**: 51 rules, offline,
-deterministic, 111 tests green, `cargo clippy -D warnings` clean.
+Research and architecture complete. **Phases 1–3 are implemented**: 51 rules,
+declared-vs-observed verification, policy engine, content-addressed lockfile.
+181 tests green; `cargo fmt` and `cargo clippy -D warnings` clean.
+
+**Where to pick up work: see the [issue board](https://github.com/lxbworld/SkillGuard/issues).**
+Issue #1 is the next major milestone (the Phase 0 corpus study); #6 is CI for
+this repository, which does not exist yet.
 
 - [Phase 0 Corpus Study](docs/PHASE0_CORPUS_STUDY.md) — the plan to produce the
   first large-scale empirical measurement of the skill ecosystem.
@@ -128,6 +133,12 @@ skillguard scan ./my-skill              # evidence-grade report
 skillguard scan --format sarif ./skills # for GitHub Code Scanning
 skillguard scan --fail-on high .        # CI gate
 skillguard inspect ./my-skill           # capabilities only, no judgement
+skillguard diff ./my-skill              # declared permissions vs observed behaviour
+skillguard adopt --dry-run ./my-skill   # derive a declaration from observation
+skillguard policy-check ./my-skill      # evaluate SKILLGUARD.policy.yaml
+skillguard lock ./my-skill              # write SKILLGUARD.lock
+skillguard verify ./my-skill            # recompute source + commit + digest
+skillguard import skills-lock.json      # read a foreign lockfile
 skillguard rules                        # the rule catalogue
 ```
 
@@ -184,12 +195,12 @@ finding.
 
 | Phase | Scope | Status |
 |---|---|---|
-| **0** | 100k-skill corpus study, public dataset, benchmark | next |
-| **1** | Parser, finding model, scanner | **done** |
-| 2 | Capability model, declared vs observed | planned |
-| 3 | Policy engine, approval lockfile | planned |
-| 4 | CI / SARIF / GitHub Action / rule registry | planned |
-| 5 | `add` / `install` — **optional**, only on demonstrated demand | deferred |
+| **0** | 100k-skill corpus study, public dataset, benchmark | next — [#1](https://github.com/lxbworld/SkillGuard/issues/1) |
+| 1 | Parser, finding model, scanner | **done** |
+| 2 | Capability model, declared vs observed | **done** |
+| 3 | Policy engine, approval lockfile | **done** |
+| 4 | CI / SARIF / GitHub Action / rule registry | planned — [#4](https://github.com/lxbworld/SkillGuard/issues/4), [#6](https://github.com/lxbworld/SkillGuard/issues/6) |
+| 5 | `add` / `install` — **optional**, only on demonstrated demand | deferred — [#9](https://github.com/lxbworld/SkillGuard/issues/9) |
 
 ## Roadmap (deliberately not doing)
 
