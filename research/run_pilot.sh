@@ -55,6 +55,8 @@ with open(index_path) as fh:
             suffix = f"/{p['skill_dir']}" if p["skill_dir"] else ""
             e["source_id"] = f"github:{p['repo']}@{p['commit']}{suffix}"
             e["commit"] = p["commit"]
+            if "root_license" in p:
+                e["repo_license"] = p["root_license"]
         rows.append(e)
 rows.sort(key=lambda r: r["source_id"])
 with open(out_path, "w") as fh:
@@ -80,6 +82,13 @@ target/release/skillguard corpus report --findings "$FINDINGS" --out /tmp/sg-pil
 > `research/PROTOCOL.md` §5, and there is no GOLD label set yet, so the report
 > contains **no precision or recall figure**. Read the numbers as a first signal
 > and a proof that the pipeline runs on real data, not as the study's result.
+>
+> The `LICENSE_MISSING` figure is corrected for repository-root licenses: a
+> skill vendored in a repository inherits that repository's license, and the
+> corpus tree is not a git checkout, so the collector records the repo-root
+> license and `corpus scan` honours it. Before the correction this rule read
+> 87.2%; on a 30-skill sample, 19 of 30 flagged skills (63%) had a repo-root
+> LICENSE, i.e. were false positives.
 
 HEADER
   echo "## Collection"

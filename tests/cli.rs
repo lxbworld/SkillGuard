@@ -126,6 +126,49 @@ fn verify_reports_a_missing_inventory_instead_of_failing_obscurely() {
     );
 }
 
+#[test]
+fn a_skill_inherits_its_repository_license() {
+    // Measured on 30 sampled real skills: 19 of the LICENSE_MISSING flags had a
+    // LICENSE at the repository root. A skill vendored in a repository is
+    // covered by that license, so flagging it is a false positive.
+    let d = tmpdir("repo-license");
+    let status = Command::new("git")
+        .args(["init", "-q"])
+        .arg(&d)
+        .status()
+        .expect("git init");
+    assert!(status.success(), "git init failed");
+    write(
+        &d,
+        "LICENSE",
+        "MIT License\n\nPermission is hereby granted...\n",
+    );
+    write(
+        &d,
+        "skills/demo/SKILL.md",
+        "---\nname: demo\ndescription: d\n---\n\nbody\n",
+    );
+    write(&d, "skills/demo/scripts/a.sh", "echo hi\n");
+
+    let skill = d.join("skills/demo");
+    let out = run(&["scan", skill.to_str().unwrap(), "--no-color"]);
+    assert!(
+        !stdout(&out).contains("LICENSE_MISSING"),
+        "a repo-root license covers the skill: {}",
+        stdout(&out)
+    );
+
+    // The control: outside a repository, the finding still fires.
+    let e = tmpdir("no-repo-license");
+    write(
+        &e,
+        "SKILL.md",
+        "---\nname: x\ndescription: d\n---\n\nbody\n",
+    );
+    let out = run(&["scan", e.to_str().unwrap(), "--no-color"]);
+    assert!(stdout(&out).contains("LICENSE_MISSING"), "{}", stdout(&out));
+}
+
 // ---------------------------------------------------------------------------
 // issue #4: a rule can be silenced, but only through the policy
 // ---------------------------------------------------------------------------

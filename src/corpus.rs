@@ -43,6 +43,15 @@ pub struct ManifestEntry {
     pub content_digest: Option<String>,
     /// Path to the skill, relative to the manifest's tree root.
     pub path: String,
+    /// Whether the source repository has a license at its root.
+    ///
+    /// A skill vendored in a repository is covered by that repository's license,
+    /// but a corpus tree fetched with the collector is not a git checkout, so
+    /// the scanner cannot discover it. Recorded by the collector from the
+    /// repository tree; `scan_manifest` uses it to suppress the `LICENSE_MISSING`
+    /// false positive that was measured on real data.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo_license: Option<bool>,
     /// Stratification dimensions, already bucketed, e.g.
     /// `{"size":"8k_32k","scripts":"shell","declared":"none","license":"present"}`.
     #[serde(default)]
@@ -230,7 +239,7 @@ pub fn scan_manifest(
             }
         }
 
-        let (findings, declared) = match cache.get(digest.as_str()) {
+        let (mut findings, declared) = match cache.get(digest.as_str()) {
             Some(cached) => (cached.findings.clone(), Some(cached.declared)),
             None => {
                 let out = crate::scan::scan_skill(&dir);
@@ -247,6 +256,11 @@ pub fn scan_manifest(
                 (f, Some(declared))
             }
         };
+        // A repo-root license covers the skill. The cache is keyed by content
+        // only, so this filter is applied per entry, not at cache time.
+        if e.repo_license == Some(true) {
+            findings.retain(|f| f.rule != "LICENSE_MISSING");
+        }
 
         records.push(ScanRecord {
             source_id: e.source_id.clone(),
@@ -881,6 +895,7 @@ pub fn index_tree(
             commit: collected.provenance.commit.clone(),
             content_digest: Some(digest.as_str().to_owned()),
             path: rel,
+            repo_license: None,
             stratum,
         });
     }

@@ -118,6 +118,12 @@ pub struct Walked {
     pub files: Vec<SourceFile>,
     /// `(rel, reason)` for symlinks pointing outside the skill.
     pub symlink_escapes: Vec<(String, String)>,
+    /// Set by `scan_skill`: a LICENSE found at the enclosing repository root.
+    ///
+    /// A skill vendored inside a repository inherits that repository's license.
+    /// Reporting `LICENSE_MISSING` without checking was a measured false
+    /// positive on 19 of 30 sampled real skills.
+    pub repo_license: Option<String>,
     pub truncated_depth: bool,
     pub hit_file_cap: bool,
     pub hit_byte_cap: bool,

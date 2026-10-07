@@ -204,6 +204,50 @@ fn the_pipeline_can_be_scrubbed_of_evidence() {
     assert_eq!(read_records(&out).expect("read back"), records);
 }
 
+#[test]
+fn a_repo_root_license_suppresses_license_missing() {
+    // The corpus tree is not a git checkout, so the scanner cannot see a
+    // repo-root license; the manifest carries that fact and `scan_manifest`
+    // applies it. Without this, LICENSE_MISSING over-reported badly on real
+    // data (87.2% -> 33.6% after the fix).
+    //
+    // Copy the fixtures somewhere that is not inside this repository: inside a
+    // repo the scanner would inherit *our* LICENSE and mask the effect.
+    let dir = tmpdir("repo-license-filter");
+    let tree = dir.join("tree");
+    std::fs::create_dir_all(&tree).expect("mkdir");
+    copy_dir(&fixtures(), &tree);
+    let mut entries = corpus::index_tree(&tree, &tree, "L3", "local").expect("index");
+    let idx = entries
+        .iter()
+        .position(|e| e.path.ends_with("skill-b"))
+        .expect("skill-b fixture");
+    assert!(entries[idx].repo_license.is_none());
+
+    entries[idx].repo_license = Some(false);
+    let recs = scan_manifest(&entries, &tree, &mut corpus::FindingCache::new());
+    let rec = recs
+        .iter()
+        .find(|r| r.source_id == entries[idx].source_id)
+        .unwrap();
+    assert!(
+        rec.findings.iter().any(|f| f.rule == "LICENSE_MISSING"),
+        "with no repo license the finding must stand"
+    );
+
+    entries[idx].repo_license = Some(true);
+    let recs = scan_manifest(&entries, &tree, &mut corpus::FindingCache::new());
+    let rec = recs
+        .iter()
+        .find(|r| r.source_id == entries[idx].source_id)
+        .unwrap();
+    assert!(
+        !rec.findings.iter().any(|f| f.rule == "LICENSE_MISSING"),
+        "a repo-root license covers the skill: {:#?}",
+        rec.findings
+    );
+}
+
 fn copy_dir(from: &Path, to: &Path) {
     for entry in walkdir_lite(from) {
         let rel = entry.strip_prefix(from).expect("relative");

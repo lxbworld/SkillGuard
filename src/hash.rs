@@ -216,7 +216,7 @@ pub fn collect(root: &Path, declared_license: Option<&str>) -> Result<Collected,
 }
 
 fn read_git_provenance(root: &Path, declared_license: Option<&str>) -> Provenance {
-    let Some(repo_root) = git_root(root) else {
+    let Some(repo_root) = git_toplevel(root) else {
         return Provenance {
             license: declared_license.map(str::to_owned),
             license_source: declared_license.map(|_| "frontmatter".to_owned()),
@@ -258,7 +258,10 @@ fn read_git_provenance(root: &Path, declared_license: Option<&str>) -> Provenanc
     }
 }
 
-fn git_root(path: &Path) -> Option<PathBuf> {
+/// The repository root containing `path`, or `None` if it is not in a
+/// repository. Read-only, and the only other place besides provenance that
+/// shells out to git.
+pub fn git_toplevel(path: &Path) -> Option<PathBuf> {
     let out = git(path, &["rev-parse", "--show-toplevel"])?;
     let p = PathBuf::from(out.trim());
     if p.as_os_str().is_empty() {

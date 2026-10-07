@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import hashlib
 import json
 import os
 import subprocess
@@ -120,6 +121,11 @@ class Client:
                 if exc.code == 404:
                     raise
                 raise
+            except Exception:
+                # A dropped connection is transient. A batch of thousands of
+                # requests will meet one eventually, and it must not abort the
+                # batch: retry, then give up on this call only.
+                time.sleep(3 * (attempt + 1))
         raise RuntimeError(f"gave up on {url}")
 
     def get_raw(self, owner: str, repo: str, commit: str, path: str) -> bytes | None:
@@ -133,10 +139,11 @@ class Client:
                 if exc.code in (403, 429):
                     time.sleep(5 * (attempt + 1))
                     continue
-                if exc.code == 404:
-                    return None
-                raise
-            except urllib.error.URLError:
+                # 404 and anything else: this file cannot be fetched. The caller
+                # records the skill as failed and moves on.
+                return None
+            except Exception:
+                # RemoteDisconnected, timeouts, TLS resets: transient. Retry.
                 time.sleep(3 * (attempt + 1))
         return None
 
@@ -180,6 +187,12 @@ def search_skills(client: Client, query: str, want: int) -> list[dict]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--limit", type=int, default=300, help="number of skills to collect")
+    ap.add_argument(
+        "--per-query",
+        type=int,
+        default=250,
+        help="max candidates to take from each query (the API caps at 1000)",
+    )
     ap.add_argument("--tree", default="research/raw", help="where to write the fetched bytes")
     ap.add_argument(
         "--query",
@@ -189,41 +202,82 @@ def main() -> int:
     )
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
-    queries = args.query or [
-        "filename:SKILL.md",
-        "filename:SKILL.md path:skills",
-        "filename:SKILL.md path:.claude",
-        "filename:SKILL.md path:agent",
-    ]
+    if not args.query:
+        # Several `path:` variants, because `filename:SKILL.md` alone is
+        # dominated by "the whole repository is the skill" monorepos and by
+        # whatever GitHub indexed most recently.
+        args.query = [
+            "filename:SKILL.md",
+            "filename:SKILL.md path:skills",
+            "filename:SKILL.md path:.claude",
+            "filename:SKILL.md path:agent",
+            "filename:SKILL.md path:agents",
+            "filename:SKILL.md path:.cursor",
+            "filename:SKILL.md path:plugins",
+            "filename:SKILL.md path:commands",
+            "filename:SKILL.md path:.github",
+            "filename:SKILL.md path:templates",
+            "filename:SKILL.md path:skills/",
+            "filename:SKILL.md path:.codex",
+        ]
 
     client = Client(token(), verbose=args.verbose)
     tree_root = Path(args.tree)
     tree_root.mkdir(parents=True, exist_ok=True)
     provenance_path = tree_root / "_provenance.jsonl"
 
+    # Systematic sample: take the candidates in a fixed order that does not
+    # depend on which query returned them, so the draw is reproducible and not
+    # biased by query order. (Protocol §2.2 calls for systematic sampling for
+    # over-capacity strata; this is the same idea at the collection step.)
     print(f"searching GitHub for up to {args.limit} skills ...", file=sys.stderr)
-    per = max(1, args.limit // len(queries) + 1)
-    candidates: list[dict] = []
     seen_keys: set[tuple[str, str]] = set()
-    for q in queries:
-        for cand in search_skills(client, q, per):
-            key = (cand["repo"], cand["skill_dir"])
-            if key not in seen_keys:
-                seen_keys.add(key)
-                candidates.append(cand)
-        if len(candidates) >= args.limit:
-            break
-    candidates = candidates[: args.limit]
-    print(f"  {len(candidates)} candidate skills from {len(queries)} queries", file=sys.stderr)
+    per_query_counts: dict[str, int] = {}
+    for q in args.query:
+        found = search_skills(client, q, args.per_query)
+        for cand in found:
+            seen_keys.add((cand["repo"], cand["skill_dir"]))
+        per_query_counts[q] = len(found)
+        print(f"  {len(found):5d}  {q}", file=sys.stderr)
 
-    repo_cache: dict[str, tuple[str, dict[str, dict]]] = {}
+    candidates = [
+        {"repo": repo, "skill_dir": skill_dir} for repo, skill_dir in seen_keys
+    ]
+    candidates.sort(
+        key=lambda c: hashlib.sha256(
+            f"{c['repo']}/{c['skill_dir']}".encode()
+        ).hexdigest()
+    )
+    candidates = candidates[: args.limit]
+    print(
+        f"  {len(seen_keys)} unique candidates, sampling {len(candidates)}",
+        file=sys.stderr,
+    )
+
+    repo_cache: dict[str, tuple[str, dict[str, dict], bool]] = {}
     provenance: list[dict] = []
-    collected = skipped = failed = 0
+    done: dict[str, dict] = {}
+    if provenance_path.exists():
+        with provenance_path.open() as fh:
+            for line in fh:
+                line = line.strip()
+                if line:
+                    row = json.loads(line)
+                    provenance.append(row)
+                    done[row["path"]] = row
+        print(f"  resuming: {len(done)} skills already collected", file=sys.stderr)
+    collected = 0
+    skipped = failed = 0
+    prov_fh = provenance_path.open("a")
 
     for i, cand in enumerate(candidates, 1):
         repo = cand["repo"]
         skill_dir = cand["skill_dir"]
         owner, name = repo.split("/", 1)
+
+        rel_path = f"{repo}/{skill_dir}" if skill_dir else repo
+        if rel_path in done:
+            continue
 
         try:
             if repo not in repo_cache:
@@ -234,8 +288,21 @@ def main() -> int:
                     for e in tree.get("tree", [])
                     if e.get("type") == "blob" and e.get("mode") != "120000"
                 }
-                repo_cache[repo] = (head, entries)
-            commit, entries = repo_cache[repo]
+                # A repo-root license covers every skill in the repo, and the
+                # corpus tree is not a git checkout, so the scanner cannot find
+                # it. Record it here; `corpus scan` uses it to avoid the
+                # LICENSE_MISSING false positive measured on real data.
+                root_files = {
+                    e["path"].lower()
+                    for e in tree.get("tree", [])
+                    if e.get("type") == "blob" and "/" not in e["path"]
+                }
+                root_license = any(
+                    n.startswith("license") or n.startswith("copying") or n == "notice"
+                    for n in root_files
+                )
+                repo_cache[repo] = (head, entries, root_license)
+            commit, entries, root_license = repo_cache[repo]
         except Exception as exc:
             failed += 1
             print(f"  [{i}] {repo} {skill_dir}: repo error {exc}", file=sys.stderr)
@@ -266,32 +333,41 @@ def main() -> int:
             continue
 
         paths = [p for p, _ in members]
-        with concurrent.futures.ThreadPoolExecutor(max_workers=RAW_WORKERS) as pool:
-            fetched = list(
-                pool.map(lambda p: (p, client.get_raw(owner, name, commit, p)), paths)
-            )
-        if any(body is None for _, body in fetched):
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=RAW_WORKERS) as pool:
+                fetched = list(
+                    pool.map(lambda p: (p, client.get_raw(owner, name, commit, p)), paths)
+                )
+            if any(body is None for _, body in fetched):
+                failed += 1
+                continue
+            for path, body in fetched:
+                entry = entries[path]
+                rel = path[len(prefix):] if prefix else path
+                target = dest / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(body)
+                if entry.get("mode") == "100755":
+                    target.chmod(0o755)
+        except Exception as exc:
+            # A hostile or unusual path must not abort a 1000-skill batch.
             failed += 1
+            print(f"  [{i}] {rel_path}: fetch/write error {exc}", file=sys.stderr)
             continue
-        for path, body in fetched:
-            entry = entries[path]
-            rel = path[len(prefix):] if prefix else path
-            target = dest / rel
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(body)
-            if entry.get("mode") == "100755":
-                target.chmod(0o755)
 
-        provenance.append(
-            {
-                "path": str((tree_root / repo / skill_dir).relative_to(tree_root)),
-                "repo": repo,
-                "commit": commit,
-                "skill_dir": skill_dir,
-                "files": len(members),
-                "bytes": total,
-            }
-        )
+        row = {
+            "path": str((tree_root / repo / skill_dir).relative_to(tree_root)),
+            "repo": repo,
+            "commit": commit,
+            "skill_dir": skill_dir,
+            "files": len(members),
+            "bytes": total,
+            "root_license": root_license,
+        }
+        provenance.append(row)
+        done[row["path"]] = row
+        prov_fh.write(json.dumps(row, sort_keys=True) + "\n")
+        prov_fh.flush()
         collected += 1
         if i % 25 == 0 or i == len(candidates):
             print(
@@ -300,15 +376,23 @@ def main() -> int:
                 file=sys.stderr,
             )
 
-    provenance.sort(key=lambda r: r["path"])
+    prov_fh.close()
+    # Rewrite sorted and deduplicated (last wins), so the committed sidecar is
+    # stable even after several resumed runs.
+    by_path = {row["path"]: row for row in provenance}
+    provenance = [by_path[k] for k in sorted(by_path)]
     with provenance_path.open("w") as fh:
         for row in provenance:
             fh.write(json.dumps(row, sort_keys=True) + "\n")
 
     summary = {
-        "queries": queries,
+        "queries": args.query,
+        "per_query_counts": per_query_counts,
+        "unique_candidates": len(seen_keys),
+        "sample": len(candidates),
         "candidates": len(candidates),
-        "collected": collected,
+        "collected": len(provenance),
+        "collected_this_run": collected,
         "skipped": skipped,
         "failed": failed,
         "api_calls": client.calls,
