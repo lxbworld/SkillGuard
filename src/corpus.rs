@@ -194,6 +194,10 @@ pub fn scan_manifest(
     cache: &mut FindingCache,
 ) -> Vec<ScanRecord> {
     let mut records: Vec<ScanRecord> = Vec::with_capacity(entries.len());
+    // Findings depend on the rules as well as the content, so the cache key
+    // carries a fingerprint of the rule set. Editing a pattern then invalidates
+    // the cache instead of silently returning the old findings.
+    let fingerprint = crate::scan::rules::fingerprint();
 
     for e in entries {
         // A moving ref must be refused here as well as at fetch time: a
@@ -239,15 +243,18 @@ pub fn scan_manifest(
             }
         }
 
-        let (mut findings, declared) = match cache.get(digest.as_str()) {
+        let key = format!("{fingerprint}|{}", digest.as_str());
+        let (mut findings, declared) = match cache.get(&key) {
             Some(cached) => (cached.findings.clone(), Some(cached.declared)),
             None => {
-                let out = crate::scan::scan_skill(&dir);
+                // The mirror is not the skill's checkout: do not inherit a
+                // license from whatever git repository encloses it.
+                let out = crate::scan::scan_skill_with(&dir, false);
                 let mut f = findings_of(&out);
                 f.sort();
                 let declared = out.declared.declared;
                 cache.insert(
-                    digest.as_str().to_owned(),
+                    key,
                     CachedScan {
                         findings: f.clone(),
                         declared,
@@ -853,7 +860,7 @@ pub fn index_tree(
     let mut out = Vec::new();
     for dir in dirs {
         let (digest, files) = crate::hash::digest_dir(&dir)?;
-        let out_scan = crate::scan::scan_skill(&dir);
+        let out_scan = crate::scan::scan_skill_with(&dir, false);
         let collected = crate::hash::collect(&dir, out_scan.license_declared.as_deref())?;
         let total: u64 = files.iter().map(|f| f.size).sum();
         let rel = dir

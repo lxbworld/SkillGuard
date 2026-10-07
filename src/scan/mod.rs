@@ -41,6 +41,17 @@ pub struct ScanOutcome {
 
 /// Scan one skill directory.
 pub fn scan_skill(root: &std::path::Path) -> ScanOutcome {
+    scan_skill_with(root, true)
+}
+
+/// Scan, optionally inheriting a license from the enclosing repository.
+///
+/// `inherit_repo_license` must be `false` for a corpus mirror: the mirror is not
+/// the skill's own checkout, and if it happens to sit inside some git repository
+/// (it usually does — it is inside SkillGuard), `git rev-parse` would report
+/// *that* repository and inherit *its* license for every skill. The corpus knows
+/// the real repository from the manifest and applies it itself.
+pub fn scan_skill_with(root: &std::path::Path, inherit_repo_license: bool) -> ScanOutcome {
     let name = root
         .file_name()
         .map(|s| s.to_string_lossy().to_string())
@@ -49,7 +60,9 @@ pub fn scan_skill(root: &std::path::Path) -> ScanOutcome {
     let mut walked = walk::walk_skill(root);
     // A skill vendored in a repository inherits the repository's license, so
     // look for one before `check_license` decides nothing is present.
-    walked.repo_license = enclosing_repo_license(root);
+    if inherit_repo_license {
+        walked.repo_license = enclosing_repo_license(root);
+    }
     let inherited = walked.repo_license.clone();
 
     let mut out = scan_walked(&name, walked);
@@ -492,6 +505,9 @@ fn apply_text_rules(rel: &str, kind: ArtifactKind, norm: &Normalized, out: &mut 
                 .find(&hay)
                 .map(|m| m.as_str().to_owned())
                 .unwrap_or_default();
+            if suppress_match(rule.spec.id, &line.raw, &matched) {
+                continue;
+            }
             out.push(Finding {
                 rule: RuleId::from(rule.spec.id),
                 severity: rule.spec.severity,
@@ -511,6 +527,124 @@ fn apply_text_rules(rel: &str, kind: ArtifactKind, norm: &Normalized, out: &mut 
     }
 }
 
+/// Default ecosystem endpoints that are not "an unusual host".
+///
+/// A lockfile is full of them, which is why `NET_DOMAIN_LITERAL` read 7.6% on
+/// the first real corpus. Exclusion here only stops the *finding*; the host is
+/// still recorded as an observed capability, because it is still network access.
+const SAFE_HOSTS: &[&str] = &[
+    "registry.npmjs.org",
+    "npmjs.org",
+    "npmjs.com",
+    "yarnpkg.com",
+    "pypi.org",
+    "files.pythonhosted.org",
+    "python.org",
+    "crates.io",
+    "static.crates.io",
+    "rust-lang.org",
+    "github.com",
+    "raw.githubusercontent.com",
+    "githubusercontent.com",
+    "nodejs.org",
+    "debian.org",
+    "ubuntu.com",
+    "archlinux.org",
+    "alpinelinux.org",
+    "localhost",
+];
+
+/// Suppress a match that is a known, *measured* false positive for a rule.
+///
+/// Every entry was added after reading real findings from the Phase 0 corpus,
+/// not out of caution. Keeping the rule id and the reason together means a
+/// future reader can delete exactly the right one.
+fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
+    let line = raw_line.to_lowercase();
+    let m = matched.to_lowercase();
+    match rule {
+        // An npm/pip/cargo integrity hash is base64, but it is not a payload.
+        "DL_BASE64_BLOB" => {
+            line.contains("integrity")
+                || line.contains("sha512-")
+                || line.contains("sha384-")
+                || line.contains("sha256-")
+                || line.contains("sha1-")
+        }
+        // Benign device files are not sensitive system paths.
+        "FS_ABSOLUTE_PATH" => {
+            m.contains("/dev/null")
+                || m.contains("/dev/stdout")
+                || m.contains("/dev/stderr")
+                || m.contains("/dev/stdin")
+                || m.contains("/dev/tty")
+                || m.contains("/dev/zero")
+                || m.contains("/dev/urandom")
+                || m.contains("/dev/random")
+        }
+        "NET_DOMAIN_LITERAL" => SAFE_HOSTS
+            .iter()
+            .any(|h| m == *h || m.ends_with(&format!(".{h}"))),
+        // A badge is a static image served by a badge service, not a tracking
+        // pixel. They appear in most READMEs.
+        "OBFUSC_TRACKING_PIXEL" => {
+            line.contains("shields.io")
+                || line.contains("badgen.net")
+                || line.contains("badge.fury.io")
+                || line.contains("travis-ci")
+                || line.contains("coveralls.io")
+                || line.contains("codecov.io")
+                || line.contains("app.codecov.io")
+                || line.contains("circleci.com")
+                || (line.contains("github.com/") && line.contains("/badge"))
+        }
+        _ => false,
+    }
+}
+
+/// Whether the (already homoglyph-folded) text contains a command or a URL, so
+/// a lookalike-character finding is about a command rather than prose.
+fn mentions_command_or_url(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    if lower.contains("http://") || lower.contains("https://") {
+        return true;
+    }
+    const DANGEROUS: &[&str] = &[
+        "curl",
+        "wget",
+        "bash",
+        "sh",
+        "zsh",
+        "sudo",
+        "chmod",
+        "chown",
+        "eval",
+        "exec",
+        "nc",
+        "ncat",
+        "ssh",
+        "scp",
+        "python",
+        "python3",
+        "node",
+        "npm",
+        "npx",
+        "pip",
+        "powershell",
+        "pwsh",
+        "cmd",
+        "rm",
+        "dd",
+        "crontab",
+        "systemctl",
+        "launchctl",
+        "osascript",
+    ];
+    lower
+        .split(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '-')
+        .any(|tok| DANGEROUS.contains(&tok))
+}
+
 fn apply_obfuscation_flags(
     rel: &str,
     kind: ArtifactKind,
@@ -522,6 +656,10 @@ fn apply_obfuscation_flags(
     }
     for line in &norm.lines {
         let f = line.flags;
+        // Lookalike characters are only an attack when they are used to spell a
+        // command or a URL. Firing on any non-ASCII text flagged legitimate
+        // Bulgarian, Russian and Chinese prose (616 findings, almost all false).
+        let homoglyph_is_command = f.had_homoglyph && mentions_command_or_url(&line.norm);
         let triples: [(bool, &str, &str, Severity); 3] = [
             (
                 f.had_zero_width,
@@ -530,7 +668,7 @@ fn apply_obfuscation_flags(
                 Severity::Medium,
             ),
             (
-                f.had_homoglyph,
+                homoglyph_is_command,
                 "OBFUSC_HOMOGLYPH",
                 "non-ASCII lookalike characters are used to spell a command",
                 Severity::Medium,
