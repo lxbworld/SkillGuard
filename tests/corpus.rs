@@ -281,3 +281,94 @@ fn walkdir_lite(root: &Path) -> Vec<PathBuf> {
     out.sort();
     out
 }
+
+/// Run `git` in `dir`, panicking on failure. Provenance tests need a repo.
+fn git(dir: &Path, args: &[&str]) {
+    let status = std::process::Command::new("git")
+        .args([
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "init.defaultBranch=main",
+        ])
+        .args(args)
+        .current_dir(dir)
+        .status()
+        .expect("run git");
+    assert!(status.success(), "git {args:?} failed in {}", dir.display());
+}
+
+fn write_skill(dir: &Path) {
+    std::fs::create_dir_all(dir).expect("create skill dir");
+    std::fs::write(
+        dir.join("SKILL.md"),
+        "---\nname: fixture\ndescription: A fixture skill.\n---\n",
+    )
+    .expect("write SKILL.md");
+}
+
+/// A corpus mirror is not a checkout. If the tree sits inside some other
+/// project, `git rev-parse` from a skill directory walks up to that project,
+/// and every row would be attributed to it — which is exactly what happened
+/// when the pilot tree (`research/raw`) lived inside the SkillGuard repository.
+#[test]
+fn a_mirror_inside_another_repository_is_not_attributed_to_it() {
+    let outer = tmpdir("mirror-outer");
+    git(&outer, &["init"]);
+    git(
+        &outer,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/example/outer.git",
+        ],
+    );
+    write_skill(&outer.join("mirror/skill"));
+    git(&outer, &["add", "-A"]);
+    git(&outer, &["commit", "-m", "outer"]);
+
+    let mirror = outer.join("mirror");
+    let entries = corpus::index_tree(&mirror, &mirror, "L3", "local").expect("index");
+    assert_eq!(entries.len(), 1, "{entries:#?}");
+    let e = &entries[0];
+    assert!(
+        e.source_id.starts_with("local:"),
+        "a mirror must not inherit the enclosing repository: {e:?}"
+    );
+    assert_eq!(
+        e.commit, None,
+        "untrusted provenance must not carry a commit"
+    );
+}
+
+/// The positive case: when the tree *is* the checkout, git provenance is used.
+#[test]
+fn a_checkout_is_attributed_to_its_repository() {
+    let checkout = tmpdir("checkout");
+    git(&checkout, &["init"]);
+    git(
+        &checkout,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/example/real.git",
+        ],
+    );
+    write_skill(&checkout.join("skill"));
+    git(&checkout, &["add", "-A"]);
+    git(&checkout, &["commit", "-m", "initial"]);
+
+    let entries = corpus::index_tree(&checkout, &checkout, "L3", "local").expect("index");
+    assert_eq!(entries.len(), 1, "{entries:#?}");
+    let e = &entries[0];
+    assert!(
+        e.source_id.starts_with("github:example/real@"),
+        "a checkout is attributed to its repository: {e:?}"
+    );
+    let commit = e.commit.as_deref().unwrap_or("");
+    assert_eq!(commit.len(), 40, "a full 40-hex commit, never a ref: {e:?}");
+}

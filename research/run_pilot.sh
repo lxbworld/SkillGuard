@@ -41,28 +41,45 @@ echo "== 4/6 join GitHub provenance (repo + pinned commit) =="
 python3 - "$TREE/_provenance.jsonl" /tmp/sg-pilot-index.jsonl "$MANIFEST" <<'PY'
 import json, sys
 prov_path, index_path, out_path = sys.argv[1:4]
-prov = {}
+
+# Index provenance by repository directory (the first two tree-relative path
+# segments, `owner/name`). An exact path lookup is not enough: GitHub search
+# surfaces one SKILL.md per hit, but the walker finds every nested SKILL.md in
+# the fetched tree, and the nested ones have no provenance row of their own.
+def repo_dir(path):
+    return "/".join(path.split("/")[:2])
+
+by_repo = {}
 with open(prov_path) as fh:
     for line in fh:
         r = json.loads(line)
-        prov[r["path"]] = r
-rows = []
+        rd = repo_dir(r["path"])
+        prev = by_repo.get(rd)
+        # Prefer a row that carries the repository-root license.
+        if prev is None or ("root_license" in r and "root_license" not in prev):
+            by_repo[rd] = r
+
+rows, skipped = [], 0
 with open(index_path) as fh:
     for line in fh:
         e = json.loads(line)
-        p = prov.get(e["path"])
-        if p:
-            suffix = f"/{p['skill_dir']}" if p["skill_dir"] else ""
-            e["source_id"] = f"github:{p['repo']}@{p['commit']}{suffix}"
-            e["commit"] = p["commit"]
-            if "root_license" in p:
-                e["repo_license"] = p["root_license"]
+        rd = repo_dir(e["path"])
+        p = by_repo.get(rd)
+        if p is None:
+            # No fetched repository contains this path: drop it rather than
+            # attribute it to whatever repository happens to enclose the tree.
+            skipped += 1
+            continue
+        rel = e["path"][len(rd):].lstrip("/")
+        e["source_id"] = f"github:{p['repo']}@{p['commit']}" + (f"/{rel}" if rel else "")
+        e["commit"] = p["commit"]
+        e["repo_license"] = p.get("root_license")
         rows.append(e)
 rows.sort(key=lambda r: r["source_id"])
 with open(out_path, "w") as fh:
     for e in rows:
         fh.write(json.dumps(e, sort_keys=True) + "\n")
-print(f"  {len(rows)} manifest entries -> {out_path}", file=sys.stderr)
+print(f"  {len(rows)} manifest entries ({skipped} unattributed skipped) -> {out_path}", file=sys.stderr)
 PY
 
 echo "== 5/6 scan (offline, cached) =="
@@ -88,7 +105,12 @@ target/release/skillguard corpus report --findings "$FINDINGS" --out /tmp/sg-pil
 > corpus tree is not a git checkout, so the collector records the repo-root
 > license and `corpus scan` honours it. Before the correction this rule read
 > 87.2%; on a 30-skill sample, 19 of 30 flagged skills (63%) had a repo-root
-> LICENSE, i.e. were false positives.
+> LICENSE. A second error was attribution: GitHub search surfaces one
+> `SKILL.md` per hit, but the walker finds every nested `SKILL.md` in the
+> fetched tree, and nested skills had no provenance row — they were credited to
+> whatever repository enclosed the tree (SkillGuard) and lost their own
+> repository's license. The join now matches provenance by repository, so all
+> 1372 rows carry their true repository and repository-root license.
 >
 > A precision pass over the first real corpus also corrected several heuristics
 > that fired on ordinary text and file formats: lookalike characters in

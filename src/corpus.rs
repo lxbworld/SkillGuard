@@ -857,6 +857,7 @@ pub fn index_tree(
 ) -> Result<Vec<ManifestEntry>, String> {
     let mut dirs = crate::walk::discover_skill_dirs(source);
     dirs.sort();
+    let tree_abs = tree.canonicalize().unwrap_or_else(|_| tree.to_path_buf());
     let mut out = Vec::new();
     for dir in dirs {
         let (digest, files) = crate::hash::digest_dir(&dir)?;
@@ -868,10 +869,24 @@ pub fn index_tree(
             .unwrap_or(&dir)
             .to_string_lossy()
             .replace('\\', "/");
-        let source_id = match (
-            &collected.provenance.repository,
-            &collected.provenance.commit,
-        ) {
+        // A corpus mirror is a pile of fetched directories, not a checkout. If
+        // the tree happens to sit inside some other project (the pilot tree is
+        // `research/raw` inside the SkillGuard repository), `git rev-parse` from
+        // a skill directory walks up to *that* project and every row would be
+        // attributed to it. Trust git provenance only when the repository root
+        // is the tree itself or lives inside it.
+        let trusted = crate::hash::git_toplevel(&dir)
+            .and_then(|p| p.canonicalize().ok())
+            .is_some_and(|p| p.starts_with(&tree_abs));
+        let (repository, commit) = if trusted {
+            (
+                collected.provenance.repository.clone(),
+                collected.provenance.commit.clone(),
+            )
+        } else {
+            (None, None)
+        };
+        let source_id = match (&repository, &commit) {
             (Some(repo), Some(commit)) => format!("github:{repo}@{commit}/{rel}"),
             _ => format!("{source_prefix}:{rel}"),
         };
@@ -899,7 +914,7 @@ pub fn index_tree(
         out.push(ManifestEntry {
             source_id,
             layer: layer.to_owned(),
-            commit: collected.provenance.commit.clone(),
+            commit: commit.clone(),
             content_digest: Some(digest.as_str().to_owned()),
             path: rel,
             repo_license: None,
