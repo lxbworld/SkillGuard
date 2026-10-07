@@ -2,7 +2,7 @@
 #
 # Usage:
 #
-#   - uses: lxbworld/SkillGuard/action@v1
+#   - uses: lxbworld/SkillGuard/action@v0.1.0
 #     with:
 #       path: .
 #       fail-on: high
@@ -59,6 +59,10 @@ runs:
       env:
         VERSION: ${{ inputs.version }}
         DEST: ${{ runner.temp }}/skillguard
+        # Lets the installer fetch a private repository's release via the API.
+        # The token is only used for the download; it is never sent anywhere
+        # else, and SkillGuard itself has no network code.
+        GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
         bash "${{ github.action_path }}/install.sh" "${VERSION}" "${DEST}"

@@ -171,7 +171,7 @@ permissions:
   security-events: write   # required for the SARIF upload
 steps:
   - uses: actions/checkout@v4
-  - uses: lxbworld/SkillGuard/action@v1
+  - uses: lxbworld/SkillGuard/action@v0.1.0
     with:
       path: .
       fail-on: high

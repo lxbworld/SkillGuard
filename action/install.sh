@@ -64,6 +64,30 @@ asset_for_platform() {
   esac
 }
 
+# Fetch one release file.
+#
+# The public `releases/download` URL works for public repositories. GitHub does
+# not serve release assets over that URL for a private repository, so fall back
+# to `gh release download`, which uses the API and the caller's token. `gh` is
+# preinstalled on GitHub-hosted runners.
+fetch_release_file() {
+  local version="$1" name="$2" dest="$3" url
+  url="${base}/${version}/${name}"
+  # A public repository serves this; a private one returns 404, which is
+  # expected and not worth printing before the API fallback.
+  if curl -fsSL "${url}" -o "${dest}/${name}" 2>/dev/null; then
+    return 0
+  fi
+  if command -v gh >/dev/null 2>&1; then
+    if gh release download "${version}" -R "${repo}" -p "${name}" -D "${dest}" --clobber >/dev/null 2>&1 \
+      && [ -f "${dest}/${name}" ]; then
+      log "downloaded ${name} via the GitHub API (private release)"
+      return 0
+    fi
+  fi
+  return 1
+}
+
 install_from_release() {
   local asset url tmp expected actual
   asset="$(asset_for_platform)"
@@ -75,11 +99,11 @@ install_from_release() {
   tmp="$(mktemp -d)"
   url="${base}/${version}/${asset}"
   log "downloading ${url}"
-  if ! curl -fsSL "${url}" -o "${tmp}/${asset}"; then
+  if ! fetch_release_file "${version}" "${asset}" "${tmp}"; then
     log "download failed; falling back to source build"
     return 2
   fi
-  if ! curl -fsSL "${url}.sha256" -o "${tmp}/${asset}.sha256"; then
+  if ! fetch_release_file "${version}" "${asset}.sha256" "${tmp}"; then
     log "checksum file missing for ${asset}; refusing to install an unverified binary"
     return 1
   fi
