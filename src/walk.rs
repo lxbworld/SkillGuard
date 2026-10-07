@@ -294,37 +294,35 @@ pub fn discover_skill_dirs(root: &Path) -> Vec<PathBuf> {
         out.insert(root.to_path_buf());
         return out.into_iter().collect();
     }
-    let Ok(rd) = std::fs::read_dir(root) else {
-        return Vec::new();
-    };
-    for e in rd.flatten() {
-        let p = e.path();
-        if p.is_dir() && p.join("SKILL.md").is_file() {
-            out.insert(p);
-        }
-    }
-    // Nested: <root>/<category>/<skill>/SKILL.md
-    if out.is_empty() {
-        let Ok(rd) = std::fs::read_dir(root) else {
-            return Vec::new();
-        };
-        for e in rd.flatten() {
-            let p = e.path();
-            if !p.is_dir() {
-                continue;
-            }
-            let Ok(inner) = std::fs::read_dir(&p) else {
-                continue;
-            };
-            for e2 in inner.flatten() {
-                let p2 = e2.path();
-                if p2.is_dir() && p2.join("SKILL.md").is_file() {
-                    out.insert(p2);
-                }
-            }
+    // Recurse, pruning vendored and VCS directories.
+    //
+    // The previous version looked only at the root, its children, and (only if
+    // nothing matched at the child level) its grandchildren. A corpus tree laid
+    // out as `<source>/<repo>/<skill>/SKILL.md` therefore lost most of its
+    // skills, and the loss was silent: `corpus index` reported 46 of 300. A
+    // real pilot on real data is what surfaced it.
+    let walker = walkdir::WalkDir::new(root)
+        .follow_links(false)
+        .max_depth(limits::MAX_DEPTH)
+        .into_iter()
+        .filter_entry(|e| !is_excluded_dir(e));
+    for entry in walker.flatten() {
+        if entry.file_type().is_dir()
+            && entry.path() != root
+            && entry.path().join("SKILL.md").is_file()
+        {
+            out.insert(entry.path().to_path_buf());
         }
     }
     out.into_iter().collect()
+}
+
+/// Prune vendored and VCS directories while discovering skills.
+fn is_excluded_dir(entry: &walkdir::DirEntry) -> bool {
+    if entry.depth() == 0 || !entry.file_type().is_dir() {
+        return false;
+    }
+    EXCLUDED_DIRS.contains(&entry.file_name().to_string_lossy().as_ref())
 }
 
 #[cfg(test)]
@@ -475,5 +473,18 @@ mod tests {
         fs::create_dir_all(c.join("c")).unwrap_or_default();
         fs::write(c.join("c/SKILL.md"), "z").unwrap_or_default();
         assert_eq!(discover_skill_dirs(&c).len(), 2);
+
+        // A corpus layout: <source>/<repo>/<skill>/SKILL.md, several levels
+        // deep and mixed with a repo-root skill. The old shallow scan silently
+        // missed these, which a real pilot caught.
+        let deep = tmp("discover-deep");
+        fs::create_dir_all(deep.join("owner/repo-a/skill")).unwrap_or_default();
+        fs::write(deep.join("owner/repo-a/skill/SKILL.md"), "x").unwrap_or_default();
+        fs::create_dir_all(deep.join("owner/repo-b")).unwrap_or_default();
+        fs::write(deep.join("owner/repo-b/SKILL.md"), "y").unwrap_or_default();
+        fs::create_dir_all(deep.join("owner/repo-a/node_modules/pkg")).unwrap_or_default();
+        fs::write(deep.join("owner/repo-a/node_modules/pkg/SKILL.md"), "z").unwrap_or_default();
+        let found = discover_skill_dirs(&deep);
+        assert_eq!(found.len(), 2, "vendored skills must be pruned: {found:?}");
     }
 }

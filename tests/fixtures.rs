@@ -343,7 +343,12 @@ fn homoglyphs_do_not_hide_a_command() {
 
 #[test]
 fn edge_case_fixtures_do_not_panic() {
-    for sub in ["empty-skill", "weird-encoding", "huge-line"] {
+    for sub in [
+        "empty-skill",
+        "weird-encoding",
+        "huge-line",
+        "unicode-torture",
+    ] {
         let out = scan_fixture("edge_cases", sub);
         // The only requirement is that we return, with the files we skipped
         // accounted for rather than silently dropped.

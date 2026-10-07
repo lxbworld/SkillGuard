@@ -13,3 +13,7 @@ SKILLGUARD.policy.yaml
 .vscode/
 .DS_Store
 *.swp
+# Phase 0 corpus: fetched skill bytes are never committed (only digests,
+# the manifest and the findings are). See research/DISCLOSURE.md.
+/research/raw/
+research/.corpus-cache.json
