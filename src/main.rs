@@ -67,6 +67,12 @@ enum Command {
 
         #[arg(long, short, default_value = "text", value_enum)]
         format: Format,
+
+        /// Print only normalized text with line numbers, for GOLD labelling.
+        /// No capabilities and no findings, so an annotator is not anchored by
+        /// the scanner's output (research/PROTOCOL.md §4.3).
+        #[arg(long)]
+        labeling: bool,
     },
 
     /// Compare the skill's declared permissions against observed behaviour.
@@ -177,6 +183,85 @@ enum Command {
         #[arg(long, short, default_value = "text", value_enum)]
         format: Format,
     },
+
+    /// Phase 0 corpus study: index, batch-scan and measure, offline.
+    Corpus {
+        #[command(subcommand)]
+        command: CorpusCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum CorpusCommand {
+    /// Index a local tree of skills into a manifest (the offline half of fetch).
+    Index {
+        /// Directory containing skills (searched recursively).
+        source: PathBuf,
+
+        /// Directory the manifest paths are relative to. Defaults to `source`.
+        #[arg(long)]
+        tree: Option<PathBuf>,
+
+        /// Sampling layer: L1..L5.
+        #[arg(long, default_value = "L3")]
+        layer: String,
+
+        /// Prefix for source ids that have no git repository, e.g. `local`.
+        #[arg(long, default_value = "local")]
+        source_prefix: String,
+
+        #[arg(long)]
+        out: PathBuf,
+    },
+
+    /// Scan every manifest entry. Offline, cached by content digest.
+    Scan {
+        #[arg(long)]
+        manifest: PathBuf,
+
+        /// Root the manifest paths are relative to.
+        #[arg(long)]
+        tree: PathBuf,
+
+        #[arg(long)]
+        out: PathBuf,
+
+        /// Cache file. Defaults to `<out>.cache.json`.
+        #[arg(long)]
+        cache: Option<PathBuf>,
+    },
+
+    /// Stratified prevalence from a findings JSONL.
+    Stats {
+        #[arg(long)]
+        findings: PathBuf,
+
+        /// Dimensions to stratify on; `layer` is its own field, the rest are
+        /// keys in each entry's `stratum` map.
+        #[arg(long, default_value = "layer,size,scripts,declared,license")]
+        by: String,
+
+        #[arg(long, short, default_value = "markdown", value_enum)]
+        format: Format,
+    },
+
+    /// Write the Markdown report for a findings JSONL.
+    Report {
+        #[arg(long)]
+        findings: PathBuf,
+
+        #[arg(long)]
+        out: PathBuf,
+    },
+
+    /// Recompute every manifest digest and compare. The reproducibility check.
+    Reproduce {
+        #[arg(long)]
+        manifest: PathBuf,
+
+        #[arg(long)]
+        tree: PathBuf,
+    },
 }
 
 fn main() -> ExitCode {
@@ -202,7 +287,17 @@ fn main() -> ExitCode {
             fail_on,
             list_rules,
         } => run_scan(paths, *format, fail_on, *list_rules, &cli, color),
-        Command::Inspect { paths, format } => run_inspect(paths, *format, &cli, color),
+        Command::Inspect {
+            paths,
+            format,
+            labeling,
+        } => {
+            if *labeling {
+                run_labeling(paths, &cli)
+            } else {
+                run_inspect(paths, *format, &cli, color)
+            }
+        }
         Command::Diff { paths, strict } => run_diff(paths, *strict, &cli),
         Command::Adopt { paths, dry_run } => run_adopt(paths, *dry_run, &cli),
         Command::PolicyCheck { paths, policy } => run_policy_check(paths, policy.as_deref(), &cli),
@@ -217,6 +312,7 @@ fn main() -> ExitCode {
         } => run_approve(path, reviewer, reason, *force, lockfile.as_deref(), &cli),
         Command::Import { file, out } => run_import(file, out.as_deref(), &cli),
         Command::Rules { format } => run_rules(*format, &cli, color),
+        Command::Corpus { command } => run_corpus(command, &cli),
     };
 
     match result {
@@ -1102,5 +1198,170 @@ fn run_rules(format: Format, cli: &Cli, color: bool) -> Result<i32, String> {
         }
     };
     emit(cli, &body)?;
+    Ok(exit::OK)
+}
+
+/// Phase 0 corpus driver. Thin CLI over `skillguard::corpus`; all the logic
+/// (and its tests) live in the library so the pipeline is usable from Rust too.
+fn run_corpus(command: &CorpusCommand, cli: &Cli) -> Result<i32, String> {
+    use skillguard::corpus;
+
+    match command {
+        CorpusCommand::Index {
+            source,
+            tree,
+            layer,
+            source_prefix,
+            out,
+        } => {
+            let tree = tree.clone().unwrap_or_else(|| source.clone());
+            let entries = corpus::index_tree(source, &tree, layer, source_prefix)?;
+            corpus::write_manifest(out, &entries)?;
+            emit(
+                cli,
+                &format!(
+                    "\n  SkillGuard corpus index\n    {} skill(s) -> {}\n\n",
+                    entries.len(),
+                    out.display()
+                ),
+            )?;
+            Ok(exit::OK)
+        }
+
+        CorpusCommand::Scan {
+            manifest,
+            tree,
+            out,
+            cache,
+        } => {
+            let entries = corpus::read_manifest(manifest)?;
+            let cache_path = cache
+                .clone()
+                .unwrap_or_else(|| out.with_extension("cache.json"));
+            let mut c = corpus::load_cache(&cache_path)?;
+            let records = corpus::scan_manifest(&entries, tree, &mut c);
+            corpus::write_records(out, &records)?;
+            corpus::save_cache(&cache_path, &c)?;
+
+            let scanned = records.iter().filter(|r| r.is_scanned()).count();
+            let failed = records.len() - scanned;
+            let mut o = format!(
+                "\n  SkillGuard corpus scan\n    scanned {scanned}\n    failed  {failed}\n    output  {}\n",
+                out.display()
+            );
+            for r in records.iter().filter(|r| !r.is_scanned()).take(20) {
+                o.push_str(&format!(
+                    "      {} - {}\n",
+                    r.source_id,
+                    r.reason.as_deref().unwrap_or("unknown")
+                ));
+            }
+            if failed > 20 {
+                o.push_str(&format!("      ... and {} more\n", failed - 20));
+            }
+            o.push('\n');
+            emit(cli, &o)?;
+            // A failed entry is recorded, not fatal: one unreadable skill must
+            // not abort a 100,000-skill batch.
+            Ok(exit::OK)
+        }
+
+        CorpusCommand::Stats {
+            findings,
+            by,
+            format,
+        } => {
+            let records = corpus::read_records(findings)?;
+            let dims: Vec<&str> = by
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect();
+            let s = corpus::stats(&records, &dims);
+            let body = match format {
+                Format::Json => serde_json::to_string_pretty(&s)
+                    .map_err(|e| format!("cannot serialise stats: {e}"))?,
+                _ => corpus::report_markdown(&s, skillguard::RULE_SET_VERSION),
+            };
+            emit(cli, &body)?;
+            Ok(exit::OK)
+        }
+
+        CorpusCommand::Report { findings, out } => {
+            let records = corpus::read_records(findings)?;
+            let dims: Vec<&str> = corpus::DEFAULT_DIMENSIONS.to_vec();
+            let s = corpus::stats(&records, &dims);
+            let body = corpus::report_markdown(&s, skillguard::RULE_SET_VERSION);
+            if let Some(parent) = out.parent() {
+                if !parent.as_os_str().is_empty() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
+                }
+            }
+            std::fs::write(out, &body)
+                .map_err(|e| format!("cannot write {}: {e}", out.display()))?;
+            emit(cli, &format!("\n  wrote {}\n\n", out.display()))?;
+            Ok(exit::OK)
+        }
+
+        CorpusCommand::Reproduce { manifest, tree } => {
+            let entries = corpus::read_manifest(manifest)?;
+            let rep = corpus::reproduce(&entries, tree);
+            let mut o = format!(
+                "\n  SkillGuard corpus reproduce\n    checked        {}\n    matched        {}\n    missing digest {}\n    mismatched     {}\n",
+                rep.checked,
+                rep.matched,
+                rep.missing_digest.len(),
+                rep.mismatched.len()
+            );
+            for m in rep.mismatched.iter().take(20) {
+                o.push_str(&format!("      {m}\n"));
+            }
+            o.push('\n');
+            emit(cli, &o)?;
+            Ok(if rep.ok() { exit::OK } else { exit::INTEGRITY })
+        }
+    }
+}
+
+/// The GOLD labelling view: normalized text and line numbers only.
+///
+/// Deliberately emits no rule output. If an annotator sees what the scanner
+/// found, they agree with it, and the kappa that is supposed to make the labels
+/// credible measures anchoring instead of agreement (research/PROTOCOL.md §4.3).
+fn run_labeling(paths: &[PathBuf], cli: &Cli) -> Result<i32, String> {
+    let targets = resolve_targets(paths)?;
+    let mut o = String::from(
+        "\n  SkillGuard labeling view - normalized text and line numbers, no rule output\n",
+    );
+
+    for t in &targets {
+        o.push_str(&format!("\n  == {} ==\n", t.display()));
+        let walked = walk::walk_skill(t);
+        for f in &walked.files {
+            if !f.scanned {
+                o.push_str(&format!(
+                    "  {}: SKIPPED ({})\n",
+                    f.rel,
+                    f.note.as_deref().unwrap_or("")
+                ));
+                continue;
+            }
+            let Ok(src) = std::str::from_utf8(&f.bytes) else {
+                continue;
+            };
+            let norm = skillguard::text::normalize_file(src, walk::limits::MAX_FILE_BYTES as usize);
+            for l in &norm.lines {
+                o.push_str(&format!(
+                    "{}:{} | {}\n",
+                    f.rel,
+                    l.line,
+                    text::sanitize_for_display(&l.norm)
+                ));
+            }
+        }
+    }
+
+    emit(cli, &o)?;
     Ok(exit::OK)
 }

@@ -102,13 +102,20 @@ its actual behaviour.** That is where this project lives.
 
 ## Status
 
-Research and architecture complete. **Phases 1–3 are implemented**: 51 rules,
-declared-vs-observed verification, policy engine, content-addressed lockfile.
-181 tests green; `cargo fmt` and `cargo clippy -D warnings` clean.
+Research and architecture complete. **Phases 1–4 are implemented**: 52 rules,
+declared-vs-observed verification, policy engine, content-addressed lockfile,
+CI on three platforms, a GitHub Action, a pre-commit hook and prebuilt-binary
+releases. The Phase 0 corpus pipeline (`corpus index|scan|stats|report|reproduce`)
+is implemented and offline; the study itself is blocked on registry collection
+permission, not on code.
+
+Test suite and CI are green; `cargo fmt`, `cargo clippy -D warnings` and
+`cargo deny check` are clean, on every platform in the matrix.
 
 **Where to pick up work: see the [issue board](https://github.com/lxbworld/SkillGuard/issues).**
-Issue #1 is the next major milestone (the Phase 0 corpus study); #6 is CI for
-this repository, which does not exist yet.
+Issue #1 is the next major milestone — the corpus study needs a corpus, which
+needs the collection clearances tracked at #5; the pipeline that consumes it is
+done.
 
 - [Phase 0 Corpus Study](docs/PHASE0_CORPUS_STUDY.md) — the plan to produce the
   first large-scale empirical measurement of the skill ecosystem.
@@ -141,6 +148,14 @@ skillguard lock ./my-skill              # write SKILLGUARD.lock
 skillguard verify ./my-skill            # recompute source + commit + digest
 skillguard import skills-lock.json      # read a foreign lockfile
 skillguard rules                        # the rule catalogue
+skillguard rules --format markdown      # the catalogue as docs/RULES.md
+skillguard inspect --labeling ./skill   # normalized text only, for GOLD labelling
+skillguard corpus index ./checkout --out corpus-manifest.jsonl
+skillguard corpus scan --manifest corpus-manifest.jsonl --tree ./checkout \
+                       --out raw-findings.jsonl
+skillguard corpus stats --findings raw-findings.jsonl
+skillguard corpus report --findings raw-findings.jsonl --out docs/CORPUS_REPORT.md
+skillguard corpus reproduce --manifest corpus-manifest.jsonl --tree ./checkout
 ```
 
 Exit codes: `0` clean · `1` findings at/above `--fail-on` · `2` integrity · `3` usage.
@@ -196,12 +211,17 @@ finding.
 
 | Phase | Scope | Status |
 |---|---|---|
-| **0** | 100k-skill corpus study, public dataset, benchmark | next — [#1](https://github.com/lxbworld/SkillGuard/issues/1) |
+| **0** | 100k-skill corpus study, public dataset, benchmark | pipeline **done**; collection blocked on [#5](https://github.com/lxbworld/SkillGuard/issues/5) — [#1](https://github.com/lxbworld/SkillGuard/issues/1) |
 | 1 | Parser, finding model, scanner | **done** |
 | 2 | Capability model, declared vs observed | **done** |
 | 3 | Policy engine, approval lockfile | **done** |
-| 4 | CI / SARIF / GitHub Action / rule registry | planned — [#4](https://github.com/lxbworld/SkillGuard/issues/4), [#6](https://github.com/lxbworld/SkillGuard/issues/6) |
+| 4 | CI / SARIF / GitHub Action / rule registry | **done** — [#4](https://github.com/lxbworld/SkillGuard/issues/4), [#6](https://github.com/lxbworld/SkillGuard/issues/6) |
 | 5 | `add` / `install` — **optional**, only on demonstrated demand | deferred — [#9](https://github.com/lxbworld/SkillGuard/issues/9) |
+
+Distribution for Phase 4 lives in `action/` (composite GitHub Action),
+`.pre-commit-hooks.yaml` (pre-commit hook) and `.github/workflows/release.yml`
+(prebuilt binaries with a published `sha256` for each). `docs/RULES.md` is
+generated from the code and checked for drift in CI.
 
 ## Roadmap (deliberately not doing)
 

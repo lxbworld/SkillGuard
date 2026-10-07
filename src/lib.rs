@@ -24,6 +24,7 @@
 )]
 
 pub mod capability;
+pub mod corpus;
 pub mod hash;
 pub mod import;
 pub mod models;

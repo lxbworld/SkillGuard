@@ -9,6 +9,17 @@ This document exists so the study cannot be quietly reshaped after the results
 are known. In security research, the most common way a corpus study becomes
 worthless is not that the data was bad — it is that the denominator moved.
 
+> **Tooling status (2026-10-07, non-normative).** The protocol above is
+> unchanged; this note only records what the scanner can now do.
+> `skillguard corpus index|scan|stats|report|reproduce` implement §6 offline:
+> `index` turns a local checkout into a manifest pinned to full commits and
+> `sgdir-v1` digests, `scan` is cached by digest and produces byte-identical
+> JSONL across runs, and the denominators table lists every failed entry rather
+> than hiding it. Network collection is still blocked on
+> [DISCLOSURE.md](DISCLOSURE.md) §3 (issue #5). `skillguard inspect --labeling`
+> is the rules-free view §7 requires for the GOLD set.
+> See `tests/corpus.rs` for the reproducibility tests.
+
 ---
 
 ## 1. Hypotheses

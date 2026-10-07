@@ -1,7 +1,10 @@
 # Phase 0 — Large-Scale Corpus Security Study
 
 **目的**：在写产品之前，先用一份无法被反驳的数据把项目立住。
-**状态**：待批准。**技术前提**：只需 Phase 1 的扫描器 + 一个语料驱动模式。
+**状态**：协议已预注册；采集管线已实现并通过测试（`skillguard corpus
+index|scan|stats|report|reproduce`，见 `tests/corpus.rs`）。**阻塞在采集许可**
+（issue #5，`research/TERMS-REVIEW.md` / `research/DISCLOSURE.md`），不阻塞在代码。
+**技术前提**：Phase 1 扫描器 + 已实现的语料驱动模式。
 
 ---
 
