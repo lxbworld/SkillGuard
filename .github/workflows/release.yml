@@ -29,22 +29,27 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             asset: skillguard-linux-x86_64
+            cross_apt: ""
             cross_linker: ""
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             asset: skillguard-linux-aarch64
-            cross_linker: gcc-aarch64-linux-gnu
+            cross_apt: gcc-aarch64-linux-gnu
+            cross_linker: aarch64-linux-gnu-gcc
           - os: macos-latest
             target: x86_64-apple-darwin
             asset: skillguard-macos-x86_64
+            cross_apt: ""
             cross_linker: ""
           - os: macos-latest
             target: aarch64-apple-darwin
             asset: skillguard-macos-aarch64
+            cross_apt: ""
             cross_linker: ""
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             asset: skillguard-windows-x86_64
+            cross_apt: ""
             cross_linker: ""
     steps:
       - uses: actions/checkout@v4
@@ -57,10 +62,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Install cross linker
-        if: matrix.cross_linker != ''
+        if: matrix.cross_apt != ''
         run: |
           sudo apt-get update
-          sudo apt-get install -y ${{ matrix.cross_linker }}
+          sudo apt-get install -y ${{ matrix.cross_apt }}
 
       - name: Configure cross linker
         if: matrix.cross_linker != ''
