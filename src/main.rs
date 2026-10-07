@@ -276,6 +276,10 @@ enum CorpusCommand {
         #[arg(long)]
         findings: PathBuf,
 
+        /// Optional GOLD label set (JSONL) for per-rule precision and recall.
+        #[arg(long)]
+        gold: Option<PathBuf>,
+
         #[arg(long)]
         out: PathBuf,
     },
@@ -1302,17 +1306,25 @@ fn run_corpus(command: &CorpusCommand, cli: &Cli) -> Result<i32, String> {
             let body = match format {
                 Format::Json => serde_json::to_string_pretty(&s)
                     .map_err(|e| format!("cannot serialise stats: {e}"))?,
-                _ => corpus::report_markdown(&s, skillguard::RULE_SET_VERSION),
+                _ => corpus::report_markdown(&s, skillguard::RULE_SET_VERSION, &[]),
             };
             emit(cli, &body)?;
             Ok(exit::OK)
         }
 
-        CorpusCommand::Report { findings, out } => {
+        CorpusCommand::Report {
+            findings,
+            gold,
+            out,
+        } => {
             let records = corpus::read_records(findings)?;
             let dims: Vec<&str> = corpus::DEFAULT_DIMENSIONS.to_vec();
             let s = corpus::stats(&records, &dims);
-            let body = corpus::report_markdown(&s, skillguard::RULE_SET_VERSION);
+            let scores = match gold {
+                Some(path) => corpus::score(&corpus::read_gold(path)?),
+                None => Vec::new(),
+            };
+            let body = corpus::report_markdown(&s, skillguard::RULE_SET_VERSION, &scores);
             if let Some(parent) = out.parent() {
                 if !parent.as_os_str().is_empty() {
                     std::fs::create_dir_all(parent)

@@ -3,6 +3,14 @@
 技术栈：**Rust（edition 2021，MSRV 1.78）**，单二进制，零运行时依赖。
 本文件描述架构与接口边界，不含实现代码。
 
+> **实现状态（2026-10-07，非规范性）。** 本文件写于实现之前，实际模块布局比
+> 下面的树更扁平（例如 `src/models.rs`、`src/scan/mod.rs`、`src/scan/rules.rs`、
+> `src/hash.rs`、`src/policy.rs`、`src/permissions.rs`、`src/corpus.rs`），
+> 且 Phase 4 的 `add/install`（`install/`、`diff/`、`provenance/` 等）**未实现，
+> 按设计延后**（issue #9）。**真正有约束力的是本文的不变量与边界**（§2 末尾、
+> §3、§4），它们逐条由测试强制（见 `tests/invariants.rs`）。Phase 0 的批量驱动实现为
+> `src/corpus.rs`，不属于本文件原来规划的任何模块。
+
 ---
 
 ## 1. 技术选型理由（对比需求文档 §18 的 Python 建议）

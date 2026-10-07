@@ -2,6 +2,12 @@
 
 技术栈：Rust（单二进制，离线，零 LLM）。本文件定义交付边界与验收标准。
 
+> **实现状态（2026-10-07）。** 本文件的 Phase 编号与仓库后期的编号已经不同步：
+> 本文件的 Phase 1–3 已全部实现；本文件的 Phase 4（`add`/`install`/`update`）按设计
+> 延后（issue #9）；本文件的 Phase 5（CI / SARIF / Action）已实现，仓库里称为 Phase 4。
+> 权威状态以 [README](../README.md#status) 和 issue board 为准。本文件保留为范围与
+> 验收标准的依据。
+
 ---
 
 ## 1. 命名决策（待定，先用 `skillguard`）

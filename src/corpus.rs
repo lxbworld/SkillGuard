@@ -452,6 +452,111 @@ fn prevalence_for(members: &[&ScanRecord]) -> Vec<RulePrevalence> {
     out
 }
 
+// ── GOLD: precision and recall ──────────────────────────────────────────
+
+/// One hand-annotation.
+///
+/// The unit is `(skill, rule)`:
+/// * `tp` — the scanner reported the rule and the annotator agrees;
+/// * `fp` — the scanner reported it and the annotator disagrees;
+/// * `fn` — the annotator found the problem and the scanner did not report it.
+///   Without `fn` labels a recall figure is impossible, and a tool that only
+///   reports precision is advertising its best number.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GoldLabel {
+    pub source_id: String,
+    pub rule: String,
+    pub verdict: String,
+}
+
+pub fn read_gold(path: &Path) -> Result<Vec<GoldLabel>, String> {
+    let body = std::fs::read_to_string(path)
+        .map_err(|e| format!("cannot read GOLD {}: {e}", path.display()))?;
+    let mut out = Vec::new();
+    for (i, line) in body.lines().enumerate() {
+        let t = line.trim();
+        if t.is_empty() || t.starts_with('#') {
+            continue;
+        }
+        let label: GoldLabel = serde_json::from_str(t)
+            .map_err(|e| format!("{}:{}: invalid GOLD label: {e}", path.display(), i + 1))?;
+        if !matches!(label.verdict.as_str(), "tp" | "fp" | "fn") {
+            return Err(format!(
+                "{}:{}: verdict must be tp, fp or fn, got {:?}",
+                path.display(),
+                i + 1,
+                label.verdict
+            ));
+        }
+        out.push(label);
+    }
+    Ok(out)
+}
+
+/// Precision and recall for one rule.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuleScore {
+    pub rule: String,
+    pub tp: usize,
+    pub fp: usize,
+    pub missed: usize,
+    /// `None` when no positive or negative prediction exists — an unmeasured
+    /// rule, not a perfect one.
+    pub precision: Option<f64>,
+    pub recall: Option<f64>,
+}
+
+/// The G4 gate from `docs/PHASE0_CORPUS_STUDY.md` §8.
+pub const G4_PRECISION: f64 = 0.85;
+pub const G4_RECALL: f64 = 0.60;
+
+/// Compute per-rule precision and recall from hand labels.
+///
+/// Per-rule, never micro-averaged: a micro-average lets a large rule with good
+/// numbers hide a small rule that is wrong, and `docs/PHASE0_CORPUS_STUDY.md`
+/// §4.3 explicitly forbids it.
+pub fn score(gold: &[GoldLabel]) -> Vec<RuleScore> {
+    let mut by_rule: BTreeMap<&str, RuleScore> = BTreeMap::new();
+    for g in gold {
+        let entry = by_rule.entry(g.rule.as_str()).or_insert_with(|| RuleScore {
+            rule: g.rule.clone(),
+            tp: 0,
+            fp: 0,
+            missed: 0,
+            precision: None,
+            recall: None,
+        });
+        match g.verdict.as_str() {
+            "tp" => entry.tp += 1,
+            "fp" => entry.fp += 1,
+            "fn" => entry.missed += 1,
+            _ => {}
+        }
+    }
+    let mut out: Vec<RuleScore> = by_rule.into_values().collect();
+    for s in &mut out {
+        s.precision = ratio(s.tp, s.tp + s.fp);
+        s.recall = ratio(s.tp, s.tp + s.missed);
+    }
+    out.sort_by(|a, b| a.rule.cmp(&b.rule));
+    out
+}
+
+fn ratio(num: usize, den: usize) -> Option<f64> {
+    if den == 0 {
+        None
+    } else {
+        Some(num as f64 / den as f64)
+    }
+}
+
+fn pct(v: Option<f64>) -> String {
+    match v {
+        Some(x) => format!("{:.1}%", x * 100.0),
+        None => "n/a".to_owned(),
+    }
+}
+
 // ── report ────────────────────────────────────────────────────────────────
 
 /// The honest declarations from `docs/PHASE0_CORPUS_STUDY.md` §5.1. They are
@@ -466,7 +571,13 @@ pub const HONEST_DECLARATIONS: &[&str] = &[
 ];
 
 /// Render a Markdown report.
-pub fn report_markdown(stats: &CorpusStats, rule_set_version: &str) -> String {
+/// Render a Markdown report. `scores` may be empty when no GOLD set exists yet;
+/// the precision section then says so rather than being omitted.
+pub fn report_markdown(
+    stats: &CorpusStats,
+    rule_set_version: &str,
+    scores: &[RuleScore],
+) -> String {
     let mut o = String::new();
     o.push_str("# SkillGuard Phase 0 corpus report\n\n");
     o.push_str(&format!("Rule set version: `{rule_set_version}`.\n\n"));
@@ -545,6 +656,42 @@ pub fn report_markdown(stats: &CorpusStats, rule_set_version: &str) -> String {
         ));
     }
     o.push('\n');
+
+    o.push_str("## Precision and recall (GOLD)\n\n");
+    if scores.is_empty() {
+        o.push_str(
+            "No GOLD label set yet, so no precision or recall figure is reported. \
+             This is deliberate: a prevalence figure without a precision is not a \
+             result (`research/PROTOCOL.md` §4.3).\n\n",
+        );
+    } else {
+        o.push_str(&format!(
+            "Gate G4: precision >= {G4_PRECISION:.2} and recall >= {G4_RECALL:.2}, per rule (no micro-average).\n\n"
+        ));
+        o.push_str("| rule | TP | FP | missed | precision | recall | G4 |\n|---|---|---|---|---|---|---|\n");
+        for s in scores {
+            let p = pct(s.precision);
+            let r = pct(s.recall);
+            let pass = match (s.precision, s.recall) {
+                (Some(p), Some(r)) => p >= G4_PRECISION && r >= G4_RECALL,
+                _ => false,
+            };
+            o.push_str(&format!(
+                "| `{}` | {} | {} | {} | {} | {} | {} |\n",
+                s.rule,
+                s.tp,
+                s.fp,
+                s.missed,
+                p,
+                r,
+                if pass { "pass" } else { "below" }
+            ));
+        }
+        o.push_str(
+            "\nIf precision falls short, publish the measured value as an upper bound on \
+             true prevalence rather than widening the definition to hit a target.\n\n",
+        );
+    }
 
     o.push_str("## Limitations\n\n");
     o.push_str(
@@ -821,7 +968,7 @@ mod tests {
     #[test]
     fn the_report_carries_the_honest_declarations() {
         let s = stats(&[record("a", "L1", &["R"])], &["layer"]);
-        let md = report_markdown(&s, "0.1.0");
+        let md = report_markdown(&s, "0.1.0", &[]);
         for d in HONEST_DECLARATIONS {
             assert!(md.contains(d), "missing declaration: {d}");
         }
@@ -835,5 +982,42 @@ mod tests {
         assert_eq!(size_bucket(8 * 1024), "8k_32k");
         assert_eq!(size_bucket(32 * 1024), "32k_128k");
         assert_eq!(size_bucket(128 * 1024), "gt_128k");
+    }
+
+    #[test]
+    fn gold_scores_are_per_rule_and_missed_labels_drive_recall() {
+        let g = |rule: &str, verdict: &str| GoldLabel {
+            source_id: "s".to_owned(),
+            rule: rule.to_owned(),
+            verdict: verdict.to_owned(),
+        };
+        // Rule A: 3 tp, 1 fp -> precision 0.75; 3 tp, 1 fn -> recall 0.75.
+        // Rule B: 1 tp, 0 fp, 0 fn -> precision 1.0, recall 1.0.
+        let gold = vec![
+            g("A", "tp"),
+            g("A", "tp"),
+            g("A", "tp"),
+            g("A", "fp"),
+            g("A", "fn"),
+            g("B", "tp"),
+        ];
+        let scores = score(&gold);
+        let a = scores.iter().find(|s| s.rule == "A").expect("A");
+        assert!((a.precision.unwrap() - 0.75).abs() < 1e-9);
+        assert!((a.recall.unwrap() - 0.75).abs() < 1e-9);
+        let b = scores.iter().find(|s| s.rule == "B").expect("B");
+        assert_eq!(b.precision, Some(1.0));
+        assert_eq!(b.recall, Some(1.0));
+        // A rule with no predictions has no precision, not a perfect one.
+        let empty = score(&[g("C", "fn")]);
+        assert_eq!(empty[0].precision, None);
+        assert_eq!(empty[0].recall, Some(0.0));
+    }
+
+    #[test]
+    fn a_report_without_gold_says_so_instead_of_implying_precision() {
+        let s = stats(&[record("a", "L1", &["R"])], &["layer"]);
+        let md = report_markdown(&s, "0.1.0", &[]);
+        assert!(md.contains("No GOLD label set yet"), "{md}");
     }
 }

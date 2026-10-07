@@ -92,14 +92,6 @@ Existing tools each cover one slice:
 The one empty cell: **nobody verifies a Skill's declared permissions against
 its actual behaviour.** That is where this project lives.
 
-## Design constraints
-
-1. **Zero LLM in the core.** Every verdict is deterministic.
-2. **Fully offline.** Scanning uploads nothing anywhere.
-3. **The scanner never executes what it scans.**
-4. **Evidence, not verdicts.**
-5. **Single Rust binary.**
-
 ## Status
 
 Research and architecture complete. **Phases 1–4 are implemented**: 52 rules,
@@ -123,8 +115,12 @@ done.
   Market data, why "package manager" is the wrong framing, and the phased plan.
 - [Competitive Analysis](docs/COMPETITIVE_ANALYSIS.md) — 13 projects surveyed
 - [Architecture](docs/ARCHITECTURE.md) — crate layout, data flow, invariants
-- [Threat Model](docs/THREAT_MODEL.md) — T1–T16, including attacks on the scanner
+- [Threat Model](docs/THREAT_MODEL.md) — T1–T17, including attacks on the scanner
+- [Rule reference](docs/RULES.md) — every rule, generated from the code
+- [Corpus report](docs/CORPUS_REPORT.md) — the Phase 0 report (awaiting a corpus)
 - [MVP Roadmap](docs/MVP.md) — phased scope with exit criteria
+- [`research/DISCLOSURE.md`](research/DISCLOSURE.md) — the disclosure protocol and
+  the registry permission requests
 
 ## Install
 
@@ -132,7 +128,8 @@ done.
 cargo install --path .          # from a clone
 ```
 
-Requires Rust 1.78+. Git is only needed for provenance in later phases.
+Requires Rust 1.78+. Git is needed only to establish a skill's provenance (its
+commit SHA); every other check works on a directory that is not a repository.
 
 ## Use
 
@@ -155,10 +152,45 @@ skillguard corpus scan --manifest corpus-manifest.jsonl --tree ./checkout \
                        --out raw-findings.jsonl
 skillguard corpus stats --findings raw-findings.jsonl
 skillguard corpus report --findings raw-findings.jsonl --out docs/CORPUS_REPORT.md
+skillguard corpus report --findings raw-findings.jsonl --gold research/gold/GOLD-v1.jsonl \
+                        --out docs/CORPUS_REPORT.md   # with precision/recall (G4)
 skillguard corpus reproduce --manifest corpus-manifest.jsonl --tree ./checkout
 ```
 
 Exit codes: `0` clean · `1` findings at/above `--fail-on` · `2` integrity · `3` usage.
+
+### Use in CI
+
+The scan is offline and deterministic, so it drops into an existing pipeline
+without an account or a network call:
+
+```yaml
+# GitHub Actions
+permissions:
+  contents: read
+  security-events: write   # required for the SARIF upload
+steps:
+  - uses: actions/checkout@v4
+  - uses: lxbworld/SkillGuard/action@v1
+    with:
+      path: .
+      fail-on: high
+```
+
+```yaml
+# .pre-commit-config.yaml — one line to adopt
+repos:
+  - repo: https://github.com/lxbworld/SkillGuard
+    rev: v0.1.0
+    hooks:
+      - id: skillguard
+```
+
+The Action emits SARIF, uploads it to Code Scanning, and only then fails the
+job, so a finding is visible for the commit that needed it. Prebuilt binaries
+for five platforms are published with a `sha256` that the installer verifies
+before running anything. The Action adds no telemetry; nothing about your skills
+leaves the runner.
 
 ### What a finding looks like
 
@@ -193,7 +225,7 @@ finding.
    subprocess on scanned files, no network. The scanned skill is hostile input,
    and the scanner is built to survive that: symlink escapes, path traversal,
    parser bombs, terminal-injection and lockfile poisoning are all handled
-   explicitly ([docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) T11–T16).
+   explicitly ([docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) T11–T17).
 4. **Evidence, not verdicts.** Documentation that merely *mentions* `~/.ssh` is
    reported at low confidence; the same string in `scripts/` is a finding. That
    distinction is what makes the tool usable on real skills.

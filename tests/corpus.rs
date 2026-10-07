@@ -144,7 +144,7 @@ fn failed_entries_appear_in_the_denominators_and_are_not_counted_as_clean() {
         "the failure must be attributed: {:#?}",
         s.failure_reasons
     );
-    let md = corpus::report_markdown(&s, "0.1.0");
+    let md = corpus::report_markdown(&s, "0.1.0", &[]);
     assert!(md.contains("| failed | 1 |"), "{md}");
     for d in corpus::HONEST_DECLARATIONS {
         assert!(md.contains(d));
