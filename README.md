@@ -97,7 +97,7 @@ A skill that contacts a host it never declared is a skill whose author is not in
 control of it — either it was tampered with, or it was never honest. Either way
 you want to know before it runs.
 
-> **Early signal (pilot, not the study).** Across 331 real GitHub skills, **92.7%
+> **Early signal (pilot, not the study).** Across 1372 real GitHub skills, **91.8%
 declared no permissions at all** — there is almost nothing to diff against, which
 is exactly why the diff is needed. Full numbers, denominators and caveats:
 > [docs/CORPUS_REPORT.md](docs/CORPUS_REPORT.md).
@@ -326,8 +326,8 @@ approval accepted — an approval never quietly rewrites `deny` into `allow`.
 
 The first large-scale empirical measurement of this ecosystem is the next
 milestone — see the [corpus study](docs/PHASE0_CORPUS_STUDY.md). A pilot has
-already run end to end on 331 real GitHub skills: **7.3% declare permissions,
-92.7% declare nothing**, which rejects the H6 null at that sample. The full
+already run end to end on 1372 real GitHub skills: **8.2% declare permissions,
+91.8% declare nothing**, which rejects the H6 null at that sample. The full
 N=100,000 stratified study is waiting on registry collection permission, not on
 code — the pipeline is built, reproducible (`corpus reproduce` re-derives every
 digest) and offline.
@@ -347,7 +347,7 @@ Test suite and CI are green, and `cargo fmt`, `cargo clippy -D warnings` and
 
 | Phase | Scope | Status |
 |---|---|---|
-| **0** | 100k-skill corpus study, public dataset, benchmark | pilot **done** (331 skills, H6 = 7.3%); full study blocked on [#5](https://github.com/lxbworld/SkillGuard/issues/5) |
+| **0** | 100k-skill corpus study, public dataset, benchmark | pilot **done** (1372 skills, H6 = 8.2%); full study blocked on [#5](https://github.com/lxbworld/SkillGuard/issues/5) |
 | 1 | Parser, finding model, scanner (52 rules) | **done** |
 | 2 | Capability model, declared vs observed | **done** |
 | 3 | Policy engine, approval lockfile | **done** |
@@ -370,7 +370,7 @@ Work is tracked on the [issue board](https://github.com/lxbworld/SkillGuard/issu
 | [Architecture](docs/ARCHITECTURE.md) | Module boundaries, data flow and invariants |
 | [Rule reference](docs/RULES.md) | Every rule, generated from the code |
 | [Phase 0 corpus study](docs/PHASE0_CORPUS_STUDY.md) | The plan for the first large-scale measurement |
-| [Corpus pilot report](docs/CORPUS_REPORT.md) | 331 real skills: denominators, prevalence, and the H6 result |
+| [Corpus pilot report](docs/CORPUS_REPORT.md) | 1372 real skills: denominators, prevalence, and the H6 result |
 | [Corpus protocol](research/PROTOCOL.md) | Pre-registered hypotheses, sampling and metrics |
 | [Disclosure policy](research/DISCLOSURE.md) | Notify-before-publish, digests only |
 | [Competitive analysis](docs/COMPETITIVE_ANALYSIS.md) | 13 projects surveyed |
