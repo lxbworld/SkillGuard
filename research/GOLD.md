@@ -156,3 +156,48 @@ skillguard corpus agreement research/gold/GOLD-v1.annotator-a.jsonl \
 skillguard corpus report --findings research/raw-findings.jsonl \
     --gold research/gold/GOLD-v1.jsonl --out docs/CORPUS_REPORT.md
 ```
+
+---
+
+## GOLD-v2 (constructed)
+
+GOLD-v1 drove rule changes (comment-line suppression for behavioural rules, a
+`NET_FETCH_CALL` that requires a call rather than an import, zero-width
+characters that must sit inside a word). A changed rule set invalidates
+comparison, so those changes are measured as **GOLD-v2**.
+
+| | |
+|---|---|
+| items | 183 line-level findings (8 per rule, hash-ordered) |
+| annotator A / B | **two independent sessions of the same model** (`opencode-go/deepseek-v4.1-flash`), blind to each other |
+| agreement | 169/183 (92.3%), **Cohen's κ 0.833** (gate 0.75) |
+| disagreements | 14, adjudicated by the instruction both annotators were given |
+
+Neither annotator is human, and this time **the rule author did not annotate**,
+so there is no author anchoring. The two sessions are the same model, so κ is a
+test–retest figure, not inter-model agreement.
+
+### What changed
+
+| rule | GOLD-v1 | GOLD-v2 | note |
+|---|---|---|---|
+| `NET_FETCH_CALL` | 37.5% | **87.5%** | now requires a call, not `import urllib.request` |
+| `FS_HOME_ACCESS` | 25.0% | 50.0% | comment lines no longer fire |
+| `NET_HTTP_CLIENT` | 50.0% | 62.5% | |
+| `FS_PATH_ESCAPE` | 75.0% | 75.0% | unchanged |
+| `FS_RECURSIVE_WALK` | 100% | 100% | unchanged |
+
+The v1 and v2 columns are **not directly comparable** — the raters differ (v1
+used one model plus the author; v2 uses two model sessions). The rule-attributable
+change is `NET_FETCH_CALL`, whose false-positive source was removed by
+construction and is covered by a regression test.
+
+### What is still wrong
+
+Most rules remain far below G4. The cause is the same as v1: patterns match
+**mentions**. `PERSIST_AGENT_CONFIG` still fires on any line that names
+`~/.claude/`, including `Write`/`read` helpers and documentation that survived
+comment suppression. `NET_DOMAIN_LITERAL` still matches file extensions that
+look like TLDs (`.sh`, `.app`, `.info`). `OBFUSC_HOMOGLYPH` still fires on
+legitimate non-Latin prose. These need a *line-kind model* (comment / string /
+code / prose) and patterns that require an action, and they are GOLD-v3 work.

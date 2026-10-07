@@ -514,6 +514,14 @@ fn apply_text_rules(rel: &str, kind: ArtifactKind, norm: &Normalized, out: &mut 
             if suppress_match(rule.spec.id, &line.raw, &matched) {
                 continue;
             }
+            // Comment text describes behaviour; it does not perform it. This is
+            // the single largest source of GOLD-v1 false positives.
+            if kind.is_executable()
+                && is_behavioural(rule.spec.id)
+                && line.match_in_comment(&matched)
+            {
+                continue;
+            }
             out.push(Finding {
                 rule: RuleId::from(rule.spec.id),
                 severity: rule.spec.severity,
@@ -565,6 +573,17 @@ const SAFE_HOSTS: &[&str] = &[
 /// Every entry was added after reading real findings from the Phase 0 corpus,
 /// not out of caution. Keeping the rule id and the reason together means a
 /// future reader can delete exactly the right one.
+/// Rules whose claim is about what the code *does*.
+///
+/// A comment that mentions the behaviour is not the behaviour: a `#   ~/.claude/`
+/// example, a `# curl's wall clock...` note, a commented-out path. These rules
+/// skip comment text (GOLD-v1). Rules about prose, injection or obfuscation do
+/// not, because that text *is* their subject.
+fn is_behavioural(id: &str) -> bool {
+    const PREFIXES: &[&str] = &["FS_", "NET_", "DL_", "PERSIST_", "SHELL_", "DEP_"];
+    PREFIXES.iter().any(|p| id.starts_with(p))
+}
+
 fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
     let line = raw_line.to_lowercase();
     let m = matched.to_lowercase();
@@ -1370,6 +1389,65 @@ mod tests {
         .unwrap_or_default();
         let h = hits(&scan_skill(&d));
         assert!(h.contains("OBFUSC_HOMOGLYPH"), "{h:?}");
+    }
+
+    /// GOLD-v1: `PERSIST_AGENT_CONFIG` fired on a comment mentioning
+    /// `~/.claude/`, `NET_HTTP_CLIENT` on a comment about curl, `FS_HOME_ACCESS`
+    /// on a commented-out example path. Comment text describes behaviour; it
+    /// does not perform it.
+    #[test]
+    fn a_comment_is_not_behaviour() {
+        let d = tmp("comment-not-behaviour");
+        fs::write(
+            d.join("SKILL.md"),
+            "---\nname: x\ndescription: helper\n---\n",
+        )
+        .unwrap_or_default();
+        fs::create_dir_all(d.join("scripts")).unwrap_or_default();
+        fs::write(
+            d.join("scripts/a.py"),
+            "#   plugin): ~/.cursor/plans/x.md\n# curl's wall clock is short\nprint('ok')\n",
+        )
+        .unwrap_or_default();
+        let h = hits(&scan_skill(&d));
+        assert!(!h.contains("NET_HTTP_CLIENT"), "comment fired: {h:?}");
+        assert!(!h.contains("FS_HOME_ACCESS"), "comment fired: {h:?}");
+        // The real assignment still fires.
+        fs::write(
+            d.join("scripts/b.py"),
+            "REG = os.path.expanduser('~/.claude/worktree-registry.json')\n",
+        )
+        .unwrap_or_default();
+        assert!(hits(&scan_skill(&d)).contains("PERSIST_AGENT_CONFIG"));
+    }
+
+    /// GOLD-v1: `import urllib.request` was reported as "performs an outbound
+    /// network request". An import is not a request.
+    #[test]
+    fn an_import_is_not_a_fetch_call() {
+        let d = tmp("import-not-fetch");
+        fs::write(d.join("SKILL.md"), "---\nname: x\ndescription: f\n---\n").unwrap_or_default();
+        fs::create_dir_all(d.join("scripts")).unwrap_or_default();
+        fs::write(d.join("scripts/a.py"), "import urllib.request\n").unwrap_or_default();
+        assert!(!hits(&scan_skill(&d)).contains("NET_FETCH_CALL"));
+        fs::write(
+            d.join("scripts/b.py"),
+            "urllib.request.urlopen('https://example.org')\n",
+        )
+        .unwrap_or_default();
+        assert!(hits(&scan_skill(&d)).contains("NET_FETCH_CALL"));
+    }
+
+    /// GOLD-v1: every `OBFUSC_ZERO_WIDTH` finding was a BOM in ordinary text.
+    #[test]
+    fn a_bom_is_not_keyword_obfuscation() {
+        let d = tmp("bom-not-obfusc");
+        fs::write(d.join("SKILL.md"), "---\nname: x\ndescription: f\n---\n").unwrap_or_default();
+        fs::create_dir_all(d.join("scripts")).unwrap_or_default();
+        fs::write(d.join("scripts/a.py"), "\u{feff}print('hello')\n").unwrap_or_default();
+        assert!(!hits(&scan_skill(&d)).contains("OBFUSC_ZERO_WIDTH"));
+        fs::write(d.join("scripts/b.py"), "ig\u{200b}nore\n").unwrap_or_default();
+        assert!(hits(&scan_skill(&d)).contains("OBFUSC_ZERO_WIDTH"));
     }
 
     #[test]

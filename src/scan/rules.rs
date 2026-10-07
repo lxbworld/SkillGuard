@@ -280,14 +280,17 @@ static TABLE: &[RuleSpec] = &[
         docs_confidence: None,
         kinds: CODE,
         patterns: &[
+            // A *call*, not a mention: GOLD-v1 found `import urllib.request` and
+            // a bare `httpx.AsyncClient` type annotation reported as "performs an
+            // outbound network request".
             r"\bfetch\s*\(",
-            r"\baxios\b",
-            r"\brequests\.(?:get|post|put|delete|head|patch|request)\b",
-            r"(?i)\burllib\.request\b|\burlopen\s*\(",
-            r"(?i)\bhttpx?\.(?:get|post|Client|AsyncClient)\b",
-            r"(?i)\bgot\s*\(|\bsuperagent\b|\bneedle\b",
+            r"\brequests\.(?:get|post|put|delete|head|patch|request)\s*\(",
+            r"(?i)\burlopen\s*\(",
+            r"(?i)\bhttpx?\.(?:get|post|put|delete|head|patch|request|stream)\s*\(",
+            r"(?i)\baxios\.(?:get|post|put|delete|head|patch|request)\s*\(",
+            r"\bgot\s*\(",
             r#"(?i)\brequire\(['"]https?['"]\)|\bnew\s+WebClient\b"#,
-            r"\bnet/http\b|\bhttp\.Get\b|\bhttp\.Post\b",
+            r"(?i)\bhttp\.(?:Get|Post|Put|Delete|Head|NewRequest)\s*\(",
         ],
         message: "Library code performs an outbound network request",
         capability: Some("network.outbound"),
@@ -953,7 +956,9 @@ pub fn rule_count() -> usize {
 /// rev 1: initial value. rev 2: `description_mismatch` admits Chinese and
 /// inflected verbs. rev 3: it also treats a capability declared in
 /// `allowed-tools` as admitted, instead of duplicating declared-vs-observed.
-pub const SCAN_LOGIC_REVISION: u32 = 3;
+/// rev 4: behavioural rules skip comment lines; `OBFUSC_ZERO_WIDTH` needs the
+/// zero-width character inside a word.
+pub const SCAN_LOGIC_REVISION: u32 = 4;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

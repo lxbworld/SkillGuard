@@ -88,7 +88,7 @@ target/release/skillguard corpus scan \
   --out "$FINDINGS" --cache research/.corpus-cache.json
 
 echo "== 6/6 report + reproduce =="
-GOLD="research/gold/GOLD-v1.jsonl"
+GOLD="research/gold/GOLD-v2.jsonl"
 if [ -f "$GOLD" ]; then
   target/release/skillguard corpus report --findings "$FINDINGS" --gold "$GOLD" --out /tmp/sg-pilot-body.md
 else
@@ -125,24 +125,27 @@ fi
 > flagged every non-English `PI_DESCRIPTION_MISMATCH`, and unstemmed verbs
 > (`execution` did not match `execute`). Each fix is a regression test.
 >
-> ## GOLD-v1
+> ## GOLD-v2
 >
-> The precision column below is measured against `research/gold/GOLD-v1.jsonl`:
-> a deterministic sample of 193 findings (8 per rule, hash-ordered), each judged
-> `tp`/`fp` by two annotators who saw only the matched line, its context and the
-> rule's own claim. **Both annotators are AI.** Annotator A is an independent
-> model (`opencode-go/deepseek-v4.1-flash`); annotator B is the rule author.
-> Cohen's kappa is **0.784** (gate: >= 0.75), so the labels are usable, but the
-> 19 disagreements were adjudicated by the author, which biases toward the
-> author. This is **not** the protocol's human GOLD; it is a scoped, reproducible
-> first pass. See `research/GOLD.md`.
+> The precision column below is measured against `research/gold/GOLD-v2.jsonl`:
+> 183 line-level findings (8 per rule, hash-ordered), each judged `tp`/`fp` by
+> **two independent annotator sessions** that saw only the matched line, its
+> context and the rule's own claim. Both are the same model
+> (`opencode-go/deepseek-v4.1-flash`), run twice blind to each other. Cohen's
+> kappa is **0.833** (gate 0.75); the 14 disagreements were adjudicated by the
+> instruction both annotators were given — the matched line must *exhibit* the
+> behaviour, not merely mention it. **No human annotated**, and unlike GOLD-v1
+> the rule author did not annotate either.
 >
-> Its main result is uncomfortable and useful: **most heuristics over-fire on
-> comments, documentation, docstrings and string literals.** A rule that says
-> "performs an outbound request" fires on `import urllib.request`; `SHELL_EVAL`
-> fires on the word "eval" in a CLI subcommand name; `PERSIST_AGENT_CONFIG`
-> fires on a comment mentioning `~/.claude/`. Treat every prevalence below as an
-> upper bound, and the precision column as the real signal.
+> The result is mixed. `NET_FETCH_CALL` rose to 87.5%: it no longer counts
+> `import urllib.request` as a request. `FS_HOME_ACCESS` rose to 50%. But most
+> rules are still far below G4, and the dominant cause is unchanged: the
+> patterns match **mentions** — comments, docstrings, string literals and test
+> fixtures — rather than actions. Treat every prevalence figure below as an
+> upper bound.
+>
+> (GOLD-v1, measured by one model plus the author, is kept in `research/gold/`.
+> The two sets are not directly comparable: the raters differ.)
 >
 > The remaining `PI_*` heuristics are **unmeasured upper bounds**. A
 > single-annotator read-through is not `GOLD` (research/GOLD.md) and the report

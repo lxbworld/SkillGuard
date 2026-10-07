@@ -115,6 +115,49 @@ impl NormLine {
     pub fn is_shebang(&self) -> bool {
         self.line == 1 && self.norm.starts_with("#!")
     }
+
+    /// True when the line is a comment, or the match sits after a trailing
+    /// comment marker.
+    ///
+    /// Comment text *describes* behaviour; it does not perform it. GOLD-v1
+    /// found that most false positives were exactly this: `PERSIST_AGENT_CONFIG`
+    /// firing on `#   ~/.claude/hooks/...`, `NET_HTTP_CLIENT` on `# curl's wall
+    /// clock...`, `FS_HOME_ACCESS` on a commented-out example path. Behavioural
+    /// rules skip these; rules about prose or obfuscation do not.
+    ///
+    /// Only meaningful for executable artifacts: a Markdown `#` is a heading.
+    pub fn match_in_comment(&self, matched: &str) -> bool {
+        let t = self.raw.trim_start();
+        if t.starts_with("//")
+            || t.starts_with("/*")
+            || t.starts_with("*/")
+            || t.starts_with('*')
+            || t.starts_with("<!--")
+        {
+            return true;
+        }
+        // NOTE: `--` is deliberately absent. It is a comment in SQL and Lua,
+        // but far more often a command-line flag (`--extra-index-url`), and the
+        // collision silently suppressed real findings.
+        let Some(pos) = self.raw.find(matched) else {
+            return false;
+        };
+        let before = &self.raw[..pos];
+        // `#` introduces a comment in Python, shell, YAML and TOML.
+        if let Some(h) = before.rfind('#') {
+            if before[..h].trim().is_empty() {
+                return true;
+            }
+        }
+        // `//` introduces a comment in the C family. `https://` is not one.
+        if let Some(s) = before.rfind("//") {
+            let pre = &before[..s];
+            if (pre.trim().is_empty() || pre.ends_with(' ')) && !pre.ends_with(':') {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 /// Result of normalizing a whole file.
@@ -179,9 +222,18 @@ pub fn normalize_line(line: &str) -> (String, NormFlags) {
     let mut out = String::with_capacity(line.len());
 
     // NFKC folds fullwidth forms and many compatibility forms.
-    for ch in line.nfkc() {
+    let chars: Vec<char> = line.nfkc().collect();
+    for (i, ch) in chars.iter().copied().enumerate() {
         if ZERO_WIDTH.contains(&ch) {
-            flags.had_zero_width = true;
+            // A BOM or a zero-width character at a line edge is not keyword
+            // obfuscation; only one *inside* a word breaks up a keyword to
+            // evade matching. GOLD-v1: every `OBFUSC_ZERO_WIDTH` finding was a
+            // BOM in ordinary text.
+            let prev = i.checked_sub(1).map(|j| chars[j]);
+            let next = chars.get(i + 1).copied();
+            if prev.is_some_and(char::is_alphanumeric) && next.is_some_and(char::is_alphanumeric) {
+                flags.had_zero_width = true;
+            }
             continue;
         }
         if BIDI_CONTROL.contains(&ch) {
