@@ -227,6 +227,7 @@ skillguard corpus scan    --manifest corpus-manifest.jsonl --tree ./checkout --o
 skillguard corpus stats   --findings findings.jsonl
 skillguard corpus report  --findings findings.jsonl --gold GOLD-v1.jsonl --out report.md
 skillguard corpus reproduce --manifest corpus-manifest.jsonl --tree ./checkout
+skillguard corpus agreement research/gold/GOLD-v1.a.jsonl research/gold/GOLD-v1.b.jsonl
 ```
 
 </details>

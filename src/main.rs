@@ -292,6 +292,21 @@ enum CorpusCommand {
         #[arg(long)]
         tree: PathBuf,
     },
+
+    /// Cohen's kappa between two independent label sets: the GOLD agreement
+    /// gate of `research/PROTOCOL.md` §4.3 (kappa >= 0.75).
+    ///
+    /// Exits `INTEGRITY` (2) when the gate fails, so it can gate a release.
+    Agreement {
+        /// First label set (JSONL, same schema as `report --gold`).
+        a: PathBuf,
+
+        /// Second label set, produced blind to the first.
+        b: PathBuf,
+
+        #[arg(long, short, default_value = "text", value_enum)]
+        format: Format,
+    },
 }
 
 fn main() -> ExitCode {
@@ -1371,6 +1386,47 @@ fn run_corpus(command: &CorpusCommand, cli: &Cli) -> Result<i32, String> {
             o.push('\n');
             emit(cli, &o)?;
             Ok(if rep.ok() { exit::OK } else { exit::INTEGRITY })
+        }
+
+        CorpusCommand::Agreement { a, b, format } => {
+            let la = corpus::read_gold(a)?;
+            let lb = corpus::read_gold(b)?;
+            let rows = corpus::cohen_kappa(&la, &lb);
+            let body = match format {
+                Format::Json => serde_json::to_string_pretty(&rows)
+                    .map_err(|e| format!("cannot serialise agreement: {e}"))?,
+                _ => {
+                    let mut o = String::from("\n  SkillGuard corpus agreement (Cohen's kappa)\n\n");
+                    o.push_str("    rule                        n  agree  kappa\n");
+                    for r in &rows {
+                        let k = match r.kappa {
+                            Some(x) => format!("{x:.3}"),
+                            None => "undefined".to_owned(),
+                        };
+                        o.push_str(&format!(
+                            "    {:24} {:>5} {:>6}  {}\n",
+                            skillguard::text::truncate_chars(&r.rule, 24),
+                            r.n,
+                            r.agree,
+                            k
+                        ));
+                    }
+                    let overall = rows.last().expect("an overall row is always emitted");
+                    o.push('\n');
+                    o.push_str(&format!(
+                        "    G3 gate (kappa >= {:.2}): {}\n\n",
+                        corpus::KAPPA_MIN,
+                        if overall.passes() { "PASS" } else { "FAIL" }
+                    ));
+                    o
+                }
+            };
+            emit(cli, &body)?;
+            Ok(if rows.last().is_some_and(|r| r.passes()) {
+                exit::OK
+            } else {
+                exit::INTEGRITY
+            })
         }
     }
 }

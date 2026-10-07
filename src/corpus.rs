@@ -21,7 +21,7 @@
 
 use crate::models::Severity;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 // ── manifest ──────────────────────────────────────────────────────────────
@@ -603,6 +603,104 @@ fn ratio(num: usize, den: usize) -> Option<f64> {
     }
 }
 
+/// The G3 agreement gate from `research/PROTOCOL.md` §4.3: below this the rule
+/// definitions are defective and labelling restarts.
+pub const KAPPA_MIN: f64 = 0.75;
+
+/// Cohen's kappa for one rule over the items both annotators rated.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Agreement {
+    pub rule: String,
+    /// Items both annotators rated.
+    pub n: usize,
+    /// Items on which they agreed.
+    pub agree: usize,
+    /// `None` when kappa is undefined: no common items, or no chance-corrected
+    /// variance to measure (both annotators used a single label throughout).
+    pub kappa: Option<f64>,
+}
+
+impl Agreement {
+    pub fn passes(&self) -> bool {
+        self.kappa.is_some_and(|k| k >= KAPPA_MIN)
+    }
+}
+
+/// Cohen's kappa between two independent label sets.
+///
+/// The unit is a finding `(source_id, rule)`; the category is the verdict. Only
+/// items *both* annotators rated are counted — an annotator who skipped an item
+/// has neither agreed nor disagreed about it, and scoring a missing label as
+/// agreement is how a kappa number lies.
+///
+/// Returns one row per rule plus a final `(all rules)` row, so a rule nobody can
+/// label consistently does not hide behind the average.
+pub fn cohen_kappa(a: &[GoldLabel], b: &[GoldLabel]) -> Vec<Agreement> {
+    let index = |labels: &[GoldLabel]| -> BTreeMap<(String, String), String> {
+        labels
+            .iter()
+            .map(|g| ((g.source_id.clone(), g.rule.clone()), g.verdict.clone()))
+            .collect()
+    };
+    let ia = index(a);
+    let ib = index(b);
+
+    let mut by_rule: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
+    for ((source_id, rule), va) in &ia {
+        if let Some(vb) = ib.get(&(source_id.clone(), rule.clone())) {
+            by_rule
+                .entry(rule.clone())
+                .or_default()
+                .push((va.clone(), vb.clone()));
+        }
+    }
+
+    let mut out: Vec<Agreement> = by_rule
+        .iter()
+        .map(|(rule, pairs)| agreement(rule, pairs))
+        .collect();
+    let all: Vec<(String, String)> = by_rule.into_values().flatten().collect();
+    out.push(agreement("(all rules)", &all));
+    out
+}
+
+fn agreement(rule: &str, pairs: &[(String, String)]) -> Agreement {
+    let n = pairs.len();
+    let agree = pairs.iter().filter(|(a, b)| a == b).count();
+    let kappa = if n == 0 {
+        None
+    } else {
+        let mut cats: BTreeSet<&str> = BTreeSet::new();
+        for (x, y) in pairs {
+            cats.insert(x);
+            cats.insert(y);
+        }
+        let nf = n as f64;
+        let po = agree as f64 / nf;
+        let pe: f64 = cats
+            .iter()
+            .map(|c| {
+                let ca = pairs.iter().filter(|(x, _)| x == c).count() as f64 / nf;
+                let cb = pairs.iter().filter(|(_, y)| y == c).count() as f64 / nf;
+                ca * cb
+            })
+            .sum();
+        if (1.0 - pe).abs() < f64::EPSILON {
+            // Both annotators put every item in one category: perfect
+            // agreement, but no chance-corrected information to report.
+            None
+        } else {
+            Some((po - pe) / (1.0 - pe))
+        }
+    };
+    Agreement {
+        rule: rule.to_owned(),
+        n,
+        agree,
+        kappa,
+    }
+}
+
 fn pct(v: Option<f64>) -> String {
     match v {
         Some(x) => format!("{:.1}%", x * 100.0),
@@ -1132,6 +1230,76 @@ mod tests {
         let empty = score(&[g("C", "fn")]);
         assert_eq!(empty[0].precision, None);
         assert_eq!(empty[0].recall, Some(0.0));
+    }
+
+    #[test]
+    fn kappa_is_one_for_identical_labels_and_undefined_when_degenerate() {
+        let l = |id: &str, v: &str| GoldLabel {
+            source_id: id.to_owned(),
+            rule: "R".to_owned(),
+            verdict: v.to_owned(),
+        };
+        let labels = vec![l("1", "tp"), l("2", "fp"), l("3", "tp")];
+        let rows = cohen_kappa(&labels, &labels.clone());
+        let all = rows.iter().find(|r| r.rule == "(all rules)").expect("all");
+        assert_eq!((all.n, all.agree), (3, 3));
+        assert_eq!(all.kappa, Some(1.0));
+        assert!(all.passes());
+
+        // Both annotators use one label for every item: agreement is perfect
+        // but kappa is undefined, not 1.0.
+        let same = vec![l("1", "tp"), l("2", "tp")];
+        let rows = cohen_kappa(&same, &same.clone());
+        let all = rows.iter().find(|r| r.rule == "(all rules)").expect("all");
+        assert_eq!(all.kappa, None);
+        assert!(!all.passes());
+    }
+
+    #[test]
+    fn kappa_is_zero_when_agreement_equals_chance() {
+        // Four items, two agree and two do not, with balanced marginals -> 0.
+        let l = |id: &str, v: &str| GoldLabel {
+            source_id: id.to_owned(),
+            rule: "R".to_owned(),
+            verdict: v.to_owned(),
+        };
+        let a = vec![l("1", "tp"), l("2", "tp"), l("3", "fp"), l("4", "fp")];
+        let b = vec![l("1", "tp"), l("2", "fp"), l("3", "tp"), l("4", "fp")];
+        let rows = cohen_kappa(&a, &b);
+        let r = rows.iter().find(|r| r.rule == "R").expect("R");
+        assert_eq!((r.n, r.agree), (4, 2));
+        assert!(r.kappa.unwrap().abs() < 1e-9, "kappa was {:?}", r.kappa);
+    }
+
+    #[test]
+    fn kappa_counts_only_items_both_annotators_rated() {
+        let l = |id: &str, v: &str| GoldLabel {
+            source_id: id.to_owned(),
+            rule: "R".to_owned(),
+            verdict: v.to_owned(),
+        };
+        let a = vec![
+            l("1", "tp"),
+            l("2", "tp"),
+            l("3", "tp"),
+            l("4", "tp"),
+            l("5", "fp"),
+            l("6", "fp"), // only A rated this one
+        ];
+        let b = vec![
+            l("1", "tp"),
+            l("2", "tp"),
+            l("3", "tp"),
+            l("4", "tp"),
+            l("5", "fp"),
+        ];
+        let rows = cohen_kappa(&a, &b);
+        let r = rows.iter().find(|r| r.rule == "R").expect("R");
+        assert_eq!(
+            r.n, 5,
+            "a skipped item is neither agreement nor disagreement"
+        );
+        assert!(r.passes());
     }
 
     #[test]

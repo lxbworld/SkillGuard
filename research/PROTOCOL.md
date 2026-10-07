@@ -160,6 +160,10 @@ meaning anything.
 If G4 fails, we publish the measured precision as an **upper bound on true
 prevalence** and say so. A published 0.62 is worth more than an unpublished 0.95.
 
+The end-to-end procedure — the draw, the two blind worksheets, the
+`corpus agreement` command that computes Cohen's κ, and the freeze rule — is in
+[`research/GOLD.md`](GOLD.md).
+
 ---
 
 ## 8. Disclosure protocol

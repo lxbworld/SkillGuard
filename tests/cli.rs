@@ -355,3 +355,61 @@ fn approve_of_a_clean_skill_records_allow() {
         "a clean approval must not claim an override: {lock}"
     );
 }
+
+#[test]
+fn corpus_agreement_computes_kappa_and_gates_it() {
+    let d = tmpdir("agreement");
+    let write_labels = |name: &str, rows: &[(&str, &str, &str)]| {
+        let body: String = rows
+            .iter()
+            .map(|(s, r, v)| {
+                format!("{{\"source_id\":\"{s}\",\"rule\":\"{r}\",\"verdict\":\"{v}\"}}\n")
+            })
+            .collect();
+        write(&d, name, &body);
+    };
+
+    // Five items, perfect agreement, balanced marginals -> kappa 1.0, PASS.
+    let agree = [
+        ("1", "R", "tp"),
+        ("2", "R", "tp"),
+        ("3", "R", "tp"),
+        ("4", "R", "fp"),
+        ("5", "R", "fp"),
+    ];
+    write_labels("a.jsonl", &agree);
+    write_labels("b.jsonl", &agree);
+    let out = run(&[
+        "corpus",
+        "agreement",
+        d.join("a.jsonl").to_str().unwrap(),
+        d.join("b.jsonl").to_str().unwrap(),
+    ]);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stdout={} stderr={}",
+        stdout(&out),
+        stderr(&out)
+    );
+    assert!(stdout(&out).contains("PASS"), "{}", stdout(&out));
+    assert!(stdout(&out).contains("1.000"), "{}", stdout(&out));
+
+    // Total disagreement -> kappa below 0, gate FAILs with exit 2.
+    let other = [
+        ("1", "R", "fp"),
+        ("2", "R", "fp"),
+        ("3", "R", "fp"),
+        ("4", "R", "tp"),
+        ("5", "R", "tp"),
+    ];
+    write_labels("c.jsonl", &other);
+    let out = run(&[
+        "corpus",
+        "agreement",
+        d.join("a.jsonl").to_str().unwrap(),
+        d.join("c.jsonl").to_str().unwrap(),
+    ]);
+    assert_eq!(out.status.code(), Some(2), "stdout={}", stdout(&out));
+    assert!(stdout(&out).contains("FAIL"), "{}", stdout(&out));
+}
