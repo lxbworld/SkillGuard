@@ -76,7 +76,10 @@ its actual behaviour.** That is where this project lives.
 
 Research and architecture complete. See [docs/](docs/).
 
-- [Competitive Analysis](docs/COMPETITIVE_ANALYSIS.md) — 11 projects surveyed,
+- [**Feasibility, Direction & GTM**](docs/VIABILITY.md) — **read this first.**
+  Market data, why "package manager" is the wrong framing, where the real gap is,
+  and the phased go-to-market plan.
+- [Competitive Analysis](docs/COMPETITIVE_ANALYSIS.md) — 13 projects surveyed,
   what each already does, and where the gaps actually are
 - [Architecture](docs/ARCHITECTURE.md) — crate layout, data flow, invariants
 - [Threat Model](docs/THREAT_MODEL.md) — T1–T16, including attacks on the scanner
