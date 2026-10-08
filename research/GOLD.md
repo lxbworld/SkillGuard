@@ -241,3 +241,44 @@ substring (`/usr/`, `~/`, `.env`, a long base64 run) without requiring the
 claimed action. `PI_*` rules have not been measured at all against a skill-level
 sample — a line-level finding sample cannot measure "the description does not
 match the behaviour".
+
+---
+
+## GOLD-v4 (constructed)
+
+A fourth round, aimed at the last four rules that matched substrings without
+requiring the claimed action.
+
+| | |
+|---|---|
+| items | 151 line-level findings |
+| annotators | two independent sessions of `opencode-go/deepseek-v4.1-flash` |
+| agreement | 144/151 (95.4%), **Cohen's κ 0.907** |
+| disagreements | 7, adjudicated by the annotators' shared instruction |
+
+### What changed
+
+| rule | GOLD-v3 | GOLD-v4 | note |
+|---|---|---|---|
+| `FS_ABSOLUTE_PATH` | 25.0% | **50.0%** | `/dev/null` was matched as `/dev/`; the check now reads the whole line |
+| `PERSIST_HOOK` | 12.5% | 66.7% | |
+| `FS_SENSITIVE_PATH` | 25.0% | 20.0% | `\b` around the verbs: `README` is not `read` |
+| `DL_BASE64_BLOB` | 12.5% | off the table | a long lowercase path is not a payload |
+| `FS_HOME_ACCESS` | 25.0% | 100% | **see the tautology below** |
+
+### The `FS_HOME_ACCESS` tautology
+
+The rule's claim is *"The home directory is referenced"*. Any line containing
+`~/` satisfies that literally, so the two annotators disagreed on six of its
+eight items and the adjudicated precision is 100% — which says nothing about
+whether the rule is useful. The claim needs to be *"The home directory is
+accessed (a config, cache or credential path)"* and the rule needs to require an
+access, not a mention. Until then its number should be ignored. This is a good
+example of why a rule's **claim wording is part of its definition**: a vague
+claim makes an unmeasurable rule.
+
+### Remaining
+
+`PI_*` rules are still unmeasured: a line-level finding sample cannot measure
+"the description does not match the behaviour". That needs a skill-level GOLD —
+annotators read a whole skill and label capabilities, blind to rule output.

@@ -26,28 +26,28 @@
 > flagged every non-English `PI_DESCRIPTION_MISMATCH`, and unstemmed verbs
 > (`execution` did not match `execute`). Each fix is a regression test.
 >
-> ## GOLD-v3
+> ## GOLD-v4
 >
-> The precision column below is measured against `research/gold/GOLD-v3.jsonl`:
-> 162 line-level findings, judged `tp`/`fp` by **two independent sessions** of
+> The precision column below is measured against `research/gold/GOLD-v4.jsonl`:
+> 151 line-level findings, judged `tp`/`fp` by **two independent sessions** of
 > `opencode-go/deepseek-v4.1-flash` (no human, and not the rule author). Cohen's
-> kappa is **0.898**; the 8 disagreements were adjudicated by the instruction
-> both annotators were given.
+> kappa is **0.907**.
 >
-> This version follows a round of fixes aimed at the "mention vs action" problem:
-> `NET_DOMAIN_LITERAL` needs URL context for ambiguous TLDs, so `comet-state.sh`
-> and `logger.info` are no longer hosts (`12.5% -> 50.0%`); `PERSIST_AGENT_CONFIG`
-> and `PERSIST_SHELL_RC` need a write; `OBFUSC_HOMOGLYPH` needs a lookalike
-> *inside a word*; `DL_REMOTE_INSTALL` no longer counts `--index-url`.
-> `NET_FETCH_CALL` holds at 87.5%.
+> This round fixed the last four rules' substring matching. `FS_ABSOLUTE_PATH`
+> matched `/dev/` inside `/dev/null`; `FS_SENSITIVE_PATH` matched `read` inside
+> `README` and `Readonly`; `DL_BASE64_BLOB` matched long lowercase paths; and a
+> `# ...` after code was not treated as a comment. `FS_ABSOLUTE_PATH` rose
+> `25% -> 50%`, `PERSIST_HOOK` `12.5% -> 66.7%`, and `DL_BASE64_BLOB` left the
+> table.
 >
-> Still short of G4: `DL_BASE64_BLOB`, `FS_ABSOLUTE_PATH`, `FS_HOME_ACCESS` and
-> `FS_SENSITIVE_PATH` are at 25% or below, because they still match substrings
-> without requiring the claimed action. Treat every prevalence figure below as an
-> upper bound.
+> `FS_HOME_ACCESS` reads 100%, but that is a **tautology**: its claim is only
+> that the home directory is "referenced", which any `~/` mention satisfies, and
+> the two annotators disagreed on six of its eight items. The claim must be
+> reworded to "accessed" before the number means anything. Treat every
+> prevalence figure below as an upper bound.
 >
-> (GOLD-v1 and GOLD-v2 are kept in `research/gold/`. The versions are not
-> directly comparable: both the raters and the rule set change.)
+> (GOLD-v1..v3 are kept in `research/gold/`. Versions are not directly
+> comparable: both the raters and the rule set change.)
 >
 > The remaining `PI_*` heuristics are **unmeasured upper bounds**. A
 > single-annotator read-through is not `GOLD` (research/GOLD.md) and the report
@@ -125,22 +125,21 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 |---|---|---|---|
 | `LICENSE_MISSING` | 411 | 1372 | 30.0% |
 | `PI_DESCRIPTION_MISMATCH` | 101 | 1372 | 7.4% |
-| `NET_DOMAIN_LITERAL` | 64 | 1372 | 4.7% |
-| `FS_ABSOLUTE_PATH` | 52 | 1372 | 3.8% |
+| `NET_DOMAIN_LITERAL` | 62 | 1372 | 4.5% |
 | `FS_RECURSIVE_WALK` | 32 | 1372 | 2.3% |
 | `NET_FETCH_CALL` | 31 | 1372 | 2.3% |
-| `FS_HOME_ACCESS` | 20 | 1372 | 1.5% |
+| `FS_ABSOLUTE_PATH` | 21 | 1372 | 1.5% |
 | `NET_HTTP_CLIENT` | 20 | 1372 | 1.5% |
 | `PARSE_FAILED` | 20 | 1372 | 1.5% |
 | `SHELL_EXEC` | 20 | 1372 | 1.5% |
 | `MISMATCH_UNDER_DECLARED` | 19 | 1372 | 1.4% |
+| `FS_HOME_ACCESS` | 17 | 1372 | 1.2% |
 | `FS_PATH_ESCAPE` | 16 | 1372 | 1.2% |
-| `DL_BASE64_BLOB` | 14 | 1372 | 1.0% |
 | `LICENSE_RESTRICTIVE` | 13 | 1372 | 0.9% |
-| `FS_SENSITIVE_PATH` | 10 | 1372 | 0.7% |
 | `DL_UNTRUSTED_DOMAIN` | 9 | 1372 | 0.7% |
 | `OBFUSC_TRACKING_PIXEL` | 9 | 1372 | 0.7% |
 | `SECRET_ENV_DUMP` | 9 | 1372 | 0.7% |
+| `FS_SENSITIVE_PATH` | 5 | 1372 | 0.4% |
 | `PERSIST_AGENT_CONFIG` | 5 | 1372 | 0.4% |
 | `PI_CONCEALMENT` | 4 | 1372 | 0.3% |
 | `SHELL_EVAL` | 4 | 1372 | 0.3% |
@@ -184,35 +183,35 @@ Every headline figure must be reported per stratum (protocol §4.2); without str
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| L3 | 1372 | 0 | `LICENSE_MISSING` 30.0%, `PI_DESCRIPTION_MISMATCH` 7.4%, `NET_DOMAIN_LITERAL` 4.7%, `FS_ABSOLUTE_PATH` 3.8%, `FS_RECURSIVE_WALK` 2.3% |
+| L3 | 1372 | 0 | `LICENSE_MISSING` 30.0%, `PI_DESCRIPTION_MISMATCH` 7.4%, `NET_DOMAIN_LITERAL` 4.5%, `FS_RECURSIVE_WALK` 2.3%, `NET_FETCH_CALL` 2.3% |
 ### by `size`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| 32k_128k | 163 | 0 | `PI_DESCRIPTION_MISMATCH` 22.7%, `LICENSE_MISSING` 20.9%, `NET_DOMAIN_LITERAL` 13.5%, `FS_ABSOLUTE_PATH` 12.9%, `FS_HOME_ACCESS` 6.7% |
-| 8k_32k | 359 | 0 | `LICENSE_MISSING` 31.2%, `PI_DESCRIPTION_MISMATCH` 7.8%, `FS_ABSOLUTE_PATH` 3.9%, `MISMATCH_UNDER_DECLARED` 3.3%, `NET_DOMAIN_LITERAL` 3.1% |
-| gt_128k | 66 | 0 | `PI_DESCRIPTION_MISMATCH` 50.0%, `NET_DOMAIN_LITERAL` 42.4%, `FS_ABSOLUTE_PATH` 24.2%, `FS_RECURSIVE_WALK` 24.2%, `LICENSE_MISSING` 21.2% |
+| 32k_128k | 163 | 0 | `PI_DESCRIPTION_MISMATCH` 22.7%, `LICENSE_MISSING` 20.9%, `NET_DOMAIN_LITERAL` 13.5%, `FS_HOME_ACCESS` 6.1%, `NET_FETCH_CALL` 6.1% |
+| 8k_32k | 359 | 0 | `LICENSE_MISSING` 31.2%, `PI_DESCRIPTION_MISMATCH` 7.8%, `MISMATCH_UNDER_DECLARED` 3.3%, `NET_DOMAIN_LITERAL` 2.8%, `NET_HTTP_CLIENT` 2.5% |
+| gt_128k | 66 | 0 | `PI_DESCRIPTION_MISMATCH` 50.0%, `NET_DOMAIN_LITERAL` 40.9%, `FS_RECURSIVE_WALK` 24.2%, `LICENSE_MISSING` 21.2%, `NET_FETCH_CALL` 21.2% |
 | lt_8k | 784 | 0 | `LICENSE_MISSING` 32.0%, `PARSE_FAILED` 1.4%, `NET_DOMAIN_LITERAL` 0.4%, `PI_DESCRIPTION_MISMATCH` 0.4%, `FS_PATH_ESCAPE` 0.3% |
 ### by `scripts`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| js | 30 | 0 | `PI_DESCRIPTION_MISMATCH` 56.7%, `NET_DOMAIN_LITERAL` 40.0%, `MISMATCH_UNDER_DECLARED` 26.7%, `NET_FETCH_CALL` 23.3%, `DL_BASE64_BLOB` 13.3% |
+| js | 30 | 0 | `PI_DESCRIPTION_MISMATCH` 56.7%, `NET_DOMAIN_LITERAL` 40.0%, `MISMATCH_UNDER_DECLARED` 26.7%, `NET_FETCH_CALL` 23.3%, `FS_PATH_ESCAPE` 13.3% |
 | none | 1214 | 0 | `LICENSE_MISSING` 30.8%, `PARSE_FAILED` 1.3%, `PI_DESCRIPTION_MISMATCH` 0.7%, `LICENSE_RESTRICTIVE` 0.5%, `OBFUSC_TRACKING_PIXEL` 0.4% |
-| python | 74 | 0 | `PI_DESCRIPTION_MISMATCH` 45.9%, `NET_DOMAIN_LITERAL` 36.5%, `LICENSE_MISSING` 28.4%, `FS_RECURSIVE_WALK` 27.0%, `NET_FETCH_CALL` 23.0% |
-| shell | 54 | 0 | `FS_ABSOLUTE_PATH` 77.8%, `PI_DESCRIPTION_MISMATCH` 77.8%, `NET_DOMAIN_LITERAL` 46.3%, `NET_HTTP_CLIENT` 31.5%, `SHELL_EXEC` 29.6% |
+| python | 74 | 0 | `PI_DESCRIPTION_MISMATCH` 45.9%, `NET_DOMAIN_LITERAL` 33.8%, `LICENSE_MISSING` 28.4%, `FS_RECURSIVE_WALK` 27.0%, `NET_FETCH_CALL` 23.0% |
+| shell | 54 | 0 | `PI_DESCRIPTION_MISMATCH` 77.8%, `NET_DOMAIN_LITERAL` 46.3%, `NET_HTTP_CLIENT` 31.5%, `SHELL_EXEC` 29.6%, `LICENSE_MISSING` 25.9% |
 ### by `declared`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| none | 1259 | 0 | `LICENSE_MISSING` 29.5%, `PI_DESCRIPTION_MISMATCH` 7.2%, `NET_DOMAIN_LITERAL` 4.6%, `FS_ABSOLUTE_PATH` 4.1%, `FS_RECURSIVE_WALK` 2.1% |
-| present | 113 | 0 | `LICENSE_MISSING` 35.4%, `MISMATCH_UNDER_DECLARED` 16.8%, `PI_DESCRIPTION_MISMATCH` 8.8%, `NET_DOMAIN_LITERAL` 5.3%, `FS_RECURSIVE_WALK` 4.4% |
+| none | 1259 | 0 | `LICENSE_MISSING` 29.5%, `PI_DESCRIPTION_MISMATCH` 7.2%, `NET_DOMAIN_LITERAL` 4.6%, `FS_RECURSIVE_WALK` 2.1%, `NET_FETCH_CALL` 2.1% |
+| present | 113 | 0 | `LICENSE_MISSING` 35.4%, `MISMATCH_UNDER_DECLARED` 16.8%, `PI_DESCRIPTION_MISMATCH` 8.8%, `FS_RECURSIVE_WALK` 4.4%, `NET_FETCH_CALL` 4.4% |
 ### by `license`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| absent | 1197 | 0 | `LICENSE_MISSING` 34.3%, `PI_DESCRIPTION_MISMATCH` 5.3%, `NET_DOMAIN_LITERAL` 3.0%, `FS_ABSOLUTE_PATH` 2.7%, `PARSE_FAILED` 1.4% |
-| present | 175 | 0 | `PI_DESCRIPTION_MISMATCH` 21.7%, `NET_DOMAIN_LITERAL` 16.0%, `FS_ABSOLUTE_PATH` 11.4%, `FS_RECURSIVE_WALK` 9.1%, `NET_FETCH_CALL` 9.1% |
+| absent | 1197 | 0 | `LICENSE_MISSING` 34.3%, `PI_DESCRIPTION_MISMATCH` 5.3%, `NET_DOMAIN_LITERAL` 3.0%, `PARSE_FAILED` 1.4%, `FS_RECURSIVE_WALK` 1.3% |
+| present | 175 | 0 | `PI_DESCRIPTION_MISMATCH` 21.7%, `NET_DOMAIN_LITERAL` 14.9%, `FS_RECURSIVE_WALK` 9.1%, `NET_FETCH_CALL` 9.1%, `MISMATCH_UNDER_DECLARED` 6.3% |
 
 ## Precision and recall (GOLD)
 
@@ -222,16 +221,15 @@ Gate G4: precision >= 0.85 and recall >= 0.60, per rule (no micro-average).
 |---|---|---|---|---|---|---|
 | `DEP_CUSTOM_REGISTRY` | 0 | 2 | 0 | 0.0% | n/a | below |
 | `DEP_UNPINNED_SCRIPT` | 2 | 0 | 0 | 100.0% | 100.0% | pass |
-| `DL_BASE64_BLOB` | 1 | 7 | 0 | 12.5% | 100.0% | below |
 | `DL_PASSWORD_ARCHIVE` | 0 | 3 | 0 | 0.0% | n/a | below |
 | `DL_PIPE_TO_SHELL` | 0 | 1 | 0 | 0.0% | n/a | below |
 | `DL_REMOTE_INSTALL` | 0 | 1 | 0 | 0.0% | n/a | below |
 | `DL_UNTRUSTED_DOMAIN` | 2 | 6 | 0 | 25.0% | 100.0% | below |
-| `FS_ABSOLUTE_PATH` | 2 | 6 | 0 | 25.0% | 100.0% | below |
-| `FS_HOME_ACCESS` | 2 | 6 | 0 | 25.0% | 100.0% | below |
+| `FS_ABSOLUTE_PATH` | 4 | 4 | 0 | 50.0% | 100.0% | below |
+| `FS_HOME_ACCESS` | 8 | 0 | 0 | 100.0% | 100.0% | pass |
 | `FS_PATH_ESCAPE` | 6 | 2 | 0 | 75.0% | 100.0% | below |
 | `FS_RECURSIVE_WALK` | 7 | 1 | 0 | 87.5% | 100.0% | pass |
-| `FS_SENSITIVE_PATH` | 2 | 6 | 0 | 25.0% | 100.0% | below |
+| `FS_SENSITIVE_PATH` | 1 | 4 | 0 | 20.0% | 100.0% | below |
 | `LICENSE_RESTRICTIVE` | 4 | 4 | 0 | 50.0% | 100.0% | below |
 | `NET_DOMAIN_LITERAL` | 4 | 4 | 0 | 50.0% | 100.0% | below |
 | `NET_DYNAMIC_URL` | 3 | 0 | 0 | 100.0% | 100.0% | pass |
@@ -240,7 +238,7 @@ Gate G4: precision >= 0.85 and recall >= 0.60, per rule (no micro-average).
 | `OBFUSC_TRACKING_PIXEL` | 6 | 2 | 0 | 75.0% | 100.0% | below |
 | `PERSIST_AGENT_CONFIG` | 1 | 4 | 0 | 20.0% | 100.0% | below |
 | `PERSIST_CRON` | 1 | 1 | 0 | 50.0% | 100.0% | below |
-| `PERSIST_HOOK` | 1 | 2 | 0 | 33.3% | 100.0% | below |
+| `PERSIST_HOOK` | 2 | 1 | 0 | 66.7% | 100.0% | below |
 | `PI_CONCEALMENT` | 0 | 4 | 0 | 0.0% | n/a | below |
 | `PI_EXFIL_INSTRUCTION` | 0 | 3 | 0 | 0.0% | n/a | below |
 | `PI_INJECTION_OVERRIDE` | 0 | 2 | 0 | 0.0% | n/a | below |

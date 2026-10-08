@@ -611,17 +611,19 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
                 ]
                 .iter()
                 .any(|k| line.contains(k))
+                || !looks_like_base64(&m, &line)
         }
-        // Benign device files are not sensitive system paths.
+        // Benign device files are not sensitive system paths. The match is only
+        // `/dev/`, so the check has to look at the whole line (GOLD-v3).
         "FS_ABSOLUTE_PATH" => {
-            m.contains("/dev/null")
-                || m.contains("/dev/stdout")
-                || m.contains("/dev/stderr")
-                || m.contains("/dev/stdin")
-                || m.contains("/dev/tty")
-                || m.contains("/dev/zero")
-                || m.contains("/dev/urandom")
-                || m.contains("/dev/random")
+            line.contains("/dev/null")
+                || line.contains("/dev/stdout")
+                || line.contains("/dev/stderr")
+                || line.contains("/dev/stdin")
+                || line.contains("/dev/tty")
+                || line.contains("/dev/zero")
+                || line.contains("/dev/urandom")
+                || line.contains("/dev/random")
         }
         "NET_DOMAIN_LITERAL" => {
             let trimmed = raw_line.trim_start();
@@ -688,6 +690,33 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
         }
         _ => false,
     }
+}
+
+/// Does the match look like an encoded payload rather than a path or an
+/// identifier?
+///
+/// The raw pattern `[A-Za-z0-9+/]{40,}` matched long lowercase paths
+/// (`launch/config/urdf/rviz/...`), XML namespaces and minified JS (GOLD-v3).
+/// A payload has mixed case and a digit; a `/`-separated run only counts with a
+/// `+`/`=` signature or a decode call.
+fn looks_like_base64(blob: &str, line: &str) -> bool {
+    let upper = blob.chars().any(|c| c.is_ascii_uppercase());
+    let lower = blob.chars().any(|c| c.is_ascii_lowercase());
+    let digit = blob.chars().any(|c| c.is_ascii_digit());
+    if !(upper && lower && digit) {
+        return false;
+    }
+    let decode_ctx = [
+        "base64",
+        "atob",
+        "btoa",
+        "buffer.from",
+        "b64decode",
+        "from_base64",
+    ]
+    .iter()
+    .any(|k| line.contains(k));
+    blob.contains('+') || blob.ends_with('=') || !blob.contains('/') || decode_ctx
 }
 
 /// Does the line write to `matched`?

@@ -349,8 +349,8 @@ static TABLE: &[RuleSpec] = &[
         docs_confidence: Some(Low),
         kinds: CODE,
         patterns: &[
-            r"(?i)(?:open|read|readFile|cat|load|copy|shutil\.copy|fs\.readFile)[^\n]{0,80}\.env\b",
-            r"(?i)(?:open|read|readFile|cat|load)[^\n]{0,80}(?:\.ssh|\.aws|\.gnupg|\.kube)",
+            r"(?i)\b(?:open|read|readfile|load|cat|copy)\b[^\n]{0,80}\.env\b",
+            r"(?i)\b(?:open|read|readfile|load|cat|copy)\b[^\n]{0,80}(?:\.ssh|\.aws|\.gnupg|\.kube)",
             r"(?i)\btar\b[^\n]{0,60}(?:~|/home/|/Users/)[^\n]{0,40}(?:-C|>)",
             r"(?i)\bzip\b[^\n]{0,60}(?:~|/home/|\.ssh)",
         ],
@@ -362,9 +362,12 @@ static TABLE: &[RuleSpec] = &[
         id: "FS_HOME_ACCESS",
         severity: SevLow,
         confidence: Medium,
-        docs_confidence: Some(Low),
+        // Documentation and CLI help text name `~/` paths without accessing
+        // them; GOLD-v3 had help strings and README lines flagged. Only code is
+        // reported.
+        docs_confidence: None,
         kinds: CODE,
-        patterns: &[r#"(?:^|[\s\"'(=])~(?:/|\$)"#],
+        patterns: &[r#"(?:^|[\s"'(=])~/\S"#],
         message: "The home directory is referenced",
         capability: Some("filesystem.read"),
         remediation: "Prefer a project-relative path. Home-directory access reaches config and credentials.",
@@ -961,7 +964,10 @@ pub fn rule_count() -> usize {
 /// zero-width character inside a word. rev 5: `NET_DOMAIN_LITERAL` needs URL
 /// context for ambiguous TLDs; `PERSIST_*` needs a write; `OBFUSC_HOMOGLYPH`
 /// needs a mixed-script word; `DL_BASE64_BLOB`/`DEP_CUSTOM_REGISTRY` tightened.
-pub const SCAN_LOGIC_REVISION: u32 = 5;
+/// rev 6: trailing comments are comments; `/dev/null` checks the whole line;
+/// `DL_BASE64_BLOB` needs a payload shape; `FS_HOME_ACCESS` is code-only;
+/// `FS_SENSITIVE_PATH` verbs are word-bounded.
+pub const SCAN_LOGIC_REVISION: u32 = 6;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

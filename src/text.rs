@@ -143,9 +143,13 @@ impl NormLine {
             return false;
         };
         let before = &self.raw[..pos];
-        // `#` introduces a comment in Python, shell, YAML and TOML.
+        // `#` introduces a comment in Python, shell, YAML and TOML. A trailing
+        // comment (`x = 1  # ...`) has code before the `#`, so requiring an
+        // empty prefix missed it — GOLD-v3 had `# loads credentials from .env`
+        // reported as a sensitive-path read.
         if let Some(h) = before.rfind('#') {
-            if before[..h].trim().is_empty() {
+            let head = &before[..h];
+            if head.trim().is_empty() || head.ends_with(' ') || head.ends_with('\t') {
                 return true;
             }
         }
