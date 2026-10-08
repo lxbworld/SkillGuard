@@ -188,7 +188,7 @@ static TABLE: &[RuleSpec] = &[
         docs_confidence: None,
         kinds: SCRIPTS,
         patterns: &[
-            r#"\beval\s*[\"$]"#,
+            r#"\beval\s+["'$(`]"#,
             // `(?:^|[^.\w])` excludes `regex.exec(` and `matchAll(`-style calls,
             // which are not dynamic code evaluation. Rust's regex crate has no
             // lookbehind, so the boundary is matched instead.
@@ -472,8 +472,8 @@ static TABLE: &[RuleSpec] = &[
         docs_confidence: None,
         kinds: SCRIPTS,
         patterns: &[
-            r"(?i)\b(?:unzip|7z|7za|rar|bsdtar)\b[^\n]{0,80}(?:-p\s*\S+|--password[= ]\S+)",
-            r"(?i)\bzip\b[^\n]{0,60}-P\s*\S+",
+            r"(?i)\b(?:unzip|7z|7za|rar|bsdtar)\b[^\n]{0,80}(?:\s-p\s*\S+|--password[= ]\S+)",
+            r"(?i)\bzip\b[^\n]{0,60}\s-P\s*\S+",
         ],
         message: "An archive is opened with a hardcoded password, which is how malware is smuggled",
         capability: Some("shell.execute"),
@@ -972,8 +972,9 @@ pub fn rule_count() -> usize {
 /// `DL_BASE64_BLOB` needs a payload shape; `FS_HOME_ACCESS` is code-only;
 /// `FS_SENSITIVE_PATH` verbs are word-bounded.
 /// rev 7: `PI_DESCRIPTION_MISMATCH` drops its network and shell branches, which
-/// a skill-level GOLD scored 0/6 correct.
-pub const SCAN_LOGIC_REVISION: u32 = 7;
+/// a skill-level GOLD scored 0/6 correct. rev 8: test assertions are not
+/// behaviour; `-P` in an archive needs whitespace; `eval` needs a command.
+pub const SCAN_LOGIC_REVISION: u32 = 8;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};
