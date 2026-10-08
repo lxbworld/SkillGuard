@@ -246,9 +246,17 @@ static TABLE: &[RuleSpec] = &[
         kinds: SCRIPTS,
         patterns: &[
             r"(?:^|[|;&]\s*|\$\(\s*)(?:sudo\s+)?(?:ba|z|k)?sh\b",
-            r"\b(?:python3?|node|perl|ruby|php)\b[^\n]{0,80}\s-(?:c|e)\b",
+            // `python -c` and `node -e`, but also `python3 foo.py` and
+            // `node script.js`: SKILL-v2 measured 8.3% recall because only the
+            // inline forms were caught while 24 of 30 skills invoke an
+            // interpreter.
+            r"(?i)\b(?:python3?|node|perl|ruby|php)\b[^\n]{0,80}\s(?:-{1,2}[a-z]|\S+\.(?:py|js|mjs|cjs|ts|rb|pl|php|sh))\b",
             r"\bosascript\b",
             r"(?i)\bpowershell\b|\bpwsh\b",
+            r"(?i)\bsubprocess\.(?:run|call|check_call|check_output|popen)\b",
+            r"(?i)\bos\.(?:system|popen)\s*\(",
+            r"(?i)\bchild_process\b|\bexecsync\s*\(|\bspawnsync\s*\(",
+            r"(?i)\b(?:uv|poetry|pipenv|npx|bunx)\s+run\b",
         ],
         message: "The skill invokes another interpreter",
         capability: Some("shell.execute"),
@@ -977,7 +985,7 @@ pub fn rule_count() -> usize {
 /// rev 9: quoted or documentation-shaped lines are not `PI_*` instructions.
 /// rev 10: nor is a line that *discusses* the attack (security training
 /// material), and `score()` no longer counts stale `tp`/`fp` labels.
-pub const SCAN_LOGIC_REVISION: u32 = 10;
+pub const SCAN_LOGIC_REVISION: u32 = 12;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};
