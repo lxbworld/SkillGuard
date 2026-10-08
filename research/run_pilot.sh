@@ -115,7 +115,7 @@ fi
 > fetched tree, and nested skills had no provenance row — they were credited to
 > whatever repository enclosed the tree (SkillGuard) and lost their own
 > repository's license. The join now matches provenance by repository, so all
-> 1372 rows carry their true repository and repository-root license.
+> every row carries its true repository and repository-root license.
 >
 > A precision pass over the first real corpus also corrected several heuristics
 > that fired on ordinary text and file formats: lookalike characters in

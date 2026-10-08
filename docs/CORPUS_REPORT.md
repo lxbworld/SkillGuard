@@ -16,7 +16,7 @@
 > fetched tree, and nested skills had no provenance row — they were credited to
 > whatever repository enclosed the tree (SkillGuard) and lost their own
 > repository's license. The join now matches provenance by repository, so all
-> 1372 rows carry their true repository and repository-root license.
+> every row carries its true repository and repository-root license.
 >
 > A precision pass over the first real corpus also corrected several heuristics
 > that fired on ordinary text and file formats: lookalike characters in
@@ -67,40 +67,128 @@
   "queries": [
     "filename:SKILL.md",
     "filename:SKILL.md path:skills",
+    "filename:SKILL.md path:skills/",
     "filename:SKILL.md path:.claude",
+    "filename:SKILL.md path:.claude/skills",
     "filename:SKILL.md path:agent",
+    "filename:SKILL.md path:agent/skills",
     "filename:SKILL.md path:agents",
+    "filename:SKILL.md path:agents/skills",
     "filename:SKILL.md path:.cursor",
+    "filename:SKILL.md path:.cursor/skills",
     "filename:SKILL.md path:plugins",
     "filename:SKILL.md path:commands",
     "filename:SKILL.md path:.github",
+    "filename:SKILL.md path:.github/skills",
     "filename:SKILL.md path:templates",
-    "filename:SKILL.md path:skills/",
-    "filename:SKILL.md path:.codex"
+    "filename:SKILL.md path:.codex",
+    "filename:SKILL.md path:.gemini",
+    "filename:SKILL.md path:.agent",
+    "filename:SKILL.md path:.agents",
+    "filename:SKILL.md path:.windsurf",
+    "filename:SKILL.md path:.trae",
+    "filename:SKILL.md path:.roo",
+    "filename:SKILL.md path:.continue",
+    "filename:SKILL.md path:prompts",
+    "filename:SKILL.md path:workflows",
+    "filename:SKILL.md path:mcp",
+    "filename:SKILL.md path:tools",
+    "filename:SKILL.md path:functions",
+    "filename:SKILL.md path:recipes",
+    "filename:SKILL.md path:playbooks",
+    "filename:SKILL.md path:assistants",
+    "filename:SKILL.md path:modes",
+    "filename:SKILL.md path:rules",
+    "filename:SKILL.md path:capabilities",
+    "filename:SKILL.md path:packages",
+    "filename:SKILL.md path:integrations",
+    "filename:SKILL.md path:automation",
+    "filename:SKILL.md path:examples",
+    "filename:SKILL.md path:docs",
+    "filename:SKILL.md path:src",
+    "filename:SKILL.md path:lib",
+    "filename:SKILL.md path:apps",
+    "filename:SKILL.md path:services",
+    "filename:SKILL.md path:backend",
+    "filename:SKILL.md path:frontend",
+    "filename:SKILL.md path:infra",
+    "filename:SKILL.md path:ops",
+    "filename:SKILL.md path:security",
+    "filename:SKILL.md path:data",
+    "filename:SKILL.md path:ai",
+    "filename:SKILL.md path:llm",
+    "filename:SKILL.md path:copilot",
+    "filename:SKILL.md path:claude",
+    "filename:SKILL.md path:openai",
+    "filename:SKILL.md path:anthropic"
   ],
   "per_query_counts": {
-    "filename:SKILL.md": 250,
-    "filename:SKILL.md path:skills": 250,
-    "filename:SKILL.md path:.claude": 250,
-    "filename:SKILL.md path:agent": 250,
-    "filename:SKILL.md path:agents": 250,
-    "filename:SKILL.md path:.cursor": 250,
-    "filename:SKILL.md path:plugins": 250,
-    "filename:SKILL.md path:commands": 250,
-    "filename:SKILL.md path:.github": 250,
-    "filename:SKILL.md path:templates": 250,
-    "filename:SKILL.md path:skills/": 250,
-    "filename:SKILL.md path:.codex": 250
+    "filename:SKILL.md": 100,
+    "filename:SKILL.md path:skills": 100,
+    "filename:SKILL.md path:skills/": 100,
+    "filename:SKILL.md path:.claude": 100,
+    "filename:SKILL.md path:.claude/skills": 100,
+    "filename:SKILL.md path:agent": 100,
+    "filename:SKILL.md path:agent/skills": 100,
+    "filename:SKILL.md path:agents": 100,
+    "filename:SKILL.md path:agents/skills": 100,
+    "filename:SKILL.md path:.cursor": 100,
+    "filename:SKILL.md path:.cursor/skills": 100,
+    "filename:SKILL.md path:plugins": 100,
+    "filename:SKILL.md path:commands": 100,
+    "filename:SKILL.md path:.github": 100,
+    "filename:SKILL.md path:.github/skills": 100,
+    "filename:SKILL.md path:templates": 100,
+    "filename:SKILL.md path:.codex": 100,
+    "filename:SKILL.md path:.gemini": 100,
+    "filename:SKILL.md path:.agent": 100,
+    "filename:SKILL.md path:.agents": 100,
+    "filename:SKILL.md path:.windsurf": 100,
+    "filename:SKILL.md path:.trae": 100,
+    "filename:SKILL.md path:.roo": 100,
+    "filename:SKILL.md path:.continue": 100,
+    "filename:SKILL.md path:prompts": 100,
+    "filename:SKILL.md path:workflows": 100,
+    "filename:SKILL.md path:mcp": 100,
+    "filename:SKILL.md path:tools": 100,
+    "filename:SKILL.md path:functions": 94,
+    "filename:SKILL.md path:recipes": 100,
+    "filename:SKILL.md path:playbooks": 100,
+    "filename:SKILL.md path:assistants": 77,
+    "filename:SKILL.md path:modes": 100,
+    "filename:SKILL.md path:rules": 100,
+    "filename:SKILL.md path:capabilities": 100,
+    "filename:SKILL.md path:packages": 100,
+    "filename:SKILL.md path:integrations": 100,
+    "filename:SKILL.md path:automation": 100,
+    "filename:SKILL.md path:examples": 100,
+    "filename:SKILL.md path:docs": 100,
+    "filename:SKILL.md path:src": 100,
+    "filename:SKILL.md path:lib": 100,
+    "filename:SKILL.md path:apps": 100,
+    "filename:SKILL.md path:services": 100,
+    "filename:SKILL.md path:backend": 100,
+    "filename:SKILL.md path:frontend": 100,
+    "filename:SKILL.md path:infra": 100,
+    "filename:SKILL.md path:ops": 100,
+    "filename:SKILL.md path:security": 100,
+    "filename:SKILL.md path:data": 100,
+    "filename:SKILL.md path:ai": 100,
+    "filename:SKILL.md path:llm": 100,
+    "filename:SKILL.md path:copilot": 100,
+    "filename:SKILL.md path:claude": 100,
+    "filename:SKILL.md path:openai": 100,
+    "filename:SKILL.md path:anthropic": 100
   },
-  "unique_candidates": 2694,
-  "sample": 1200,
-  "candidates": 1200,
-  "collected": 1240,
-  "collected_this_run": 329,
-  "skipped": 33,
-  "failed": 71,
-  "api_calls": 776,
-  "collected_at_utc": "2026-10-07T12:32:26Z"
+  "unique_candidates": 5118,
+  "sample": 5118,
+  "candidates": 5118,
+  "collected": 5124,
+  "collected_this_run": 2608,
+  "skipped": 141,
+  "failed": 460,
+  "api_calls": 2494,
+  "collected_at_utc": "2026-10-08T08:03:26Z"
 }
 ```
 
@@ -120,8 +208,8 @@ This file is generated by `skillguard corpus report` from a findings JSONL. A nu
 
 | | count |
 |---|---|
-| manifest entries | 1372 |
-| scanned | 1372 |
+| manifest entries | 5442 |
+| scanned | 5442 |
 | failed | 0 |
 
 ## Overall prevalence
@@ -130,45 +218,50 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 
 | rule | hits | n | prevalence |
 |---|---|---|---|
-| `LICENSE_MISSING` | 411 | 1372 | 30.0% |
-| `PI_DESCRIPTION_MISMATCH` | 101 | 1372 | 7.4% |
-| `NET_DOMAIN_LITERAL` | 62 | 1372 | 4.5% |
-| `FS_RECURSIVE_WALK` | 32 | 1372 | 2.3% |
-| `NET_FETCH_CALL` | 31 | 1372 | 2.3% |
-| `FS_ABSOLUTE_PATH` | 21 | 1372 | 1.5% |
-| `NET_HTTP_CLIENT` | 20 | 1372 | 1.5% |
-| `PARSE_FAILED` | 20 | 1372 | 1.5% |
-| `SHELL_EXEC` | 20 | 1372 | 1.5% |
-| `MISMATCH_UNDER_DECLARED` | 19 | 1372 | 1.4% |
-| `FS_HOME_ACCESS` | 17 | 1372 | 1.2% |
-| `FS_PATH_ESCAPE` | 16 | 1372 | 1.2% |
-| `LICENSE_RESTRICTIVE` | 13 | 1372 | 0.9% |
-| `DL_UNTRUSTED_DOMAIN` | 9 | 1372 | 0.7% |
-| `OBFUSC_TRACKING_PIXEL` | 9 | 1372 | 0.7% |
-| `SECRET_ENV_DUMP` | 9 | 1372 | 0.7% |
-| `FS_SENSITIVE_PATH` | 5 | 1372 | 0.4% |
-| `PERSIST_AGENT_CONFIG` | 5 | 1372 | 0.4% |
-| `PI_CONCEALMENT` | 4 | 1372 | 0.3% |
-| `SHELL_EVAL` | 4 | 1372 | 0.3% |
-| `DL_PASSWORD_ARCHIVE` | 3 | 1372 | 0.2% |
-| `MISMATCH_OVER_DECLARED` | 3 | 1372 | 0.2% |
-| `NET_DYNAMIC_URL` | 3 | 1372 | 0.2% |
-| `PERSIST_HOOK` | 3 | 1372 | 0.2% |
-| `PI_EXFIL_INSTRUCTION` | 3 | 1372 | 0.2% |
-| `SECRET_PRIVATE_KEY` | 3 | 1372 | 0.2% |
-| `SHELL_DESTRUCTIVE` | 3 | 1372 | 0.2% |
-| `DEP_CUSTOM_REGISTRY` | 2 | 1372 | 0.1% |
-| `DEP_UNPINNED_SCRIPT` | 2 | 1372 | 0.1% |
-| `PERSIST_CRON` | 2 | 1372 | 0.1% |
-| `PI_INJECTION_OVERRIDE` | 2 | 1372 | 0.1% |
-| `PI_SYSTEM_IMPERSATION` | 2 | 1372 | 0.1% |
-| `SECRET_GENERIC_ASSIGN` | 2 | 1372 | 0.1% |
-| `SHELL_PRIVILEGE_ESCALATION` | 2 | 1372 | 0.1% |
-| `DL_PIPE_TO_SHELL` | 1 | 1372 | 0.1% |
-| `DL_REMOTE_INSTALL` | 1 | 1372 | 0.1% |
-| `SECRET_AWS_ACCESS_KEY` | 1 | 1372 | 0.1% |
-| `SECRET_PATH_READ` | 1 | 1372 | 0.1% |
-| `SECRET_PROVIDER_TOKEN` | 1 | 1372 | 0.1% |
+| `LICENSE_MISSING` | 1153 | 5442 | 21.2% |
+| `PI_DESCRIPTION_MISMATCH` | 585 | 5442 | 10.7% |
+| `NET_DOMAIN_LITERAL` | 411 | 5442 | 7.6% |
+| `NET_FETCH_CALL` | 169 | 5442 | 3.1% |
+| `FS_RECURSIVE_WALK` | 148 | 5442 | 2.7% |
+| `FS_PATH_ESCAPE` | 141 | 5442 | 2.6% |
+| `FS_ABSOLUTE_PATH` | 123 | 5442 | 2.3% |
+| `FS_HOME_ACCESS` | 123 | 5442 | 2.3% |
+| `MISMATCH_UNDER_DECLARED` | 82 | 5442 | 1.5% |
+| `SHELL_EXEC` | 75 | 5442 | 1.4% |
+| `PARSE_FAILED` | 71 | 5442 | 1.3% |
+| `NET_HTTP_CLIENT` | 69 | 5442 | 1.3% |
+| `SECRET_ENV_DUMP` | 64 | 5442 | 1.2% |
+| `LICENSE_RESTRICTIVE` | 52 | 5442 | 1.0% |
+| `PI_CONCEALMENT` | 50 | 5442 | 0.9% |
+| `OBFUSC_TRACKING_PIXEL` | 39 | 5442 | 0.7% |
+| `SECRET_GENERIC_ASSIGN` | 36 | 5442 | 0.7% |
+| `DL_UNTRUSTED_DOMAIN` | 29 | 5442 | 0.5% |
+| `DL_PASSWORD_ARCHIVE` | 26 | 5442 | 0.5% |
+| `DEP_CUSTOM_REGISTRY` | 24 | 5442 | 0.4% |
+| `NET_DYNAMIC_URL` | 24 | 5442 | 0.4% |
+| `PI_INJECTION_OVERRIDE` | 24 | 5442 | 0.4% |
+| `MISMATCH_OVER_DECLARED` | 22 | 5442 | 0.4% |
+| `SHELL_EVAL` | 20 | 5442 | 0.4% |
+| `PERSIST_AGENT_CONFIG` | 17 | 5442 | 0.3% |
+| `SECRET_PATH_READ` | 17 | 5442 | 0.3% |
+| `FS_SENSITIVE_PATH` | 16 | 5442 | 0.3% |
+| `PI_EXFIL_INSTRUCTION` | 15 | 5442 | 0.3% |
+| `SHELL_PRIVILEGE_ESCALATION` | 14 | 5442 | 0.3% |
+| `PERSIST_HOOK` | 11 | 5442 | 0.2% |
+| `PI_SYSTEM_IMPERSATION` | 11 | 5442 | 0.2% |
+| `SHELL_DESTRUCTIVE` | 8 | 5442 | 0.1% |
+| `DL_PIPE_TO_SHELL` | 6 | 5442 | 0.1% |
+| `DL_REMOTE_INSTALL` | 6 | 5442 | 0.1% |
+| `SECRET_PROVIDER_TOKEN` | 6 | 5442 | 0.1% |
+| `PERSIST_SHELL_RC` | 5 | 5442 | 0.1% |
+| `PERSIST_CRON` | 4 | 5442 | 0.1% |
+| `SECRET_PRIVATE_KEY` | 4 | 5442 | 0.1% |
+| `DEP_UNPINNED_SCRIPT` | 3 | 5442 | 0.1% |
+| `FS_MODE_UNRESOLVED` | 3 | 5442 | 0.1% |
+| `OBFUSC_ZERO_WIDTH` | 3 | 5442 | 0.1% |
+| `SECRET_AWS_ACCESS_KEY` | 3 | 5442 | 0.1% |
+| `DL_CHAIN_FETCH_EXECUTE` | 1 | 5442 | 0.0% |
+| `LICENSE_MISMATCH` | 1 | 5442 | 0.0% |
 
 ## Declaration rate (H6)
 
@@ -176,10 +269,10 @@ H6: *almost no skill declares its permissions.* This is the number the whole pro
 
 | | count |
 |---|---|
-| scanned, declaration status known | 1372 |
-| declare permissions | 113 |
-| do not declare | 1259 |
-| declaration rate | 8.2% |
+| scanned, declaration status known | 5442 |
+| declare permissions | 386 |
+| do not declare | 5056 |
+| declaration rate | 7.1% |
 | H6 null (>= 20%) | rejected at this sample |
 
 ## Stratified prevalence
@@ -190,35 +283,36 @@ Every headline figure must be reported per stratum (protocol §4.2); without str
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| L3 | 1372 | 0 | `LICENSE_MISSING` 30.0%, `PI_DESCRIPTION_MISMATCH` 7.4%, `NET_DOMAIN_LITERAL` 4.5%, `FS_RECURSIVE_WALK` 2.3%, `NET_FETCH_CALL` 2.3% |
+| L3 | 5442 | 0 | `LICENSE_MISSING` 21.2%, `PI_DESCRIPTION_MISMATCH` 10.7%, `NET_DOMAIN_LITERAL` 7.6%, `NET_FETCH_CALL` 3.1%, `FS_RECURSIVE_WALK` 2.7% |
 ### by `size`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| 32k_128k | 163 | 0 | `PI_DESCRIPTION_MISMATCH` 22.7%, `LICENSE_MISSING` 20.9%, `NET_DOMAIN_LITERAL` 13.5%, `FS_HOME_ACCESS` 6.1%, `NET_FETCH_CALL` 6.1% |
-| 8k_32k | 359 | 0 | `LICENSE_MISSING` 31.2%, `PI_DESCRIPTION_MISMATCH` 7.8%, `MISMATCH_UNDER_DECLARED` 3.3%, `NET_DOMAIN_LITERAL` 2.8%, `NET_HTTP_CLIENT` 2.5% |
-| gt_128k | 66 | 0 | `PI_DESCRIPTION_MISMATCH` 50.0%, `NET_DOMAIN_LITERAL` 40.9%, `FS_RECURSIVE_WALK` 24.2%, `LICENSE_MISSING` 21.2%, `NET_FETCH_CALL` 21.2% |
-| lt_8k | 784 | 0 | `LICENSE_MISSING` 32.0%, `PARSE_FAILED` 1.4%, `NET_DOMAIN_LITERAL` 0.4%, `PI_DESCRIPTION_MISMATCH` 0.4%, `FS_PATH_ESCAPE` 0.3% |
+| 32k_128k | 720 | 0 | `PI_DESCRIPTION_MISMATCH` 24.9%, `NET_DOMAIN_LITERAL` 20.4%, `LICENSE_MISSING` 14.7%, `FS_PATH_ESCAPE` 8.9%, `NET_FETCH_CALL` 8.2% |
+| 8k_32k | 1537 | 0 | `LICENSE_MISSING` 24.8%, `PI_DESCRIPTION_MISMATCH` 11.3%, `NET_DOMAIN_LITERAL` 6.1%, `FS_PATH_ESCAPE` 2.7%, `MISMATCH_UNDER_DECLARED` 2.5% |
+| gt_128k | 306 | 0 | `PI_DESCRIPTION_MISMATCH` 57.8%, `NET_DOMAIN_LITERAL` 47.7%, `FS_RECURSIVE_WALK` 26.5%, `NET_FETCH_CALL` 21.6%, `FS_HOME_ACCESS` 19.0% |
+| lt_8k | 2879 | 0 | `LICENSE_MISSING` 21.9%, `PI_DESCRIPTION_MISMATCH` 1.9%, `PARSE_FAILED` 1.0%, `NET_DOMAIN_LITERAL` 0.9%, `PI_CONCEALMENT` 0.6% |
 ### by `scripts`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| js | 30 | 0 | `PI_DESCRIPTION_MISMATCH` 56.7%, `NET_DOMAIN_LITERAL` 40.0%, `MISMATCH_UNDER_DECLARED` 26.7%, `NET_FETCH_CALL` 23.3%, `FS_PATH_ESCAPE` 13.3% |
-| none | 1214 | 0 | `LICENSE_MISSING` 30.8%, `PARSE_FAILED` 1.3%, `PI_DESCRIPTION_MISMATCH` 0.7%, `LICENSE_RESTRICTIVE` 0.5%, `OBFUSC_TRACKING_PIXEL` 0.4% |
-| python | 74 | 0 | `PI_DESCRIPTION_MISMATCH` 45.9%, `NET_DOMAIN_LITERAL` 33.8%, `LICENSE_MISSING` 28.4%, `FS_RECURSIVE_WALK` 27.0%, `NET_FETCH_CALL` 23.0% |
-| shell | 54 | 0 | `PI_DESCRIPTION_MISMATCH` 77.8%, `NET_DOMAIN_LITERAL` 46.3%, `NET_HTTP_CLIENT` 31.5%, `SHELL_EXEC` 29.6%, `LICENSE_MISSING` 25.9% |
+| js | 305 | 0 | `NET_DOMAIN_LITERAL` 50.5%, `PI_DESCRIPTION_MISMATCH` 45.9%, `FS_PATH_ESCAPE` 33.4%, `NET_FETCH_CALL` 23.6%, `MISMATCH_UNDER_DECLARED` 14.4% |
+| none | 4498 | 0 | `LICENSE_MISSING` 22.6%, `PI_DESCRIPTION_MISMATCH` 1.6%, `PARSE_FAILED` 1.2%, `PI_CONCEALMENT` 0.8%, `OBFUSC_TRACKING_PIXEL` 0.5% |
+| other | 5 | 0 | `PI_DESCRIPTION_MISMATCH` 60.0%, `NET_DOMAIN_LITERAL` 40.0%, `SECRET_GENERIC_ASSIGN` 40.0%, `FS_HOME_ACCESS` 20.0%, `MISMATCH_UNDER_DECLARED` 20.0% |
+| python | 424 | 0 | `PI_DESCRIPTION_MISMATCH` 51.7%, `NET_DOMAIN_LITERAL` 42.5%, `FS_RECURSIVE_WALK` 22.4%, `LICENSE_MISSING` 18.2%, `NET_FETCH_CALL` 16.7% |
+| shell | 210 | 0 | `PI_DESCRIPTION_MISMATCH` 71.0%, `NET_DOMAIN_LITERAL` 35.2%, `NET_HTTP_CLIENT` 26.7%, `SHELL_EXEC` 25.7%, `FS_RECURSIVE_WALK` 23.3% |
 ### by `declared`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| none | 1259 | 0 | `LICENSE_MISSING` 29.5%, `PI_DESCRIPTION_MISMATCH` 7.2%, `NET_DOMAIN_LITERAL` 4.6%, `FS_RECURSIVE_WALK` 2.1%, `NET_FETCH_CALL` 2.1% |
-| present | 113 | 0 | `LICENSE_MISSING` 35.4%, `MISMATCH_UNDER_DECLARED` 16.8%, `PI_DESCRIPTION_MISMATCH` 8.8%, `FS_RECURSIVE_WALK` 4.4%, `NET_FETCH_CALL` 4.4% |
+| none | 5056 | 0 | `LICENSE_MISSING` 21.3%, `PI_DESCRIPTION_MISMATCH` 10.2%, `NET_DOMAIN_LITERAL` 7.4%, `NET_FETCH_CALL` 3.0%, `FS_RECURSIVE_WALK` 2.8% |
+| present | 386 | 0 | `MISMATCH_UNDER_DECLARED` 21.2%, `LICENSE_MISSING` 19.4%, `PI_DESCRIPTION_MISMATCH` 17.6%, `NET_DOMAIN_LITERAL` 10.1%, `MISMATCH_OVER_DECLARED` 5.7% |
 ### by `license`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| absent | 1197 | 0 | `LICENSE_MISSING` 34.3%, `PI_DESCRIPTION_MISMATCH` 5.3%, `NET_DOMAIN_LITERAL` 3.0%, `PARSE_FAILED` 1.4%, `FS_RECURSIVE_WALK` 1.3% |
-| present | 175 | 0 | `PI_DESCRIPTION_MISMATCH` 21.7%, `NET_DOMAIN_LITERAL` 14.9%, `FS_RECURSIVE_WALK` 9.1%, `NET_FETCH_CALL` 9.1%, `MISMATCH_UNDER_DECLARED` 6.3% |
+| absent | 4797 | 0 | `LICENSE_MISSING` 24.0%, `PI_DESCRIPTION_MISMATCH` 8.5%, `NET_DOMAIN_LITERAL` 6.1%, `FS_PATH_ESCAPE` 2.5%, `NET_FETCH_CALL` 2.5% |
+| present | 645 | 0 | `PI_DESCRIPTION_MISMATCH` 27.4%, `NET_DOMAIN_LITERAL` 18.1%, `FS_RECURSIVE_WALK` 10.9%, `FS_HOME_ACCESS` 8.7%, `NET_FETCH_CALL` 7.6% |
 
 ## Precision and recall (GOLD)
 

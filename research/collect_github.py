@@ -38,6 +38,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -59,6 +60,12 @@ MAX_SKILL_FILES = 80
 # the small pool and the low overall rate; raw.githubusercontent.com is a CDN
 # and does not count against the API limit.
 RAW_WORKERS = 8
+
+# The repository loop runs several workers at once, so API calls are throttled
+# to stay under GitHub's 5000/hour core quota (0.8s between calls is 75/min =
+# 4500/hour). Without it the workers burst past the quota and the client sleeps
+# until the hourly reset.
+MIN_CALL_INTERVAL = 0.8
 
 # Never sample ourselves: our test fixtures are not ecosystem data.
 EXCLUDE_REPOS = {"lxbworld/SkillGuard"}
@@ -91,6 +98,17 @@ class Client:
         self.tok = tok
         self.verbose = verbose
         self.calls = 0
+        self._lock = threading.Lock()
+        self._last = 0.0
+
+    def _throttle(self) -> None:
+        """Serialise API calls to MIN_CALL_INTERVAL, and count them."""
+        with self._lock:
+            wait = self._last + MIN_CALL_INTERVAL - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+            self._last = time.monotonic()
+            self.calls += 1
 
     def get_json(self, path: str) -> dict:
         url = path if path.startswith("http") else f"{API}{path}"
@@ -104,8 +122,8 @@ class Client:
         )
         for attempt in range(6):
             try:
+                self._throttle()
                 with urllib.request.urlopen(req, timeout=30) as resp:
-                    self.calls += 1
                     return json.load(resp)
             except urllib.error.HTTPError as exc:
                 if exc.code in (403, 429):
@@ -188,6 +206,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--limit", type=int, default=300, help="number of skills to collect")
     ap.add_argument(
+        "--workers",
+        type=int,
+        default=8,
+        help="repositories fetched concurrently (API calls are still throttled)",
+    )
+    ap.add_argument(
         "--per-query",
         type=int,
         default=250,
@@ -209,16 +233,60 @@ def main() -> int:
         args.query = [
             "filename:SKILL.md",
             "filename:SKILL.md path:skills",
+            "filename:SKILL.md path:skills/",
             "filename:SKILL.md path:.claude",
+            "filename:SKILL.md path:.claude/skills",
             "filename:SKILL.md path:agent",
+            "filename:SKILL.md path:agent/skills",
             "filename:SKILL.md path:agents",
+            "filename:SKILL.md path:agents/skills",
             "filename:SKILL.md path:.cursor",
+            "filename:SKILL.md path:.cursor/skills",
             "filename:SKILL.md path:plugins",
             "filename:SKILL.md path:commands",
             "filename:SKILL.md path:.github",
+            "filename:SKILL.md path:.github/skills",
             "filename:SKILL.md path:templates",
-            "filename:SKILL.md path:skills/",
             "filename:SKILL.md path:.codex",
+            "filename:SKILL.md path:.gemini",
+            "filename:SKILL.md path:.agent",
+            "filename:SKILL.md path:.agents",
+            "filename:SKILL.md path:.windsurf",
+            "filename:SKILL.md path:.trae",
+            "filename:SKILL.md path:.roo",
+            "filename:SKILL.md path:.continue",
+            "filename:SKILL.md path:prompts",
+            "filename:SKILL.md path:workflows",
+            "filename:SKILL.md path:mcp",
+            "filename:SKILL.md path:tools",
+            "filename:SKILL.md path:functions",
+            "filename:SKILL.md path:recipes",
+            "filename:SKILL.md path:playbooks",
+            "filename:SKILL.md path:assistants",
+            "filename:SKILL.md path:modes",
+            "filename:SKILL.md path:rules",
+            "filename:SKILL.md path:capabilities",
+            "filename:SKILL.md path:packages",
+            "filename:SKILL.md path:integrations",
+            "filename:SKILL.md path:automation",
+            "filename:SKILL.md path:examples",
+            "filename:SKILL.md path:docs",
+            "filename:SKILL.md path:src",
+            "filename:SKILL.md path:lib",
+            "filename:SKILL.md path:apps",
+            "filename:SKILL.md path:services",
+            "filename:SKILL.md path:backend",
+            "filename:SKILL.md path:frontend",
+            "filename:SKILL.md path:infra",
+            "filename:SKILL.md path:ops",
+            "filename:SKILL.md path:security",
+            "filename:SKILL.md path:data",
+            "filename:SKILL.md path:ai",
+            "filename:SKILL.md path:llm",
+            "filename:SKILL.md path:copilot",
+            "filename:SKILL.md path:claude",
+            "filename:SKILL.md path:openai",
+            "filename:SKILL.md path:anthropic",
         ]
 
     client = Client(token(), verbose=args.verbose)
@@ -254,9 +322,9 @@ def main() -> int:
         file=sys.stderr,
     )
 
-    repo_cache: dict[str, tuple[str, dict[str, dict], bool]] = {}
     provenance: list[dict] = []
     done: dict[str, dict] = {}
+
     if provenance_path.exists():
         with provenance_path.open() as fh:
             for line in fh:
@@ -266,117 +334,146 @@ def main() -> int:
                     provenance.append(row)
                     done[row["path"]] = row
         print(f"  resuming: {len(done)} skills already collected", file=sys.stderr)
-    collected = 0
-    skipped = failed = 0
+
+    # Group the sample by repository. One worker owns a repository, so its HEAD
+    # and tree calls are made once and its raw downloads overlap with other
+    # repositories'. The old loop was serial: it spent ~3.3s per repository in
+    # two sequential API round-trips while eight download threads sat idle.
+    by_repo: dict[str, list[str]] = {}
+    for cand in candidates:
+        rel = f"{cand['repo']}/{cand['skill_dir']}" if cand["skill_dir"] else cand["repo"]
+        if rel in done:
+            continue
+        by_repo.setdefault(cand["repo"], []).append(cand["skill_dir"])
+    repos = sorted(by_repo)
+    print(
+        f"  {len(repos)} repositories to fetch with {args.workers} workers",
+        file=sys.stderr,
+    )
+
+    lock = threading.Lock()
+    stats = {"collected": 0, "skipped": 0, "failed": 0, "repos_done": 0}
     prov_fh = provenance_path.open("a")
 
-    for i, cand in enumerate(candidates, 1):
-        repo = cand["repo"]
-        skill_dir = cand["skill_dir"]
+    def process_repo(repo: str) -> None:
         owner, name = repo.split("/", 1)
-
-        rel_path = f"{repo}/{skill_dir}" if skill_dir else repo
-        if rel_path in done:
-            continue
-
         try:
-            if repo not in repo_cache:
-                head = client.get_json(f"/repos/{repo}/commits/HEAD")["sha"]
-                tree = client.get_json(f"/repos/{repo}/git/trees/{head}?recursive=1")
-                entries = {
-                    e["path"]: e
-                    for e in tree.get("tree", [])
-                    if e.get("type") == "blob" and e.get("mode") != "120000"
-                }
-                # A repo-root license covers every skill in the repo, and the
-                # corpus tree is not a git checkout, so the scanner cannot find
-                # it. Record it here; `corpus scan` uses it to avoid the
-                # LICENSE_MISSING false positive measured on real data.
-                root_files = {
-                    e["path"].lower()
-                    for e in tree.get("tree", [])
-                    if e.get("type") == "blob" and "/" not in e["path"]
-                }
-                root_license = any(
-                    n.startswith("license") or n.startswith("copying") or n == "notice"
-                    for n in root_files
-                )
-                repo_cache[repo] = (head, entries, root_license)
-            commit, entries, root_license = repo_cache[repo]
+            head = client.get_json(f"/repos/{repo}/commits/HEAD")["sha"]
+            tree = client.get_json(f"/repos/{repo}/git/trees/{head}?recursive=1")
         except Exception as exc:
-            failed += 1
-            print(f"  [{i}] {repo} {skill_dir}: repo error {exc}", file=sys.stderr)
-            continue
-
-        prefix = f"{skill_dir}/" if skill_dir else ""
-        members = [
-            (p, e)
-            for p, e in entries.items()
-            if p.startswith(prefix) and is_included(p)
-        ]
-        total = sum(e.get("size", 0) for _, e in members)
-        if not members:
-            failed += 1
-            continue
-        if len(members) > MAX_SKILL_FILES or total > MAX_SKILL_BYTES:
-            skipped += 1
-            print(
-                f"  [{i}] {repo}/{skill_dir}: skipped "
-                f"({len(members)} files, {total} bytes)",
-                file=sys.stderr,
-            )
-            continue
-
-        dest = (tree_root / repo / skill_dir).resolve()
-        if not str(dest).startswith(str(tree_root.resolve())):
-            failed += 1
-            continue
-
-        paths = [p for p, _ in members]
-        try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=RAW_WORKERS) as pool:
-                fetched = list(
-                    pool.map(lambda p: (p, client.get_raw(owner, name, commit, p)), paths)
-                )
-            if any(body is None for _, body in fetched):
-                failed += 1
-                continue
-            for path, body in fetched:
-                entry = entries[path]
-                rel = path[len(prefix):] if prefix else path
-                target = dest / rel
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(body)
-                if entry.get("mode") == "100755":
-                    target.chmod(0o755)
-        except Exception as exc:
-            # A hostile or unusual path must not abort a 1000-skill batch.
-            failed += 1
-            print(f"  [{i}] {rel_path}: fetch/write error {exc}", file=sys.stderr)
-            continue
-
-        row = {
-            "path": str((tree_root / repo / skill_dir).relative_to(tree_root)),
-            "repo": repo,
-            "commit": commit,
-            "skill_dir": skill_dir,
-            "files": len(members),
-            "bytes": total,
-            "root_license": root_license,
+            with lock:
+                stats["failed"] += 1
+            print(f"  {repo}: repo error {exc}", file=sys.stderr)
+            return
+        entries = {
+            e["path"]: e
+            for e in tree.get("tree", [])
+            if e.get("type") == "blob" and e.get("mode") != "120000"
         }
-        provenance.append(row)
-        done[row["path"]] = row
-        prov_fh.write(json.dumps(row, sort_keys=True) + "\n")
-        prov_fh.flush()
-        collected += 1
-        if i % 25 == 0 or i == len(candidates):
-            print(
-                f"  [{i}/{len(candidates)}] collected={collected} "
-                f"skipped={skipped} failed={failed}",
-                file=sys.stderr,
-            )
+        # A repo-root license covers every skill in the repo, and the corpus tree
+        # is not a git checkout, so the scanner cannot find it. Record it here;
+        # `corpus scan` uses it to avoid the LICENSE_MISSING false positive
+        # measured on real data.
+        root_files = {
+            e["path"].lower()
+            for e in tree.get("tree", [])
+            if e.get("type") == "blob" and "/" not in e["path"]
+        }
+        root_license = any(
+            n.startswith("license") or n.startswith("copying") or n == "notice"
+            for n in root_files
+        )
+
+        for skill_dir in by_repo[repo]:
+            prefix = f"{skill_dir}/" if skill_dir else ""
+            members = [
+                (p, e)
+                for p, e in entries.items()
+                if p.startswith(prefix) and is_included(p)
+            ]
+            total = sum(e.get("size", 0) for _, e in members)
+            if not members:
+                with lock:
+                    stats["failed"] += 1
+                continue
+            if len(members) > MAX_SKILL_FILES or total > MAX_SKILL_BYTES:
+                with lock:
+                    stats["skipped"] += 1
+                print(
+                    f"  {repo}/{skill_dir}: skipped "
+                    f"({len(members)} files, {total} bytes)",
+                    file=sys.stderr,
+                )
+                continue
+
+            dest = (tree_root / repo / skill_dir).resolve()
+            if not str(dest).startswith(str(tree_root.resolve())):
+                with lock:
+                    stats["failed"] += 1
+                continue
+
+            paths = [p for p, _ in members]
+            try:
+                with concurrent.futures.ThreadPoolExecutor(
+                    max_workers=RAW_WORKERS
+                ) as pool:
+                    fetched = list(
+                        pool.map(
+                            lambda p: (p, client.get_raw(owner, name, head, p)), paths
+                        )
+                    )
+                if any(body is None for _, body in fetched):
+                    with lock:
+                        stats["failed"] += 1
+                    continue
+                for path, body in fetched:
+                    entry = entries[path]
+                    rel = path[len(prefix):] if prefix else path
+                    target = dest / rel
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(body)
+                    if entry.get("mode") == "100755":
+                        target.chmod(0o755)
+            except Exception as exc:
+                # A hostile or unusual path must not abort a 1000-skill batch.
+                with lock:
+                    stats["failed"] += 1
+                print(f"  {repo}/{skill_dir}: fetch/write error {exc}", file=sys.stderr)
+                continue
+
+            row = {
+                "path": str((tree_root / repo / skill_dir).relative_to(tree_root)),
+                "repo": repo,
+                "commit": head,
+                "skill_dir": skill_dir,
+                "files": len(members),
+                "bytes": total,
+                "root_license": root_license,
+            }
+            with lock:
+                provenance.append(row)
+                done[row["path"]] = row
+                prov_fh.write(json.dumps(row, sort_keys=True) + "\n")
+                prov_fh.flush()
+                stats["collected"] += 1
+
+        with lock:
+            stats["repos_done"] += 1
+            if stats["repos_done"] % 25 == 0 or stats["repos_done"] == len(repos):
+                print(
+                    f"  [{stats['repos_done']}/{len(repos)} repos] "
+                    f"collected={stats['collected']} "
+                    f"skipped={stats['skipped']} failed={stats['failed']}",
+                    file=sys.stderr,
+                )
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
+        list(pool.map(process_repo, repos))
 
     prov_fh.close()
+    collected = stats["collected"]
+    skipped = stats["skipped"]
+    failed = stats["failed"]
     # Rewrite sorted and deduplicated (last wins), so the committed sidecar is
     # stable even after several resumed runs.
     by_path = {row["path"]: row for row in provenance}
