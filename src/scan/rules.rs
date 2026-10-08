@@ -522,7 +522,11 @@ static TABLE: &[RuleSpec] = &[
     // ── Prompt injection ───────────────────────────────────────────────────
     RuleSpec {
         id: "PI_INJECTION_OVERRIDE",
-        severity: SevHigh,
+        // GOLD-v5: 0/8 precision on a random corpus sample. A false Critical
+        // or High is worse than no finding, so the phrase heuristics are
+        // informational: they force a human to read the line, they do not
+        // block a gate. See research/GOLD.md.
+        severity: Info,
         confidence: High,
         docs_confidence: Some(Medium),
         kinds: ANY,
@@ -538,7 +542,7 @@ static TABLE: &[RuleSpec] = &[
     },
     RuleSpec {
         id: "PI_SYSTEM_IMPERSATION",
-        severity: SevHigh,
+        severity: Info,
         confidence: High,
         docs_confidence: Some(Medium),
         kinds: ANY,
@@ -555,7 +559,7 @@ static TABLE: &[RuleSpec] = &[
     },
     RuleSpec {
         id: "PI_CONCEALMENT",
-        severity: SevHigh,
+        severity: Info,
         confidence: High,
         docs_confidence: Some(Medium),
         kinds: ANY,
@@ -575,7 +579,7 @@ static TABLE: &[RuleSpec] = &[
     },
     RuleSpec {
         id: "PI_EXFIL_INSTRUCTION",
-        severity: Critical,
+        severity: Info,
         confidence: High,
         docs_confidence: Some(Medium),
         kinds: ANY,
@@ -984,7 +988,7 @@ pub fn rule_count() -> usize {
 /// rev 9: quoted or documentation-shaped lines are not `PI_*` instructions.
 /// rev 10: nor is a line that *discusses* the attack (security training
 /// material), and `score()` no longer counts stale `tp`/`fp` labels.
-pub const SCAN_LOGIC_REVISION: u32 = 13;
+pub const SCAN_LOGIC_REVISION: u32 = 14;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

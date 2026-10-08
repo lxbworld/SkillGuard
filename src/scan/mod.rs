@@ -766,6 +766,11 @@ fn is_documentation_or_quoted(line: &str, matched: &str) -> bool {
         return false;
     };
     let before = &line[..pos];
+    // A triple-quoted docstring breaks quote parity (four quotes before the
+    // match look even), so check for it directly.
+    if before.contains("\"\"\"") || before.contains("'''") {
+        return true;
+    }
     // An odd number of quotes before the match means it is inside a quotation.
     ['"', '\'', '`']
         .iter()
@@ -795,6 +800,7 @@ fn looks_like_test(line: &str) -> bool {
         "unittest",
         "pytest",
         ".test(",
+        "input_text",
     ]
     .iter()
     .any(|t| line.contains(t))

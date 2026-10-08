@@ -286,9 +286,12 @@ These are invariants, not aspirations. Most are enforced by tests in
 5. **Single Rust binary.** No Node, no Python, no runtime dependencies.
 
 > **Detection is not judgement, and a clean scan is not a clean skill.**
-> Prompt-injection detection is a set of heuristics with an unmeasured miss rate;
-> every report says so. SkillGuard's job is to force a human to read the
-> evidence, not to adjudicate intent.
+> Prompt-injection detection is a set of phrase heuristics, and on a random
+> corpus sample they measure **0% precision** — the ecosystem is full of
+> security *training* material that quotes the phrases in order to teach them.
+> Those rules are therefore reported at `Info`: they force a human to read the
+> line, they do not block a gate. SkillGuard's job is to force a human to read
+> the evidence, not to adjudicate intent.
 
 ## Determinism and the lockfile
 

@@ -139,9 +139,13 @@ fi
 > Where they did not: the **prompt-injection rules are 0%** —
 > `PI_CONCEALMENT`, `PI_EXFIL_INSTRUCTION` and `PI_INJECTION_OVERRIDE` are 0/8
 > each. Every sampled finding was a false positive, because the corpus is full of
-> security *training* material that discusses injection. `PERSIST_HOOK` (12.5%),
-> `PERSIST_SHELL_RC` (0%) and `DEP_CUSTOM_REGISTRY` (12.5%) are next. Treat every
-> prevalence figure below as an upper bound.
+> security *training* material that discusses injection. Three suppression passes
+> (quoted phrases, documentation structure, meta-discussion) cut their prevalence
+> by half but did not lift precision, so **they are now `Info`**: a false
+> `Critical` is worse than no finding. They still force a human to read the line;
+> they no longer block a gate. `PERSIST_HOOK` (12.5%), `PERSIST_SHELL_RC` (0%)
+> and `DEP_CUSTOM_REGISTRY` (12.5%) are next. Treat every prevalence figure below
+> as an upper bound.
 >
 > (GOLD-v1..v3 are kept in `research/gold/`. Versions are not directly
 > comparable: both the raters and the rule set change.)

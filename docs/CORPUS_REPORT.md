@@ -40,9 +40,13 @@
 > Where they did not: the **prompt-injection rules are 0%** —
 > `PI_CONCEALMENT`, `PI_EXFIL_INSTRUCTION` and `PI_INJECTION_OVERRIDE` are 0/8
 > each. Every sampled finding was a false positive, because the corpus is full of
-> security *training* material that discusses injection. `PERSIST_HOOK` (12.5%),
-> `PERSIST_SHELL_RC` (0%) and `DEP_CUSTOM_REGISTRY` (12.5%) are next. Treat every
-> prevalence figure below as an upper bound.
+> security *training* material that discusses injection. Three suppression passes
+> (quoted phrases, documentation structure, meta-discussion) cut their prevalence
+> by half but did not lift precision, so **they are now `Info`**: a false
+> `Critical` is worse than no finding. They still force a human to read the line;
+> they no longer block a gate. `PERSIST_HOOK` (12.5%), `PERSIST_SHELL_RC` (0%)
+> and `DEP_CUSTOM_REGISTRY` (12.5%) are next. Treat every prevalence figure below
+> as an upper bound.
 >
 > (GOLD-v1..v3 are kept in `research/gold/`. Versions are not directly
 > comparable: both the raters and the rule set change.)
@@ -221,7 +225,7 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | `LICENSE_MISSING` | 1153 | 5442 | 21.2% |
 | `SHELL_EXEC` | 423 | 5442 | 7.8% |
 | `NET_DOMAIN_LITERAL` | 411 | 5442 | 7.6% |
-| `PI_DESCRIPTION_MISMATCH` | 291 | 5442 | 5.3% |
+| `PI_DESCRIPTION_MISMATCH` | 264 | 5442 | 4.9% |
 | `NET_FETCH_CALL` | 169 | 5442 | 3.1% |
 | `FS_RECURSIVE_WALK` | 148 | 5442 | 2.7% |
 | `FS_PATH_ESCAPE` | 141 | 5442 | 2.6% |
@@ -282,36 +286,36 @@ Every headline figure must be reported per stratum (protocol §4.2); without str
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| L3 | 5442 | 0 | `LICENSE_MISSING` 21.2%, `SHELL_EXEC` 7.8%, `NET_DOMAIN_LITERAL` 7.6%, `PI_DESCRIPTION_MISMATCH` 5.3%, `NET_FETCH_CALL` 3.1% |
+| L3 | 5442 | 0 | `LICENSE_MISSING` 21.2%, `SHELL_EXEC` 7.8%, `NET_DOMAIN_LITERAL` 7.6%, `PI_DESCRIPTION_MISMATCH` 4.9%, `NET_FETCH_CALL` 3.1% |
 ### by `size`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| 32k_128k | 720 | 0 | `SHELL_EXEC` 20.8%, `NET_DOMAIN_LITERAL` 20.4%, `LICENSE_MISSING` 14.7%, `PI_DESCRIPTION_MISMATCH` 13.8%, `FS_PATH_ESCAPE` 8.9% |
-| 8k_32k | 1537 | 0 | `LICENSE_MISSING` 24.8%, `NET_DOMAIN_LITERAL` 6.1%, `SHELL_EXEC` 5.8%, `PI_DESCRIPTION_MISMATCH` 4.9%, `FS_PATH_ESCAPE` 2.7% |
-| gt_128k | 306 | 0 | `SHELL_EXEC` 54.2%, `NET_DOMAIN_LITERAL` 47.7%, `PI_DESCRIPTION_MISMATCH` 31.4%, `FS_RECURSIVE_WALK` 26.5%, `NET_FETCH_CALL` 21.6% |
-| lt_8k | 2879 | 0 | `LICENSE_MISSING` 21.9%, `PARSE_FAILED` 1.0%, `NET_DOMAIN_LITERAL` 0.9%, `PI_DESCRIPTION_MISMATCH` 0.7%, `SHELL_EXEC` 0.6% |
+| 32k_128k | 720 | 0 | `SHELL_EXEC` 20.8%, `NET_DOMAIN_LITERAL` 20.4%, `LICENSE_MISSING` 14.7%, `PI_DESCRIPTION_MISMATCH` 12.8%, `FS_PATH_ESCAPE` 8.9% |
+| 8k_32k | 1537 | 0 | `LICENSE_MISSING` 24.8%, `NET_DOMAIN_LITERAL` 6.1%, `SHELL_EXEC` 5.8%, `PI_DESCRIPTION_MISMATCH` 4.5%, `FS_PATH_ESCAPE` 2.7% |
+| gt_128k | 306 | 0 | `SHELL_EXEC` 54.2%, `NET_DOMAIN_LITERAL` 47.7%, `PI_DESCRIPTION_MISMATCH` 30.7%, `FS_RECURSIVE_WALK` 26.5%, `NET_FETCH_CALL` 21.6% |
+| lt_8k | 2879 | 0 | `LICENSE_MISSING` 21.9%, `PARSE_FAILED` 1.0%, `NET_DOMAIN_LITERAL` 0.9%, `SHELL_EXEC` 0.6%, `MISMATCH_OVER_DECLARED` 0.5% |
 ### by `scripts`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| js | 305 | 0 | `NET_DOMAIN_LITERAL` 50.5%, `FS_PATH_ESCAPE` 33.4%, `SHELL_EXEC` 32.5%, `PI_DESCRIPTION_MISMATCH` 30.2%, `NET_FETCH_CALL` 23.6% |
-| none | 4498 | 0 | `LICENSE_MISSING` 22.6%, `PARSE_FAILED` 1.2%, `PI_DESCRIPTION_MISMATCH` 1.0%, `DEP_CUSTOM_REGISTRY` 0.4%, `OBFUSC_TRACKING_PIXEL` 0.4% |
+| js | 305 | 0 | `NET_DOMAIN_LITERAL` 50.5%, `FS_PATH_ESCAPE` 33.4%, `SHELL_EXEC` 32.5%, `PI_DESCRIPTION_MISMATCH` 29.8%, `NET_FETCH_CALL` 23.6% |
+| none | 4498 | 0 | `LICENSE_MISSING` 22.6%, `PARSE_FAILED` 1.2%, `PI_DESCRIPTION_MISMATCH` 0.5%, `DEP_CUSTOM_REGISTRY` 0.4%, `OBFUSC_TRACKING_PIXEL` 0.4% |
 | other | 5 | 0 | `PI_DESCRIPTION_MISMATCH` 60.0%, `NET_DOMAIN_LITERAL` 40.0%, `SECRET_GENERIC_ASSIGN` 40.0%, `FS_HOME_ACCESS` 20.0%, `MISMATCH_UNDER_DECLARED` 20.0% |
-| python | 424 | 0 | `SHELL_EXEC` 51.7%, `NET_DOMAIN_LITERAL` 42.5%, `FS_RECURSIVE_WALK` 22.4%, `PI_DESCRIPTION_MISMATCH` 19.8%, `LICENSE_MISSING` 18.2% |
-| shell | 210 | 0 | `SHELL_EXEC` 50.0%, `NET_DOMAIN_LITERAL` 35.2%, `PI_DESCRIPTION_MISMATCH` 31.9%, `NET_HTTP_CLIENT` 26.7%, `FS_RECURSIVE_WALK` 23.3% |
+| python | 424 | 0 | `SHELL_EXEC` 51.7%, `NET_DOMAIN_LITERAL` 42.5%, `FS_RECURSIVE_WALK` 22.4%, `PI_DESCRIPTION_MISMATCH` 19.3%, `LICENSE_MISSING` 18.2% |
+| shell | 210 | 0 | `SHELL_EXEC` 50.0%, `NET_DOMAIN_LITERAL` 35.2%, `PI_DESCRIPTION_MISMATCH` 31.4%, `NET_HTTP_CLIENT` 26.7%, `FS_RECURSIVE_WALK` 23.3% |
 ### by `declared`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| none | 5056 | 0 | `LICENSE_MISSING` 21.3%, `SHELL_EXEC` 7.4%, `NET_DOMAIN_LITERAL` 7.4%, `PI_DESCRIPTION_MISMATCH` 4.8%, `NET_FETCH_CALL` 3.0% |
-| present | 386 | 0 | `MISMATCH_UNDER_DECLARED` 21.2%, `LICENSE_MISSING` 19.4%, `PI_DESCRIPTION_MISMATCH` 12.2%, `SHELL_EXEC` 12.2%, `NET_DOMAIN_LITERAL` 10.1% |
+| none | 5056 | 0 | `LICENSE_MISSING` 21.3%, `SHELL_EXEC` 7.4%, `NET_DOMAIN_LITERAL` 7.4%, `PI_DESCRIPTION_MISMATCH` 4.4%, `NET_FETCH_CALL` 3.0% |
+| present | 386 | 0 | `MISMATCH_UNDER_DECLARED` 21.2%, `LICENSE_MISSING` 19.4%, `SHELL_EXEC` 12.2%, `PI_DESCRIPTION_MISMATCH` 10.6%, `NET_DOMAIN_LITERAL` 10.1% |
 ### by `license`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| absent | 4797 | 0 | `LICENSE_MISSING` 24.0%, `NET_DOMAIN_LITERAL` 6.1%, `SHELL_EXEC` 5.5%, `PI_DESCRIPTION_MISMATCH` 4.5%, `FS_PATH_ESCAPE` 2.5% |
-| present | 645 | 0 | `SHELL_EXEC` 24.3%, `NET_DOMAIN_LITERAL` 18.1%, `PI_DESCRIPTION_MISMATCH` 11.5%, `FS_RECURSIVE_WALK` 10.9%, `FS_HOME_ACCESS` 8.7% |
+| absent | 4797 | 0 | `LICENSE_MISSING` 24.0%, `NET_DOMAIN_LITERAL` 6.1%, `SHELL_EXEC` 5.5%, `PI_DESCRIPTION_MISMATCH` 4.1%, `FS_PATH_ESCAPE` 2.5% |
+| present | 645 | 0 | `SHELL_EXEC` 24.3%, `NET_DOMAIN_LITERAL` 18.1%, `FS_RECURSIVE_WALK` 10.9%, `PI_DESCRIPTION_MISMATCH` 10.2%, `FS_HOME_ACCESS` 8.7% |
 
 ## Precision and recall (GOLD)
 
