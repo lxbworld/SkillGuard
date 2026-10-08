@@ -201,3 +201,43 @@ comment suppression. `NET_DOMAIN_LITERAL` still matches file extensions that
 look like TLDs (`.sh`, `.app`, `.info`). `OBFUSC_HOMOGLYPH` still fires on
 legitimate non-Latin prose. These need a *line-kind model* (comment / string /
 code / prose) and patterns that require an action, and they are GOLD-v3 work.
+
+---
+
+## GOLD-v3 (constructed)
+
+A third round of fixes followed the same pattern — make the rule require the
+claimed action rather than a mention — and is measured as GOLD-v3.
+
+| | |
+|---|---|
+| items | 162 line-level findings |
+| annotators | two independent sessions of `opencode-go/deepseek-v4.1-flash`, blind to each other |
+| agreement | 154/162 (95.1%), **Cohen's κ 0.898** |
+| disagreements | 8, adjudicated by the annotators' shared instruction |
+
+No human annotated, and the rule author did not annotate.
+
+### What changed
+
+| rule | GOLD-v2 | GOLD-v3 | note |
+|---|---|---|---|
+| `NET_DOMAIN_LITERAL` | 12.5% | **50.0%** | ambiguous TLDs need URL context; `comet-state.sh`/`logger.info` are filenames |
+| `NET_FETCH_CALL` | 87.5% | 87.5% | holds |
+| `NET_DYNAMIC_URL` | 100% | 100% | holds |
+| `PERSIST_AGENT_CONFIG` | 0% | 20.0% | needs a write |
+| `FS_RECURSIVE_WALK` | 100% | 87.5% | |
+| `DL_BASE64_BLOB` | 37.5% | 12.5% | the credential-context suppression did not help the sampled items |
+
+Prevalence fell with each fix (`NET_DOMAIN_LITERAL` 6.3% → 4.7%,
+`PERSIST_AGENT_CONFIG` 1.4% → 0.4%, `OBFUSC_HOMOGLYPH` off the table), which is
+what removing false positives should do.
+
+### What is still wrong
+
+Four rules sit at 25% or below and are the remaining work: `DL_BASE64_BLOB`,
+`FS_ABSOLUTE_PATH`, `FS_HOME_ACCESS`, `FS_SENSITIVE_PATH`. All four still match a
+substring (`/usr/`, `~/`, `.env`, a long base64 run) without requiring the
+claimed action. `PI_*` rules have not been measured at all against a skill-level
+sample — a line-level finding sample cannot measure "the description does not
+match the behaviour".

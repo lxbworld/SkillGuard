@@ -160,6 +160,31 @@ impl NormLine {
     }
 }
 
+/// True when a lookalike character sits *inside* a word, next to an ASCII
+/// letter or digit.
+///
+/// That is the actual homoglyph attack (`сurl` with a Cyrillic es, `pаypal` with
+/// a Cyrillic a). Legitimate Cyrillic, Greek or CJK prose has runs of one
+/// script, and mojibake has no ASCII neighbours; neither is an attack. GOLD-v2:
+/// `OBFUSC_HOMOGLYPH` fired on Russian prose and on a URL containing a Greek
+/// beta, because the old test only asked whether the line mentioned a command.
+pub fn has_mixed_script_word(line: &str) -> bool {
+    let chars: Vec<char> = line.chars().collect();
+    for (i, c) in chars.iter().enumerate() {
+        if !HOMOGLYPHS.iter().any(|(h, _)| h == c) {
+            continue;
+        }
+        let prev = i.checked_sub(1).map(|j| chars[j]);
+        let next = chars.get(i + 1).copied();
+        if prev.is_some_and(|p| p.is_ascii_alphanumeric())
+            || next.is_some_and(|n| n.is_ascii_alphanumeric())
+        {
+            return true;
+        }
+    }
+    false
+}
+
 /// Result of normalizing a whole file.
 #[derive(Debug, Clone, Default)]
 pub struct Normalized {
@@ -375,6 +400,16 @@ pub fn looks_absolute_or_escaping(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mixed_script_detects_a_lookalike_inside_a_word() {
+        // Cyrillic es inside "curl" — the actual homoglyph attack.
+        assert!(has_mixed_script_word("\u{0441}url https://x"));
+        // Legitimate Russian prose: Cyrillic neighbours, no ASCII adjacency.
+        assert!(!has_mixed_script_word("зелёный список"));
+        // A Greek beta in a URL is not a command (GOLD-v2 false positive).
+        assert!(!has_mixed_script_word("Index: https://x/ (β-version)"));
+    }
 
     #[test]
     fn strips_zero_width() {

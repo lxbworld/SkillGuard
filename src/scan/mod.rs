@@ -589,12 +589,28 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
     let m = matched.to_lowercase();
     match rule {
         // An npm/pip/cargo integrity hash is base64, but it is not a payload.
+        // A token, cookie or API key is a credential, and the SECRET_* rules
+        // cover those; this rule is for obfuscated payloads (GOLD-v2).
         "DL_BASE64_BLOB" => {
             line.contains("integrity")
                 || line.contains("sha512-")
                 || line.contains("sha384-")
                 || line.contains("sha256-")
                 || line.contains("sha1-")
+                || [
+                    "token",
+                    "secret",
+                    "password",
+                    "cookie",
+                    "bearer",
+                    "api_key",
+                    "apikey",
+                    "credential",
+                    "authorization",
+                    "auth",
+                ]
+                .iter()
+                .any(|k| line.contains(k))
         }
         // Benign device files are not sensitive system paths.
         "FS_ABSOLUTE_PATH" => {
@@ -609,9 +625,19 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
         }
         "NET_DOMAIN_LITERAL" => {
             let trimmed = raw_line.trim_start();
-            // XML namespaces (`xmlns="http://schemas..."`) are identifiers, not
-            // network calls, and a URL in a comment is documentation.
-            line.contains("xmlns")
+            // `comet-state.sh`, `Traktor Pro 4.app`, `logger.info` and `h.to`
+            // are filenames and identifiers, not hosts. TLDs that collide with
+            // file extensions or English words need URL context; `com`/`net`/
+            // `org` do not (GOLD-v2).
+            const AMBIGUOUS: &[&str] = &[
+                ".sh", ".app", ".info", ".dev", ".ai", ".io", ".co", ".me", ".so", ".cc", ".to",
+                ".tv", ".gg", ".live", ".site", ".online", ".cloud",
+            ];
+            let url_context = line.contains("://") || line.contains("www.") || line.contains('@');
+            (AMBIGUOUS.iter().any(|t| m.ends_with(t)) && !url_context)
+                // XML namespaces (`xmlns="http://schemas..."`) are identifiers,
+                // not network calls, and a URL in a comment is documentation.
+                || line.contains("xmlns")
                 || m.contains("w3.org")
                 || m.contains("openxmlformats.org")
                 || m.contains("schemas.")
@@ -648,8 +674,67 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
                 || line.contains("circleci.com")
                 || (line.contains("github.com/") && line.contains("/badge"))
         }
+        // "The skill writes agent configuration" needs a write. A line that only
+        // names the path — a helper, a read, a commented example — is not a
+        // write, and GOLD-v2 found every sampled PERSIST_* finding was one.
+        "PERSIST_AGENT_CONFIG" | "PERSIST_SHELL_RC" => !writes_to(&line, &m),
+        // `--index-url https://pypi.org/simple` is the default registry, not a
+        // custom one.
+        "DEP_CUSTOM_REGISTRY" => {
+            line.contains("pypi.org/simple")
+                || line.contains("registry.npmjs.org")
+                || line.contains("registry.yarnpkg.com")
+                || line.contains("crates.io")
+        }
         _ => false,
     }
+}
+
+/// Does the line write to `matched`?
+///
+/// A redirect or `tee`/`cp` puts the write token before the path; a `write()`
+/// call or `open(path, 'w')` puts it after. Either counts; an assignment or a
+/// read does not.
+fn writes_to(line: &str, matched: &str) -> bool {
+    let Some(pos) = line.find(matched) else {
+        return false;
+    };
+    let (before, after) = line.split_at(pos);
+    let token_before = [
+        ">",
+        "tee ",
+        "cp ",
+        "mv ",
+        "ln -s",
+        "install ",
+        "echo ",
+        "append",
+        "write_text",
+        "writefilesync",
+        ".write(",
+        "writefile",
+        "save(",
+        "set-content",
+        "add-content",
+        "out-file",
+    ]
+    .iter()
+    .any(|t| before.contains(t));
+    let writer_call = [
+        ".write(",
+        "write_text(",
+        "writefilesync(",
+        "writelines(",
+        "save(",
+        "dump(",
+    ]
+    .iter()
+    .any(|t| line.contains(t));
+    let open_for_write = line.contains("open(")
+        && ["'w'", "\"w\"", "'a'", "\"a\""]
+            .iter()
+            .any(|m| after.contains(m));
+    token_before || writer_call || open_for_write
 }
 
 /// Whether the (already homoglyph-folded) text contains a command or a URL, so
@@ -709,7 +794,9 @@ fn apply_obfuscation_flags(
         // Lookalike characters are only an attack when they are used to spell a
         // command or a URL. Firing on any non-ASCII text flagged legitimate
         // Bulgarian, Russian and Chinese prose (616 findings, almost all false).
-        let homoglyph_is_command = f.had_homoglyph && mentions_command_or_url(&line.norm);
+        let homoglyph_is_command = f.had_homoglyph
+            && text::has_mixed_script_word(&line.raw)
+            && mentions_command_or_url(&line.norm);
         let triples: [(bool, &str, &str, Severity); 3] = [
             (
                 f.had_zero_width,
@@ -1412,10 +1499,10 @@ mod tests {
         let h = hits(&scan_skill(&d));
         assert!(!h.contains("NET_HTTP_CLIENT"), "comment fired: {h:?}");
         assert!(!h.contains("FS_HOME_ACCESS"), "comment fired: {h:?}");
-        // The real assignment still fires.
+        // The real write still fires.
         fs::write(
-            d.join("scripts/b.py"),
-            "REG = os.path.expanduser('~/.claude/worktree-registry.json')\n",
+            d.join("scripts/b.sh"),
+            "echo '{}' > ~/.claude/settings.json\n",
         )
         .unwrap_or_default();
         assert!(hits(&scan_skill(&d)).contains("PERSIST_AGENT_CONFIG"));
@@ -1448,6 +1535,49 @@ mod tests {
         assert!(!hits(&scan_skill(&d)).contains("OBFUSC_ZERO_WIDTH"));
         fs::write(d.join("scripts/b.py"), "ig\u{200b}nore\n").unwrap_or_default();
         assert!(hits(&scan_skill(&d)).contains("OBFUSC_ZERO_WIDTH"));
+    }
+
+    /// GOLD-v2: `NET_DOMAIN_LITERAL` matched filenames whose extension looks
+    /// like a TLD, and `PERSIST_AGENT_CONFIG` fired on a bare path mention.
+    #[test]
+    fn a_filename_is_not_a_host_and_a_mention_is_not_a_write() {
+        let d = tmp("tld-and-write");
+        fs::write(d.join("SKILL.md"), "---\nname: x\ndescription: f\n---\n").unwrap_or_default();
+        fs::create_dir_all(d.join("scripts")).unwrap_or_default();
+        fs::write(
+            d.join("scripts/a.sh"),
+            "STATE_SH=\"$SCRIPT_DIR/comet-state.sh\"\nCFG=~/.claude/settings.json\n",
+        )
+        .unwrap_or_default();
+        let h = hits(&scan_skill(&d));
+        assert!(!h.contains("NET_DOMAIN_LITERAL"), "filename fired: {h:?}");
+        assert!(!h.contains("PERSIST_AGENT_CONFIG"), "mention fired: {h:?}");
+        // A real host and a real write still fire.
+        fs::write(
+            d.join("scripts/b.sh"),
+            "curl https://example.com/x\necho '{}' > ~/.claude/settings.json\n",
+        )
+        .unwrap_or_default();
+        let h = hits(&scan_skill(&d));
+        assert!(h.contains("NET_DOMAIN_LITERAL"), "{h:?}");
+        assert!(h.contains("PERSIST_AGENT_CONFIG"), "{h:?}");
+    }
+
+    /// GOLD-v2: `OBFUSC_HOMOGLYPH` fired on Russian prose and on a URL that
+    /// contained a Greek beta. Only a lookalike *inside a word* is an attack.
+    #[test]
+    fn a_lookalike_outside_a_word_is_not_obfuscation() {
+        let d = tmp("homoglyph-mixed");
+        fs::write(d.join("SKILL.md"), "---\nname: x\ndescription: f\n---\n").unwrap_or_default();
+        fs::create_dir_all(d.join("scripts")).unwrap_or_default();
+        fs::write(
+            d.join("scripts/a.md"),
+            "Index: https://green-api.com/en/docs/ (β-version in docs)\n",
+        )
+        .unwrap_or_default();
+        assert!(!hits(&scan_skill(&d)).contains("OBFUSC_HOMOGLYPH"));
+        fs::write(d.join("scripts/b.sh"), "\u{0441}url https://x\n").unwrap_or_default();
+        assert!(hits(&scan_skill(&d)).contains("OBFUSC_HOMOGLYPH"));
     }
 
     #[test]

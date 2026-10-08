@@ -88,7 +88,7 @@ target/release/skillguard corpus scan \
   --out "$FINDINGS" --cache research/.corpus-cache.json
 
 echo "== 6/6 report + reproduce =="
-GOLD="research/gold/GOLD-v2.jsonl"
+GOLD="research/gold/GOLD-v3.jsonl"
 if [ -f "$GOLD" ]; then
   target/release/skillguard corpus report --findings "$FINDINGS" --gold "$GOLD" --out /tmp/sg-pilot-body.md
 else
@@ -125,27 +125,28 @@ fi
 > flagged every non-English `PI_DESCRIPTION_MISMATCH`, and unstemmed verbs
 > (`execution` did not match `execute`). Each fix is a regression test.
 >
-> ## GOLD-v2
+> ## GOLD-v3
 >
-> The precision column below is measured against `research/gold/GOLD-v2.jsonl`:
-> 183 line-level findings (8 per rule, hash-ordered), each judged `tp`/`fp` by
-> **two independent annotator sessions** that saw only the matched line, its
-> context and the rule's own claim. Both are the same model
-> (`opencode-go/deepseek-v4.1-flash`), run twice blind to each other. Cohen's
-> kappa is **0.833** (gate 0.75); the 14 disagreements were adjudicated by the
-> instruction both annotators were given — the matched line must *exhibit* the
-> behaviour, not merely mention it. **No human annotated**, and unlike GOLD-v1
-> the rule author did not annotate either.
+> The precision column below is measured against `research/gold/GOLD-v3.jsonl`:
+> 162 line-level findings, judged `tp`/`fp` by **two independent sessions** of
+> `opencode-go/deepseek-v4.1-flash` (no human, and not the rule author). Cohen's
+> kappa is **0.898**; the 8 disagreements were adjudicated by the instruction
+> both annotators were given.
 >
-> The result is mixed. `NET_FETCH_CALL` rose to 87.5%: it no longer counts
-> `import urllib.request` as a request. `FS_HOME_ACCESS` rose to 50%. But most
-> rules are still far below G4, and the dominant cause is unchanged: the
-> patterns match **mentions** — comments, docstrings, string literals and test
-> fixtures — rather than actions. Treat every prevalence figure below as an
+> This version follows a round of fixes aimed at the "mention vs action" problem:
+> `NET_DOMAIN_LITERAL` needs URL context for ambiguous TLDs, so `comet-state.sh`
+> and `logger.info` are no longer hosts (`12.5% -> 50.0%`); `PERSIST_AGENT_CONFIG`
+> and `PERSIST_SHELL_RC` need a write; `OBFUSC_HOMOGLYPH` needs a lookalike
+> *inside a word*; `DL_REMOTE_INSTALL` no longer counts `--index-url`.
+> `NET_FETCH_CALL` holds at 87.5%.
+>
+> Still short of G4: `DL_BASE64_BLOB`, `FS_ABSOLUTE_PATH`, `FS_HOME_ACCESS` and
+> `FS_SENSITIVE_PATH` are at 25% or below, because they still match substrings
+> without requiring the claimed action. Treat every prevalence figure below as an
 > upper bound.
 >
-> (GOLD-v1, measured by one model plus the author, is kept in `research/gold/`.
-> The two sets are not directly comparable: the raters differ.)
+> (GOLD-v1 and GOLD-v2 are kept in `research/gold/`. The versions are not
+> directly comparable: both the raters and the rule set change.)
 >
 > The remaining `PI_*` heuristics are **unmeasured upper bounds**. A
 > single-annotator read-through is not `GOLD` (research/GOLD.md) and the report

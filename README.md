@@ -329,7 +329,7 @@ The first large-scale empirical measurement of this ecosystem is the next
 milestone — see the [corpus study](docs/PHASE0_CORPUS_STUDY.md). A pilot has
 already run end to end on 1372 real GitHub skills: **8.2% declare permissions,
 91.8% declare nothing**, which rejects the H6 null at that sample. A precision
-pass (`GOLD-v2`, 183 findings, Cohen's κ 0.833, no human annotator) found that
+pass (`GOLD-v3`, 162 findings, Cohen's κ 0.898, no human annotator) found that
 **most heuristics over-fire on comments, documentation and string literals**, so
 the prevalence figures are upper bounds and the precision column is the real
 signal. The full N=100,000 stratified study is waiting on registry collection
@@ -344,8 +344,8 @@ Action, a pre-commit hook and prebuilt binaries for five platforms.
 
 The Phase 0 corpus pipeline (`index` / `scan` / `stats` / `report` /
 `reproduce`, plus `agreement` for Cohen's κ and GOLD precision/recall scoring)
-is implemented and offline. `GOLD-v2` is a reproducible precision pass (183
-findings, κ 0.833, two independent model annotators — no human, and not the rule
+is implemented and offline. `GOLD-v3` is a reproducible precision pass (162
+findings, κ 0.898, two independent model annotators — no human, and not the rule
 author); the protocol's two-annotator human GOLD and the full study are still
 open.
 

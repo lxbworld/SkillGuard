@@ -447,7 +447,8 @@ static TABLE: &[RuleSpec] = &[
         docs_confidence: Some(Medium),
         kinds: ANY,
         patterns: &[
-            r"(?i)\bpip3?\s+install\s+(?:-i\s+|--index-url\s+|--extra-index-url\s+)?https?://",
+            // A direct URL package, not `--index-url` (that is the registry).
+            r"(?i)\bpip3?\s+install\s+https?://",
             r"(?i)\bnpm\s+(?:i|install)\s+(?:--registry[= ])?https?://",
             r"(?i)\bgo\s+(?:get|install)\s+https?://",
             r"(?i)\bpip3?\s+install\s+git\+https?://",
@@ -652,7 +653,7 @@ static TABLE: &[RuleSpec] = &[
         kinds: CODE,
         patterns: &[
             r"\.git/hooks/",
-            r"(?i)\b(?:PreToolUse|PostToolUse|SessionStart|UserPromptSubmit|Notification)\b",
+            r"(?i)\b(?:PreToolUse|PostToolUse|SessionStart|UserPromptSubmit)\b",
             r#"(?i)\[\s*\"hooks\"\s*\]"#,
         ],
         message: "A hook is installed that runs automatically with the user's privileges",
@@ -957,8 +958,10 @@ pub fn rule_count() -> usize {
 /// inflected verbs. rev 3: it also treats a capability declared in
 /// `allowed-tools` as admitted, instead of duplicating declared-vs-observed.
 /// rev 4: behavioural rules skip comment lines; `OBFUSC_ZERO_WIDTH` needs the
-/// zero-width character inside a word.
-pub const SCAN_LOGIC_REVISION: u32 = 4;
+/// zero-width character inside a word. rev 5: `NET_DOMAIN_LITERAL` needs URL
+/// context for ambiguous TLDs; `PERSIST_*` needs a write; `OBFUSC_HOMOGLYPH`
+/// needs a mixed-script word; `DL_BASE64_BLOB`/`DEP_CUSTOM_REGISTRY` tightened.
+pub const SCAN_LOGIC_REVISION: u32 = 5;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};
