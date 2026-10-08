@@ -49,6 +49,13 @@
 > (GOLD-v1..v3 are kept in `research/gold/`. Versions are not directly
 > comparable: both the raters and the rule set change.)
 >
+> A separate **skill-level** pass (`SKILL-v1`, 30 skills, questionnaire, no rule
+> output) measured `PI_DESCRIPTION_MISMATCH` directly: precision **17.6% / 35.3%**
+> across two annotators, and the underlying "is the description understated?"
+> judgment has **κ 0.359** — the annotators cannot agree on it. That rule should
+> not be published with a precision; its 7.4% prevalence is not a result. See
+> `research/GOLD.md`.
+>
 > The remaining `PI_*` heuristics are **unmeasured upper bounds**. A
 > single-annotator read-through is not `GOLD` (research/GOLD.md) and the report
 > publishes no precision until two independent annotators agree (kappa >= 0.75).

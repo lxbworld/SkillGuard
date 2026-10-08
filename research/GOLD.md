@@ -282,3 +282,56 @@ claim makes an unmeasurable rule.
 `PI_*` rules are still unmeasured: a line-level finding sample cannot measure
 "the description does not match the behaviour". That needs a skill-level GOLD —
 annotators read a whole skill and label capabilities, blind to rule output.
+
+---
+
+## SKILL-v1: a skill-level GOLD
+
+A line-level finding sample cannot measure `PI_DESCRIPTION_MISMATCH`: its claim
+is about a whole skill. `research/build_skill_gold.py` samples 30 skills
+deterministically (skills flagged by the `PI_*`/network/shell/persistence rules,
+plus quiet skills), emits the **normalized text with no rule output**, and two
+independent model sessions answer a fixed questionnaire per skill (`network`,
+`secrets`, `shell`, `injection`, `exfiltration`, `obfuscation`, `persistence`,
+`understated`). `research/score_skill_gold.py` scores it.
+
+| category | Cohen's κ |
+|---|---|
+| shell | 1.000 |
+| exfiltration | 1.000 |
+| secrets | 0.870 |
+| network | 0.842 |
+| persistence | 0.429 |
+| **understated** | **0.359** |
+| injection / obfuscation | undefined (every skill labelled the same) |
+| overall | 0.868 |
+
+### `PI_DESCRIPTION_MISMATCH` measured
+
+| | precision | recall |
+|---|---|---|
+| annotator A | 17.6% | 100% |
+| annotator B | 35.3% | 100% |
+| consensus | 16.7% | 100% |
+
+The rule fires on 17 of 30 sampled skills and the annotators agree it is right on
+2–6 of them. And the underlying judgment — "does the skill's description omit or
+understate a capability the code has?" — has **κ 0.359**, well below the 0.75
+gate. So the rule is not merely imprecise: it is measuring a distinction the
+annotators cannot agree on, which is why the line-level GOLD never caught it
+(the line-level claim "the matched line exhibits the behaviour" is easy to
+agree on; the skill-level claim is not).
+
+**Conclusion:** `PI_DESCRIPTION_MISMATCH` should not be published as a rule with
+a precision. Either its claim is narrowed to something annotators agree on, or
+it is dropped to a note. Its 7.4% prevalence is not a result.
+
+### The other rules: precision is fine, this recall is not meaningful
+
+`NET_FETCH_CALL`, `NET_HTTP_CLIENT`, `SHELL_EXEC` and `PERSIST_HOOK` score 100%
+precision (60% for `NET_FETCH_CALL` under annotator B) — when they fire, the
+capability is real. Their category recall (4–33%) is **not** a rule recall: the
+category (`network`) is much broader than the rule (`NET_FETCH_CALL` = library
+HTTP call), so a skill that reaches the network through `curl` counts as a miss
+for a rule that never claimed it. Recall needs a rule-shaped label, not a
+category-shaped one, and is left to GOLD-v5.
