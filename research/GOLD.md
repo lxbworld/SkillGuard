@@ -390,3 +390,28 @@ cannot tell "the skill does this" from "the skill documents this", and unlike
 code rules there is no comment syntax to hide behind. These three are the next
 target, and if they cannot be made precise they should become documentation
 rather than findings.
+
+### The precision table was frozen (fixed)
+
+`corpus report --gold` computed precision from the gold labels alone and never
+checked whether those findings still existed. A rule could go from 8 false
+positives to 4 and the table still read 8. `score()` now takes the set of
+`(source_id, rule)` pairs present in the findings and drops `tp`/`fp` labels
+whose finding is gone; `fn` is always counted, because a miss is supposed to be
+absent. Without this, every precision number in this file would be a snapshot of
+the rule set at labelling time rather than of the code.
+
+### `PI_*` after the training-material suppression
+
+| rule | prevalence before | after | precision |
+|---|---|---|---|
+| `PI_CONCEALMENT` | 50 | 29 | 0/4 |
+| `PI_INJECTION_OVERRIDE` | 24 | 10 | 0/2 |
+| `PI_EXFIL_INSTRUCTION` | 15 | 9 | 0/4 |
+| `PI_SYSTEM_IMPERSATION` | 11 | 6 | 1/4 |
+
+The rules do catch real injections (`tests/fixtures/malicious/download-execute`),
+but on a random corpus sample they remain low-precision tripwires: the corpus is
+mostly security training material that quotes the phrases. If the next GOLD
+round cannot lift them above the gate, they should become documentation rather
+than findings.
