@@ -415,3 +415,46 @@ but on a random corpus sample they remain low-precision tripwires: the corpus is
 mostly security training material that quotes the phrases. If the next GOLD
 round cannot lift them above the gate, they should become documentation rather
 than findings.
+
+---
+
+## SKILL-v2: rule-shaped labels, so recall is measurable
+
+`SKILL-v1` asked broad categories (`network`, `secrets`). That cannot measure a
+rule's recall: the category is wider than the rule, so a skill reaching the
+network through `curl` counted as a miss for `NET_FETCH_CALL`, which never
+claimed it. `SKILL-v2` asks each **rule's own claim** about the same 30 skills.
+
+| | |
+|---|---|
+| items | 30 skills × 10 rules = 300 judgments |
+| annotators | two independent sessions of `opencode-go/deepseek-v4.1-flash` |
+| agreement | 283/300 (94.3%), **Cohen's κ 0.812** |
+
+| rule | precision | recall |
+|---|---|---|
+| `FS_PATH_ESCAPE` | 100% | 100% |
+| `SHELL_EXEC` | 100% | **8.3%** |
+| `FS_HOME_ACCESS` | 100% | 22.2% |
+| `NET_DOMAIN_LITERAL` | 60.0% | 50.0% |
+| `NET_FETCH_CALL` | 25.0% | 50.0% |
+| `FS_ABSOLUTE_PATH` | 25.0% | 50.0% |
+| `FS_RECURSIVE_WALK` | 0% (2 fp) | — |
+| `PERSIST_AGENT_CONFIG` | — | 0% (1 fn) |
+
+### The finding: `SHELL_EXEC` under-detects
+
+On 24 of 30 skills the annotators say an interpreter is invoked; the rule fires
+on 2. That is the largest gap measured so far, and it points the opposite way
+from every previous pass — the problem there was false positives, here it is
+false negatives. The rule's patterns are narrow (specific `subprocess` /
+`os.system` / `child_process` shapes) and miss the ordinary case of a script
+that simply runs `python3 foo.py` or `bash bar.sh`.
+
+### Caveat: the annotators read the whole skill, some rules read only code
+
+`FS_HOME_ACCESS` and `FS_ABSOLUTE_PATH` deliberately set `docs_confidence: None`
+(a `~/` path in a README is not an access). The annotators judged the whole
+skill text, docs included, so those recall figures are understated by
+construction. Recall for code-only rules needs a code-only worksheet; that is
+GOLD-v6 work.
