@@ -974,7 +974,10 @@ pub fn rule_count() -> usize {
 /// rev 7: `PI_DESCRIPTION_MISMATCH` drops its network and shell branches, which
 /// a skill-level GOLD scored 0/6 correct. rev 8: test assertions are not
 /// behaviour; `-P` in an archive needs whitespace; `eval` needs a command.
-pub const SCAN_LOGIC_REVISION: u32 = 8;
+/// rev 9: quoted or documentation-shaped lines are not `PI_*` instructions.
+/// rev 10: nor is a line that *discusses* the attack (security training
+/// material), and `score()` no longer counts stale `tp`/`fp` labels.
+pub const SCAN_LOGIC_REVISION: u32 = 10;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

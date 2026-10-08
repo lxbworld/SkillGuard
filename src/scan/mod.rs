@@ -694,8 +694,69 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
         // reported as a pipe-to-shell and as a destructive command.
         "DL_PIPE_TO_SHELL" | "SHELL_DESTRUCTIVE" | "SHELL_EVAL" | "SHELL_EXEC"
         | "NET_HTTP_CLIENT" | "NET_FETCH_CALL" => looks_like_test(&line),
+        // A quoted phrase, a heading, a list item or a table cell is
+        // documentation *about* the pattern, not an instruction to the agent.
+        // GOLD-v5 put every sampled `PI_*` finding in that bucket: the corpus is
+        // full of security training material that quotes injections in order to
+        // teach them (`"Ignore previous instructions..."`, `- Direct commands
+        // to ignore previous instructions`, `### System Prompt Writing`).
+        "PI_CONCEALMENT"
+        | "PI_EXFIL_INSTRUCTION"
+        | "PI_INJECTION_OVERRIDE"
+        | "PI_SYSTEM_IMPERSATION" => {
+            is_documentation_or_quoted(raw_line, matched) || discusses_the_attack(&line)
+        }
         _ => false,
     }
+}
+
+/// Does the line *discuss* the attack rather than issue it?
+///
+/// The corpus is full of security training material: "Detects prompt injection
+/// backdoors", "Data exfiltration patterns", "attacker server". The rules work on
+/// real injections — `tests/fixtures/malicious/download-execute` trips
+/// `PI_CONCEALMENT` and `PI_INJECTION_OVERRIDE` on plain prose — so the fix is to
+/// skip the meta-discussion, not to weaken the rule.
+fn discusses_the_attack(line: &str) -> bool {
+    [
+        "injection",
+        "jailbreak",
+        "backdoor",
+        "mitigat",
+        "vulnerab",
+        "guardrail",
+        "red team",
+        "redteam",
+        "attacker",
+        "exfiltrat",
+        "threat model",
+    ]
+    .iter()
+    .any(|t| line.contains(t))
+}
+
+/// Is the match inside a quotation, or on a line that is documentation
+/// structure (heading, list item, table row, blockquote, code fence)?
+fn is_documentation_or_quoted(line: &str, matched: &str) -> bool {
+    let t = line.trim_start();
+    let structural = t.starts_with('#')
+        || t.starts_with("- ")
+        || t.starts_with("* ")
+        || t.starts_with("> ")
+        || t.starts_with("| ")
+        || t.starts_with("```")
+        || (t.chars().next().is_some_and(|c| c.is_ascii_digit()) && t.contains(". "));
+    if structural {
+        return true;
+    }
+    let Some(pos) = line.find(matched) else {
+        return false;
+    };
+    let before = &line[..pos];
+    // An odd number of quotes before the match means it is inside a quotation.
+    ['"', '\'', '`']
+        .iter()
+        .any(|q| before.matches(*q).count() % 2 == 1)
 }
 
 /// Does the line look like a test assertion or fixture?

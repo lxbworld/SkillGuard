@@ -568,9 +568,18 @@ pub const G4_RECALL: f64 = 0.60;
 /// Per-rule, never micro-averaged: a micro-average lets a large rule with good
 /// numbers hide a small rule that is wrong, and `docs/PHASE0_CORPUS_STUDY.md`
 /// §4.3 explicitly forbids it.
-pub fn score(gold: &[GoldLabel]) -> Vec<RuleScore> {
+pub fn score(gold: &[GoldLabel], present: &BTreeSet<(String, String)>) -> Vec<RuleScore> {
     let mut by_rule: BTreeMap<&str, RuleScore> = BTreeMap::new();
     for g in gold {
+        // A `tp`/`fp` label is a judgment about a finding that existed when the
+        // label was made. If the rule no longer fires there, the judgment is
+        // stale and must not be counted: otherwise the precision table never
+        // changes after a rule is fixed. `fn` is a finding the rule *should*
+        // have made, so absence is expected and it is always counted.
+        let key = (g.source_id.clone(), g.rule.clone());
+        if matches!(g.verdict.as_str(), "tp" | "fp") && !present.contains(&key) {
+            continue;
+        }
         let entry = by_rule.entry(g.rule.as_str()).or_insert_with(|| RuleScore {
             rule: g.rule.clone(),
             tp: 0,
@@ -1219,7 +1228,11 @@ mod tests {
             g("A", "fn"),
             g("B", "tp"),
         ];
-        let scores = score(&gold);
+        let present: BTreeSet<(String, String)> = gold
+            .iter()
+            .map(|g| (g.source_id.clone(), g.rule.clone()))
+            .collect();
+        let scores = score(&gold, &present);
         let a = scores.iter().find(|s| s.rule == "A").expect("A");
         assert!((a.precision.unwrap() - 0.75).abs() < 1e-9);
         assert!((a.recall.unwrap() - 0.75).abs() < 1e-9);
@@ -1227,9 +1240,27 @@ mod tests {
         assert_eq!(b.precision, Some(1.0));
         assert_eq!(b.recall, Some(1.0));
         // A rule with no predictions has no precision, not a perfect one.
-        let empty = score(&[g("C", "fn")]);
+        let empty = score(&[g("C", "fn")], &BTreeSet::new());
         assert_eq!(empty[0].precision, None);
         assert_eq!(empty[0].recall, Some(0.0));
+    }
+
+    #[test]
+    fn a_label_for_a_finding_that_no_longer_exists_is_not_counted() {
+        let g = |rule: &str, verdict: &str| GoldLabel {
+            source_id: "s".to_owned(),
+            rule: rule.to_owned(),
+            verdict: verdict.to_owned(),
+        };
+        // Two fp labels, but the rule no longer fires on either: after a fix the
+        // precision table must be able to change. `fn` is always counted.
+        let gold = vec![g("A", "fp"), g("A", "fp"), g("A", "fn")];
+        let present: BTreeSet<(String, String)> = BTreeSet::new();
+        let scores = score(&gold, &present);
+        let a = scores.iter().find(|s| s.rule == "A").expect("A");
+        assert_eq!((a.tp, a.fp), (0, 0));
+        assert_eq!(a.precision, None, "no live predictions, no precision");
+        assert_eq!(a.missed, 1, "fn is counted even when nothing fires");
     }
 
     #[test]

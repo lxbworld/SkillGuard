@@ -12,6 +12,7 @@ use skillguard::report::{Format, Report, SkillReport};
 use skillguard::scan::{self, scan_skill, ScanOutcome};
 use skillguard::text;
 use skillguard::walk;
+use std::collections::BTreeSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -1354,7 +1355,17 @@ fn run_corpus(command: &CorpusCommand, cli: &Cli) -> Result<i32, String> {
             let dims: Vec<&str> = corpus::DEFAULT_DIMENSIONS.to_vec();
             let s = corpus::stats(&records, &dims);
             let scores = match gold {
-                Some(path) => corpus::score(&corpus::read_gold(path)?),
+                Some(path) => {
+                    // Only count a `tp`/`fp` label if the rule still fires there:
+                    // a fixed rule must be able to change its own precision.
+                    let mut present: BTreeSet<(String, String)> = BTreeSet::new();
+                    for r in &records {
+                        for f in &r.findings {
+                            present.insert((r.source_id.clone(), f.rule.clone()));
+                        }
+                    }
+                    corpus::score(&corpus::read_gold(path)?, &present)
+                }
                 None => Vec::new(),
             };
             let body = corpus::report_markdown(&s, skillguard::RULE_SET_VERSION, &scores);
