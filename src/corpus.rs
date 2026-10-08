@@ -965,27 +965,31 @@ pub fn index_tree(
     let mut dirs = crate::walk::discover_skill_dirs(source);
     dirs.sort();
     let tree_abs = tree.canonicalize().unwrap_or_else(|_| tree.to_path_buf());
+    // A corpus mirror is a pile of fetched directories, not a checkout. If the
+    // tree sits inside some other project (the pilot tree is `research/raw`
+    // inside the SkillGuard repository), `git rev-parse` from a skill directory
+    // walks up to *that* project and every row would be attributed to it.
+    //
+    // Resolve the enclosing repository **once**. `hash::collect` runs four `git`
+    // subprocesses per skill, so on a 5,442-skill mirror that is ~27,000 spawns
+    // and ~13 minutes, all of it producing information we then discard. When the
+    // enclosing repository is not inside the tree, no skill in the tree is a
+    // checkout and the per-skill work is skipped entirely.
+    let tree_is_checkout = crate::hash::git_toplevel(tree)
+        .and_then(|p| p.canonicalize().ok())
+        .is_some_and(|p| p.starts_with(&tree_abs));
     let mut out = Vec::new();
     for dir in dirs {
         let (digest, files) = crate::hash::digest_dir(&dir)?;
         let out_scan = crate::scan::scan_skill_with(&dir, false);
-        let collected = crate::hash::collect(&dir, out_scan.license_declared.as_deref())?;
         let total: u64 = files.iter().map(|f| f.size).sum();
         let rel = dir
             .strip_prefix(tree)
             .unwrap_or(&dir)
             .to_string_lossy()
             .replace('\\', "/");
-        // A corpus mirror is a pile of fetched directories, not a checkout. If
-        // the tree happens to sit inside some other project (the pilot tree is
-        // `research/raw` inside the SkillGuard repository), `git rev-parse` from
-        // a skill directory walks up to *that* project and every row would be
-        // attributed to it. Trust git provenance only when the repository root
-        // is the tree itself or lives inside it.
-        let trusted = crate::hash::git_toplevel(&dir)
-            .and_then(|p| p.canonicalize().ok())
-            .is_some_and(|p| p.starts_with(&tree_abs));
-        let (repository, commit) = if trusted {
+        let (repository, commit) = if tree_is_checkout {
+            let collected = crate::hash::collect(&dir, out_scan.license_declared.as_deref())?;
             (
                 collected.provenance.repository.clone(),
                 collected.provenance.commit.clone(),

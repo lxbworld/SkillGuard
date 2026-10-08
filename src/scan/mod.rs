@@ -675,6 +675,9 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
                 || line.contains("app.codecov.io")
                 || line.contains("circleci.com")
                 || (line.contains("github.com/") && line.contains("/badge"))
+                // A syntax listing (`<script src=...> / <link href=...>`) is
+                // documentation, not an embed (GOLD-v5).
+                || (line.contains("<script") && line.contains("<link"))
         }
         // "The skill writes agent configuration" needs a write. A line that only
         // names the path — a helper, a read, a commented example — is not a
@@ -693,7 +696,12 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
         // `assert.throws(() => mod.sanitizeCodexArgs(['; rm -rf /']))` were
         // reported as a pipe-to-shell and as a destructive command.
         "DL_PIPE_TO_SHELL" | "SHELL_DESTRUCTIVE" | "SHELL_EVAL" | "NET_HTTP_CLIENT"
-        | "NET_FETCH_CALL" => looks_like_test(&line),
+        | "NET_FETCH_CALL" | "PERSIST_CRON" | "SECRET_PATH_READ" => {
+            looks_like_test(&line) || looks_like_usage(&line)
+        }
+        // The canonical AWS documentation key is not a credential. GOLD-v5: two
+        // of three findings were `AKIAIOSFODNN7EXAMPLE` in a doc table.
+        "SECRET_AWS_ACCESS_KEY" => m.contains("akiaiosfodnn7example"),
         // A docstring that documents how to run the skill is not the skill
         // running it. Widening SHELL_EXEC to catch `python3 foo.py` also caught
         // `Usage: python add_slide.py <unpacked_dir> <source>` in every
@@ -1418,13 +1426,27 @@ mod tests {
         fs::create_dir_all(d.join("scripts")).unwrap_or_default();
         fs::write(
             d.join("scripts/a.sh"),
-            "#!/bin/bash\nAWS=AKIAIOSFODNN7EXAMPLE\ncurl -H \"Authorization: token ghp_abcdefghijklmnopqrstuvwxyz0123456789\" https://api.example.com\n",
+            "#!/bin/bash\nAWS=AKIAQWERTYUIOPASDFGH\ncurl -H \"Authorization: token ghp_abcdefghijklmnopqrstuvwxyz0123456789\" https://api.example.com\n",
         )
         .unwrap_or_default();
         let h = hits(&scan_skill(&d));
         assert!(h.contains("SECRET_AWS_ACCESS_KEY"), "{h:?}");
         assert!(h.contains("SECRET_GITHUB_TOKEN"), "{h:?}");
         assert!(h.contains("NET_HTTP_CLIENT"), "{h:?}");
+    }
+
+    /// GOLD-v5: the canonical AWS documentation key is not a credential.
+    #[test]
+    fn the_aws_example_key_is_not_a_finding() {
+        let d = tmp("aws-example");
+        fs::write(d.join("SKILL.md"), "---\nname: x\ndescription: docs\n---\n").unwrap_or_default();
+        fs::create_dir_all(d.join("scripts")).unwrap_or_default();
+        fs::write(
+            d.join("scripts/a.md"),
+            "| AWS | `AKIA[0-9A-Z]{16}` | `AKIAIOSFODNN7EXAMPLE` |\n",
+        )
+        .unwrap_or_default();
+        assert!(!hits(&scan_skill(&d)).contains("SECRET_AWS_ACCESS_KEY"));
     }
 
     #[test]

@@ -257,10 +257,14 @@ pub fn normalize_line(line: &str) -> (String, NormFlags) {
             // A BOM or a zero-width character at a line edge is not keyword
             // obfuscation; only one *inside* a word breaks up a keyword to
             // evade matching. GOLD-v1: every `OBFUSC_ZERO_WIDTH` finding was a
-            // BOM in ordinary text.
+            // BOM in ordinary text. GOLD-v5: Persian and Arabic text uses
+            // zero-width joiners legitimately between Arabic letters, so the
+            // neighbours must be ASCII.
             let prev = i.checked_sub(1).map(|j| chars[j]);
             let next = chars.get(i + 1).copied();
-            if prev.is_some_and(char::is_alphanumeric) && next.is_some_and(char::is_alphanumeric) {
+            if prev.is_some_and(|c| c.is_ascii_alphanumeric())
+                && next.is_some_and(|c| c.is_ascii_alphanumeric())
+            {
                 flags.had_zero_width = true;
             }
             continue;
