@@ -335,3 +335,26 @@ category (`network`) is much broader than the rule (`NET_FETCH_CALL` = library
 HTTP call), so a skill that reaches the network through `curl` counts as a miss
 for a rule that never claimed it. Recall needs a rule-shaped label, not a
 category-shaped one, and is left to GOLD-v5.
+
+### Branch breakdown, and the disposition of `PI_DESCRIPTION_MISMATCH`
+
+The rule had four branches. Scoring each against the skill-level labels
+(`research/score_skill_gold.py`):
+
+| branch | annotator A | annotator B | both |
+|---|---|---|---|
+| credentials | 2/4 | 1/4 | 1/4 |
+| network | **0/6** | 2/6 | **0/6** |
+| running commands | **0/6** | 2/6 | **0/6** |
+| high-severity findings | 1/1 | 1/1 | 1/1 |
+
+The network and shell branches are pure false positives on this sample: "the
+description does not mention network access" is not a judgeable claim — a skill
+that fetches a template is not lying about being a template formatter. Both
+branches were **removed** (`SCAN_LOGIC_REVISION` 7). What remains is the
+checkable, high-value case: the code reads credentials and the description
+mentions neither credentials nor security.
+
+Prevalence fell 10.7% → **6.4%** (585 → 347 of 5442). The rule is still not a
+G4-grade signal — the credential branch is 1-2/4 on a 30-skill sample — but it no
+longer asserts something annotators cannot agree on.

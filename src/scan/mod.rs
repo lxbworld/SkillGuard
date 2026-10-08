@@ -1213,76 +1213,12 @@ fn description_mismatch(
             d,
         ));
     }
-    if !caps.network_outbound.is_empty()
-        && declared.network_outbound.is_empty()
-        && !admits(
-            &d,
-            &[
-                "http",
-                "api",
-                "network",
-                "download",
-                "fetch",
-                "web",
-                "url",
-                "uri",
-                "remote",
-                "internet",
-                "online",
-                "request",
-                "endpoint",
-                "server",
-                "cloud",
-                "网络",
-                "下载",
-                "请求",
-                "接口",
-                "远程",
-                "联网",
-                "爬取",
-                "采集",
-                "抓取",
-                "网页",
-                "链接",
-                "服务器",
-                "云端",
-                "线上",
-            ],
-        )
-    {
-        return Some(mismatch_finding(
-            "the description does not mention network access, but the code makes outbound requests",
-            d,
-        ));
-    }
-    if !caps.shell_execute.is_empty()
-        && declared.shell_execute.is_empty()
-        && !admits(
-            &d,
-            &[
-                "shell",
-                "command",
-                "run",
-                "execut",
-                "script",
-                "cli",
-                "terminal",
-                "bash",
-                "subprocess",
-                "命令",
-                "执行",
-                "脚本",
-                "终端",
-                "运行",
-                "调用",
-            ],
-        )
-    {
-        return Some(mismatch_finding(
-            "the description does not mention running commands, but the code shells out",
-            d,
-        ));
-    }
+    // The network and shell branches were removed: on a skill-level GOLD they
+    // scored 0/6 correct (research/GOLD.md, SKILL-v1). "The description does not
+    // mention network access" is not judgeable — a skill that fetches a template
+    // is not lying about being a template formatter. What survives is the
+    // high-value, checkable case: the code reads credentials and the description
+    // mentions neither credentials nor security.
     if has_high && !admits(&d, &["security", "credential", "安全", "凭据", "凭证"]) {
         return Some(mismatch_finding(
             "the description does not acknowledge the high-severity findings in this skill",

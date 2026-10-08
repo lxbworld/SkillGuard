@@ -885,10 +885,14 @@ pub fn structural_rules() -> &'static [StructuralRule] {
         },
         StructuralRule {
             id: "PI_DESCRIPTION_MISMATCH",
+            // Was SevMedium with four branches. On a skill-level GOLD the network
+            // and shell branches scored 0/6 correct, so the claim is now the one
+            // case that is checkable and high-value: the code reads credentials
+            // and the description acknowledges neither credentials nor security.
             severity: SevMedium,
             capability: "agent.injection",
-            message: "The declared description does not match observed behaviour",
-            remediation: "Make the description honest, or remove the undocumented behaviour.",
+            message: "The code reads credentials, but the description does not mention credentials or security",
+            remediation: "Make the description honest, or remove the credential access.",
         },
         StructuralRule {
             id: "PARSE_FAILED",
@@ -967,7 +971,9 @@ pub fn rule_count() -> usize {
 /// rev 6: trailing comments are comments; `/dev/null` checks the whole line;
 /// `DL_BASE64_BLOB` needs a payload shape; `FS_HOME_ACCESS` is code-only;
 /// `FS_SENSITIVE_PATH` verbs are word-bounded.
-pub const SCAN_LOGIC_REVISION: u32 = 6;
+/// rev 7: `PI_DESCRIPTION_MISMATCH` drops its network and shell branches, which
+/// a skill-level GOLD scored 0/6 correct.
+pub const SCAN_LOGIC_REVISION: u32 = 7;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};
