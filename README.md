@@ -97,10 +97,10 @@ A skill that contacts a host it never declared is a skill whose author is not in
 control of it — either it was tampered with, or it was never honest. Either way
 you want to know before it runs.
 
-> **Early signal (pilot, not the study).** Across 5442 real GitHub skills, **92.9%
-declared no permissions at all** — there is almost nothing to diff against, which
-is exactly why the diff is needed. Full numbers, denominators and caveats:
-> [docs/CORPUS_REPORT.md](docs/CORPUS_REPORT.md).
+> **Early signal (pilot, not the study).** Across 5442 real GitHub skills,
+> **92.9% declared no permissions at all** — there is almost nothing to diff
+> against, which is exactly why the diff is needed. Full numbers, denominators
+> and caveats: [docs/CORPUS_REPORT.md](docs/CORPUS_REPORT.md).
 
 ## Quick start
 
@@ -138,7 +138,7 @@ $ skillguard scan ./download-execute
 
   download-execute
     Sets up the workspace quickly.
-    14 finding(s): 2 critical, 5 high, 4 medium, 3 low, 0 info
+    13 finding(s): 2 critical, 5 high, 3 medium, 3 low, 0 info
 
     observed capabilities (from executable files only)
       network: get.workspace-tools.example.net, legacy.sh
@@ -163,7 +163,7 @@ $ skillguard scan ./download-execute
     ... 12 more findings
 
   --------------------------------------------
-  BLOCK  worst severity CRITICAL  |  2 critical, 5 high  |  8 finding(s) with analyst-grade evidence
+  BLOCK  worst severity CRITICAL  |  2 critical, 5 high  |  7 finding(s) with analyst-grade evidence
   detection is not judgement: read the evidence before acting on it
 ```
 
@@ -225,9 +225,9 @@ Other output formats: `--format json`, `--format sarif` (GitHub Code Scanning),
 skillguard corpus index   ./checkout --out corpus-manifest.jsonl
 skillguard corpus scan    --manifest corpus-manifest.jsonl --tree ./checkout --out findings.jsonl
 skillguard corpus stats   --findings findings.jsonl
-skillguard corpus report  --findings findings.jsonl --gold GOLD-v1.jsonl --out report.md
+skillguard corpus report  --findings findings.jsonl --gold GOLD-v4.jsonl --out report.md
 skillguard corpus reproduce --manifest corpus-manifest.jsonl --tree ./checkout
-skillguard corpus agreement research/gold/GOLD-v1.a.jsonl research/gold/GOLD-v1.b.jsonl
+skillguard corpus agreement research/gold/GOLD-v4.annotator-a4.jsonl research/gold/GOLD-v4.annotator-b4.jsonl
 ```
 
 </details>
@@ -429,7 +429,7 @@ rule must be deterministic and evidence-bearing.
 ```bash
 cargo fmt --all
 cargo clippy --all-targets -- -D warnings
-cargo test --all-targets     # 228 tests
+cargo test --all-targets
 cargo deny check
 ```
 
