@@ -26,24 +26,22 @@
 > flagged every non-English `PI_DESCRIPTION_MISMATCH`, and unstemmed verbs
 > (`execution` did not match `execute`). Each fix is a regression test.
 >
-> ## GOLD-v4
+> ## GOLD-v5
 >
-> The precision column below is measured against `research/gold/GOLD-v4.jsonl`:
-> 151 line-level findings, judged `tp`/`fp` by **two independent sessions** of
-> `opencode-go/deepseek-v4.1-flash` (no human, and not the rule author). Cohen's
-> kappa is **0.907**.
+> The precision column below is measured against `research/gold/GOLD-v5.jsonl`:
+> 250 line-level findings from the **current** rule set, judged `tp`/`fp` by two
+> independent sessions of `opencode-go/deepseek-v4.1-flash` (no human, and not
+> the rule author). Cohen's kappa is **0.949**; 6 disagreements adjudicated.
 >
-> This round fixed the last four rules' substring matching. `FS_ABSOLUTE_PATH`
-> matched `/dev/` inside `/dev/null`; `FS_SENSITIVE_PATH` matched `read` inside
-> `README` and `Readonly`; `DL_BASE64_BLOB` matched long lowercase paths; and a
-> `# ...` after code was not treated as a comment. `FS_ABSOLUTE_PATH` rose
-> `25% -> 50%`, `PERSIST_HOOK` `12.5% -> 66.7%`, and `DL_BASE64_BLOB` left the
-> table.
+> Where the earlier passes did their job: `NET_FETCH_CALL` 100%,
+> `NET_HTTP_CLIENT` 87.5%, `FS_PATH_ESCAPE` 87.5%, `NET_DYNAMIC_URL` 100%
+> (`NET_FETCH_CALL` was 37.5% in GOLD-v1).
 >
-> `FS_HOME_ACCESS` reads 100%, but that is a **tautology**: its claim is only
-> that the home directory is "referenced", which any `~/` mention satisfies, and
-> the two annotators disagreed on six of its eight items. The claim must be
-> reworded to "accessed" before the number means anything. Treat every
+> Where they did not: the **prompt-injection rules are 0%** —
+> `PI_CONCEALMENT`, `PI_EXFIL_INSTRUCTION` and `PI_INJECTION_OVERRIDE` are 0/8
+> each. Every sampled finding was a false positive, because the corpus is full of
+> security *training* material that discusses injection. `PERSIST_HOOK` (12.5%),
+> `PERSIST_SHELL_RC` (0%) and `DEP_CUSTOM_REGISTRY` (12.5%) are next. Treat every
 > prevalence figure below as an upper bound.
 >
 > (GOLD-v1..v3 are kept in `research/gold/`. Versions are not directly
@@ -322,40 +320,44 @@ Gate G4: precision >= 0.85 and recall >= 0.60, per rule (no micro-average).
 
 | rule | TP | FP | missed | precision | recall | G4 |
 |---|---|---|---|---|---|---|
-| `DEP_CUSTOM_REGISTRY` | 0 | 2 | 0 | 0.0% | n/a | below |
-| `DEP_UNPINNED_SCRIPT` | 2 | 0 | 0 | 100.0% | 100.0% | pass |
-| `DL_PASSWORD_ARCHIVE` | 0 | 3 | 0 | 0.0% | n/a | below |
-| `DL_PIPE_TO_SHELL` | 0 | 1 | 0 | 0.0% | n/a | below |
-| `DL_REMOTE_INSTALL` | 0 | 1 | 0 | 0.0% | n/a | below |
-| `DL_UNTRUSTED_DOMAIN` | 2 | 6 | 0 | 25.0% | 100.0% | below |
-| `FS_ABSOLUTE_PATH` | 4 | 4 | 0 | 50.0% | 100.0% | below |
-| `FS_HOME_ACCESS` | 8 | 0 | 0 | 100.0% | 100.0% | pass |
-| `FS_PATH_ESCAPE` | 6 | 2 | 0 | 75.0% | 100.0% | below |
-| `FS_RECURSIVE_WALK` | 7 | 1 | 0 | 87.5% | 100.0% | pass |
-| `FS_SENSITIVE_PATH` | 1 | 4 | 0 | 20.0% | 100.0% | below |
-| `LICENSE_RESTRICTIVE` | 4 | 4 | 0 | 50.0% | 100.0% | below |
-| `NET_DOMAIN_LITERAL` | 4 | 4 | 0 | 50.0% | 100.0% | below |
-| `NET_DYNAMIC_URL` | 3 | 0 | 0 | 100.0% | 100.0% | pass |
-| `NET_FETCH_CALL` | 7 | 1 | 0 | 87.5% | 100.0% | pass |
-| `NET_HTTP_CLIENT` | 5 | 3 | 0 | 62.5% | 100.0% | below |
-| `OBFUSC_TRACKING_PIXEL` | 6 | 2 | 0 | 75.0% | 100.0% | below |
-| `PERSIST_AGENT_CONFIG` | 1 | 4 | 0 | 20.0% | 100.0% | below |
-| `PERSIST_CRON` | 1 | 1 | 0 | 50.0% | 100.0% | below |
-| `PERSIST_HOOK` | 2 | 1 | 0 | 66.7% | 100.0% | below |
-| `PI_CONCEALMENT` | 0 | 4 | 0 | 0.0% | n/a | below |
-| `PI_EXFIL_INSTRUCTION` | 0 | 3 | 0 | 0.0% | n/a | below |
-| `PI_INJECTION_OVERRIDE` | 0 | 2 | 0 | 0.0% | n/a | below |
-| `PI_SYSTEM_IMPERSATION` | 0 | 2 | 0 | 0.0% | n/a | below |
-| `SECRET_AWS_ACCESS_KEY` | 0 | 1 | 0 | 0.0% | n/a | below |
-| `SECRET_ENV_DUMP` | 5 | 3 | 0 | 62.5% | 100.0% | below |
-| `SECRET_GENERIC_ASSIGN` | 1 | 1 | 0 | 50.0% | 100.0% | below |
-| `SECRET_PATH_READ` | 0 | 1 | 0 | 0.0% | n/a | below |
-| `SECRET_PRIVATE_KEY` | 0 | 3 | 0 | 0.0% | n/a | below |
-| `SECRET_PROVIDER_TOKEN` | 0 | 1 | 0 | 0.0% | n/a | below |
-| `SHELL_DESTRUCTIVE` | 1 | 2 | 0 | 33.3% | 100.0% | below |
-| `SHELL_EVAL` | 1 | 3 | 0 | 25.0% | 100.0% | below |
+| `DEP_CUSTOM_REGISTRY` | 1 | 7 | 0 | 12.5% | 100.0% | below |
+| `DEP_UNPINNED_SCRIPT` | 3 | 0 | 0 | 100.0% | 100.0% | pass |
+| `DL_CHAIN_FETCH_EXECUTE` | 1 | 0 | 0 | 100.0% | 100.0% | pass |
+| `DL_PASSWORD_ARCHIVE` | 0 | 1 | 0 | 0.0% | n/a | below |
+| `DL_PIPE_TO_SHELL` | 0 | 5 | 0 | 0.0% | n/a | below |
+| `DL_REMOTE_INSTALL` | 1 | 5 | 0 | 16.7% | 100.0% | below |
+| `DL_UNTRUSTED_DOMAIN` | 1 | 7 | 0 | 12.5% | 100.0% | below |
+| `FS_ABSOLUTE_PATH` | 5 | 3 | 0 | 62.5% | 100.0% | below |
+| `FS_HOME_ACCESS` | 4 | 4 | 0 | 50.0% | 100.0% | below |
+| `FS_MODE_UNRESOLVED` | 3 | 0 | 0 | 100.0% | 100.0% | pass |
+| `FS_PATH_ESCAPE` | 7 | 1 | 0 | 87.5% | 100.0% | pass |
+| `FS_RECURSIVE_WALK` | 8 | 0 | 0 | 100.0% | 100.0% | pass |
+| `FS_SENSITIVE_PATH` | 2 | 6 | 0 | 25.0% | 100.0% | below |
+| `LICENSE_RESTRICTIVE` | 5 | 3 | 0 | 62.5% | 100.0% | below |
+| `NET_DOMAIN_LITERAL` | 5 | 3 | 0 | 62.5% | 100.0% | below |
+| `NET_DYNAMIC_URL` | 8 | 0 | 0 | 100.0% | 100.0% | pass |
+| `NET_FETCH_CALL` | 8 | 0 | 0 | 100.0% | 100.0% | pass |
+| `NET_HTTP_CLIENT` | 7 | 1 | 0 | 87.5% | 100.0% | pass |
+| `OBFUSC_TRACKING_PIXEL` | 4 | 4 | 0 | 50.0% | 100.0% | below |
+| `OBFUSC_ZERO_WIDTH` | 1 | 2 | 0 | 33.3% | 100.0% | below |
+| `PERSIST_AGENT_CONFIG` | 2 | 6 | 0 | 25.0% | 100.0% | below |
+| `PERSIST_CRON` | 1 | 3 | 0 | 25.0% | 100.0% | below |
+| `PERSIST_HOOK` | 1 | 7 | 0 | 12.5% | 100.0% | below |
+| `PERSIST_SHELL_RC` | 0 | 5 | 0 | 0.0% | n/a | below |
+| `PI_CONCEALMENT` | 0 | 8 | 0 | 0.0% | n/a | below |
+| `PI_EXFIL_INSTRUCTION` | 0 | 8 | 0 | 0.0% | n/a | below |
+| `PI_INJECTION_OVERRIDE` | 0 | 8 | 0 | 0.0% | n/a | below |
+| `PI_SYSTEM_IMPERSATION` | 1 | 7 | 0 | 12.5% | 100.0% | below |
+| `SECRET_AWS_ACCESS_KEY` | 0 | 3 | 0 | 0.0% | n/a | below |
+| `SECRET_ENV_DUMP` | 4 | 4 | 0 | 50.0% | 100.0% | below |
+| `SECRET_GENERIC_ASSIGN` | 1 | 7 | 0 | 12.5% | 100.0% | below |
+| `SECRET_PATH_READ` | 5 | 3 | 0 | 62.5% | 100.0% | below |
+| `SECRET_PRIVATE_KEY` | 0 | 4 | 0 | 0.0% | n/a | below |
+| `SECRET_PROVIDER_TOKEN` | 2 | 4 | 0 | 33.3% | 100.0% | below |
+| `SHELL_DESTRUCTIVE` | 1 | 5 | 0 | 16.7% | 100.0% | below |
+| `SHELL_EVAL` | 3 | 5 | 0 | 37.5% | 100.0% | below |
 | `SHELL_EXEC` | 4 | 4 | 0 | 50.0% | 100.0% | below |
-| `SHELL_PRIVILEGE_ESCALATION` | 1 | 1 | 0 | 50.0% | 100.0% | below |
+| `SHELL_PRIVILEGE_ESCALATION` | 0 | 8 | 0 | 0.0% | n/a | below |
 
 If precision falls short, publish the measured value as an upper bound on true prevalence rather than widening the definition to hit a target.
 

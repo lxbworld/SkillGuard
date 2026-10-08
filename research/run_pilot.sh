@@ -88,7 +88,7 @@ target/release/skillguard corpus scan \
   --out "$FINDINGS" --cache research/.corpus-cache.json
 
 echo "== 6/6 report + reproduce =="
-GOLD="research/gold/GOLD-v4.jsonl"
+GOLD="research/gold/GOLD-v5.jsonl"
 if [ -f "$GOLD" ]; then
   target/release/skillguard corpus report --findings "$FINDINGS" --gold "$GOLD" --out /tmp/sg-pilot-body.md
 else
@@ -125,24 +125,22 @@ fi
 > flagged every non-English `PI_DESCRIPTION_MISMATCH`, and unstemmed verbs
 > (`execution` did not match `execute`). Each fix is a regression test.
 >
-> ## GOLD-v4
+> ## GOLD-v5
 >
-> The precision column below is measured against `research/gold/GOLD-v4.jsonl`:
-> 151 line-level findings, judged `tp`/`fp` by **two independent sessions** of
-> `opencode-go/deepseek-v4.1-flash` (no human, and not the rule author). Cohen's
-> kappa is **0.907**.
+> The precision column below is measured against `research/gold/GOLD-v5.jsonl`:
+> 250 line-level findings from the **current** rule set, judged `tp`/`fp` by two
+> independent sessions of `opencode-go/deepseek-v4.1-flash` (no human, and not
+> the rule author). Cohen's kappa is **0.949**; 6 disagreements adjudicated.
 >
-> This round fixed the last four rules' substring matching. `FS_ABSOLUTE_PATH`
-> matched `/dev/` inside `/dev/null`; `FS_SENSITIVE_PATH` matched `read` inside
-> `README` and `Readonly`; `DL_BASE64_BLOB` matched long lowercase paths; and a
-> `# ...` after code was not treated as a comment. `FS_ABSOLUTE_PATH` rose
-> `25% -> 50%`, `PERSIST_HOOK` `12.5% -> 66.7%`, and `DL_BASE64_BLOB` left the
-> table.
+> Where the earlier passes did their job: `NET_FETCH_CALL` 100%,
+> `NET_HTTP_CLIENT` 87.5%, `FS_PATH_ESCAPE` 87.5%, `NET_DYNAMIC_URL` 100%
+> (`NET_FETCH_CALL` was 37.5% in GOLD-v1).
 >
-> `FS_HOME_ACCESS` reads 100%, but that is a **tautology**: its claim is only
-> that the home directory is "referenced", which any `~/` mention satisfies, and
-> the two annotators disagreed on six of its eight items. The claim must be
-> reworded to "accessed" before the number means anything. Treat every
+> Where they did not: the **prompt-injection rules are 0%** —
+> `PI_CONCEALMENT`, `PI_EXFIL_INSTRUCTION` and `PI_INJECTION_OVERRIDE` are 0/8
+> each. Every sampled finding was a false positive, because the corpus is full of
+> security *training* material that discusses injection. `PERSIST_HOOK` (12.5%),
+> `PERSIST_SHELL_RC` (0%) and `DEP_CUSTOM_REGISTRY` (12.5%) are next. Treat every
 > prevalence figure below as an upper bound.
 >
 > (GOLD-v1..v3 are kept in `research/gold/`. Versions are not directly

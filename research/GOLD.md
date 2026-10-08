@@ -358,3 +358,35 @@ mentions neither credentials nor security.
 Prevalence fell 10.7% → **6.4%** (585 → 347 of 5442). The rule is still not a
 G4-grade signal — the credential branch is 1-2/4 on a 30-skill sample — but it no
 longer asserts something annotators cannot agree on.
+
+---
+
+## GOLD-v5: the first table on the current rules
+
+GOLD-v4 measured a rule set that has since changed (rev 7 and rev 8), so the
+report's precision column was stale. GOLD-v5 re-labels the current set.
+
+| | |
+|---|---|
+| items | 250 line-level findings from the current (rev 8) rule set |
+| annotators | two independent sessions of `opencode-go/deepseek-v4.1-flash` |
+| agreement | 244/250 (97.6%), **Cohen's κ 0.949** |
+| disagreements | 6, adjudicated by the annotators' shared instruction |
+
+### What improved
+
+`NET_FETCH_CALL` **100%** (37.5% in GOLD-v1), `NET_HTTP_CLIENT` 87.5% (50%),
+`FS_PATH_ESCAPE` 87.5%, `NET_DYNAMIC_URL` 100%, `FS_ABSOLUTE_PATH` 62.5%
+(25%), `NET_DOMAIN_LITERAL` 62.5% (12.5%).
+
+### What did not: the prompt-injection rules
+
+`PI_CONCEALMENT`, `PI_EXFIL_INSTRUCTION` and `PI_INJECTION_OVERRIDE` are **0/8
+each** — every sampled finding a false positive. The cause is visible in the
+corpus: a large share of skills are security *training* material that quotes
+injection phrases in order to teach about them (`references/infra-and-supply-chain.md`,
+`Data exfiltration patterns`, `Do NOT log ...`). A rule that matches a phrase
+cannot tell "the skill does this" from "the skill documents this", and unlike
+code rules there is no comment syntax to hide behind. These three are the next
+target, and if they cannot be made precise they should become documentation
+rather than findings.
