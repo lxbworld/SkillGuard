@@ -1,0 +1,75 @@
+name: Bug report
+description: Something in SkillGuard is wrong — a crash, a wrong finding, a reproducible-output mismatch.
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Two things worth knowing before you write:
+
+        - **A false positive is a bug, and so is a missed finding.** Both are
+          useful; say which one you hit.
+        - **Do not paste a malicious payload.** A rule id, a content digest, a
+          file path and a line number are enough to reproduce almost anything,
+          and this project does not redistribute payloads. If the repro really
+          needs the content, say so and we will find another way.
+
+  - type: input
+    id: version
+    attributes:
+      label: SkillGuard version
+      description: "`skillguard --version`, or the commit if you built from source."
+      placeholder: v0.1.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you ran, and what came out. Include the command and the output.
+      placeholder: |
+        $ skillguard scan path/to/skill
+        ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of problem is it
+      options:
+        - False positive (a finding that should not be there)
+        - Missed finding (something dangerous that was not reported)
+        - Crash or panic (the scanner must never panic on any input)
+        - Wrong message or severity
+        - Non-deterministic output (a digest or report that changed between runs)
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: rule
+    attributes:
+      label: Rule id, if the report names one
+      placeholder: SHELL_EXEC
+
+  - type: input
+    id: digest
+    attributes:
+      label: Content digest, if you have one
+      description: "`skillguard verify` or the JSON output prints it. A digest plus a rule id is usually a complete reproduction."
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Platform, how the skill was obtained, whether it reproduces every time.

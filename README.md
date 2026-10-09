@@ -428,6 +428,15 @@ terms in [NOTICE](NOTICE).
 
 ## Contributing
 
+Everything in this repository — issues, pull requests, commits, comments and
+docs — is written in **English**, so that people who do not share a first
+language can review it.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before a non-trivial change: it covers
+the architectural invariants (no socket, no `unsafe`, no process spawn outside
+`src/hash.rs`), how to change a rule without breaking the precision table, and
+the disclosure rules in `research/`.
+
 Every new security rule ships with a regression test and a fixture, and every
 rule must be deterministic and evidence-bearing.
 

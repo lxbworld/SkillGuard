@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a vulnerability in SkillGuard itself
+    url: https://github.com/lxbworld/SkillGuard/security/advisories/new
+    about: Private reporting for bugs in the scanner, the digest or the policy engine. Please do not open a public issue for these.
+  - name: Contributing guide
+    url: https://github.com/lxbworld/SkillGuard/blob/main/CONTRIBUTING.md
+    about: Build, test, the architectural invariants, and how to change a rule without breaking the precision table.
+  - name: What this project is (and is not)
+    url: https://github.com/lxbworld/SkillGuard/blob/main/docs/VIABILITY.md
+    about: Read this before proposing a feature. It explains why the scope is verification, not installation.
