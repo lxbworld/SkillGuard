@@ -1,8 +1,8 @@
 # Coordination disclosure record
 
-**Status**: protocol established; registry contact **not yet sent** (issue #5).
-Contact is a human action. The messages are drafted below so that sending them
-is a copy-paste, not a blank page.
+**Status**: protocol established; **all three registry requests sent 2026-10-09**
+(issue #5). Contact is a human action. The messages are drafted below so that
+sending them is a copy-paste, not a blank page.
 
 This file is the D11 deliverable of `docs/PHASE0_CORPUS_STUDY.md` and the
 disclosure rules of `research/PROTOCOL.md` §8, recorded as they actually happen.
@@ -94,7 +94,16 @@ so this is a blank issue.
 
 ### 2.2 ClawHub
 
-**Channel**: `openclaw/clawhub`. For genuinely malicious or deceptive *listings*
+**Channel**: [RFC `openclaw/clawhub#3931`](https://github.com/openclaw/clawhub/issues/3931),
+sent 2026-10-09. The repo's **RFC** template was chosen over a plain issue or the
+Discord because its own description decided it — *"Use RFCs for decisions that
+need visible feedback before they become policy, product behavior, or public API
+contract"* — and "may researchers enumerate your index" is exactly such a
+decision. It lands in their triage as `type: rfc` / `status: review`, where a
+plain issue among ~3,900 would not. Discord (`discord.gg/clawd`, the OpenClaw
+guild, ~177k members) stays in reserve as a nudge if the RFC goes quiet.
+
+For genuinely malicious or deceptive *listings*
 its `SECURITY.md` names **listing reports** as the channel, not advisories —
 that applies to what the study finds, not to the standing permission below. Ask
 for the permission in the community **Discord** (`discord.gg/clawd`) or an issue
@@ -165,7 +174,7 @@ only one of the three with a plain email address.
 | Source | Contact route | Sent | Reply | Decision |
 |---|---|---|---|---|
 | skills.sh | GitHub issue [#2442](https://github.com/vercel-labs/skills/issues/2442) on `vercel-labs/skills` (no email, no `SECURITY.md`) | **2026-10-09** | — | excluded until reply |
-| ClawHub | `openclaw/clawhub` — Discord `discord.gg/clawd` or a repo issue; listing reports for findings | not yet | — | excluded until reply |
+| ClawHub | RFC [openclaw/clawhub#3931](https://github.com/openclaw/clawhub/issues/3931) — `type: rfc`, `status: review` | **2026-10-09** | — | excluded until reply |
 | skillsmp.com | `support@skillsmp.com` | **2026-10-09** | — | excluded until reply |
 | GitHub (L3) | n/a — API docs | n/a | n/a | **permitted**, proceed |
 
@@ -185,6 +194,7 @@ the evidence stays on the scanning machine.
 |---|---|---|---|---|
 | 2026-10-09 | permission request, no finding yet | skillsmp.com `support@` | 2026-10-16 | awaiting reply |
 | 2026-10-09 | permission request, no finding yet | skills.sh — `vercel-labs/skills` issue #2442 | 2026-10-16 | awaiting reply |
+| 2026-10-09 | permission request, no finding yet | ClawHub — RFC `openclaw/clawhub#3931` | 2026-10-23 | awaiting reply |
 
 The request cites <https://github.com/lxbworld/SkillGuard>, which became public on
 2026-10-09 so that the link in the message resolves.
