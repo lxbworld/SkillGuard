@@ -40,6 +40,20 @@ report and when, and what we will *not* publish.
 repo behind skills.sh, per its homepage). Open a GitHub **discussion** or issue
 there. Vercel Labs owns the repo, so the maintainers are the operators.
 
+**What their own files say** (checked 2026-10-09, so the message can cite them
+instead of guessing):
+
+- `https://skills.sh/robots.txt` — `Allow: /` with `Disallow: /api/`,
+  `Disallow: /search`, `Disallow: /internal/`, `Disallow: /debug-security/`, and
+the `Sitemap:` line pointing at `https://www.skills.sh/sitemap.xml`.
+- That sitemap is an index of four sitemaps; `sitemap-skills-1.xml` alone lists
+**10,000** skill URLs (876 KB), so the index is on the order of 20,000. A
+published, crawler-addressed sitemap is the intended route — which is why the
+request is framed as "may I walk your sitemap", not "may I use your API".
+- `.github/ISSUE_TEMPLATE/config.yml` sets `blank_issues_enabled: true`, and the
+three templates (`agent-request`, `bug-report`, `feature-request`) do not fit,
+so this is a blank issue.
+
 > **Subject: research request — automated enumeration of the skills.sh index**
 >
 > Hello,
@@ -49,19 +63,21 @@ there. Vercel Labs owns the repo, so the maintainers are the operators.
 > security measurement of the skill ecosystem and would like to include
 > skills.sh.
 >
-> What I am asking:
+> Your `robots.txt` allows `/` but disallows `/api/` and `/search`, and points at
+> `sitemap.xml`. I read that as "walking the sitemap is fine, the API is not",
+> so that is what I am asking about: may I fetch the sitemap and its entries at a
+> low rate — about 1 request per second — storing a content digest per skill? I
+> will not touch `/api/`, `/search` or `/internal/`, and I will honour
+> `Retry-After` and slow down further if you ask.
 >
-> 1. Permission to enumerate the public index at a low rate (about 1 request
->    per second, well under any published limit), respecting robots.txt and
->    your rate limits.
-> 2. If you prefer, a bulk export or a documented research endpoint instead. Any
->    format you already have would be easier for both of us.
+> If you would rather give me a bulk export, or an endpoint meant for this, that
+> is easier for both of us and I would prefer it.
 >
 > What I would store: repo/skill path, the full commit SHA, and a content
-> digest. Not content, not author identity, not download counts beyond what a
-> public leaderboard already shows.
+> digest. Not content, not author identity, not anything beyond what the public
+> listing already shows.
 >
-> What I would publish: aggregate, per-rule prevalence and a public dataset
+> What I would publish: aggregate per-rule prevalence, and a public dataset
 > containing digests and rule ids only.
 >
 > What I would do before publishing anything about skills.sh specifically: send
@@ -73,7 +89,8 @@ there. Vercel Labs owns the repo, so the maintainers are the operators.
 > Absence of a prohibition is not permission.
 >
 > Thank you,
-> [name]
+> lxbworld
+> <https://github.com/lxbworld/SkillGuard>
 
 ### 2.2 ClawHub
 
