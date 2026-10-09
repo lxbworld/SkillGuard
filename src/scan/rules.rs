@@ -988,7 +988,7 @@ pub fn rule_count() -> usize {
 /// rev 9: quoted or documentation-shaped lines are not `PI_*` instructions.
 /// rev 10: nor is a line that *discusses* the attack (security training
 /// material), and `score()` no longer counts stale `tp`/`fp` labels.
-pub const SCAN_LOGIC_REVISION: u32 = 15;
+pub const SCAN_LOGIC_REVISION: u32 = 16;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

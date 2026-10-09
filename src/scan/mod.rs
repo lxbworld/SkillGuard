@@ -737,7 +737,10 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
         | "PI_INJECTION_OVERRIDE"
         | "PI_SYSTEM_IMPERSATION"
         | "PERSIST_HOOK" => {
-            is_documentation_or_quoted(raw_line, matched) || discusses_the_attack(&line)
+            is_documentation_or_quoted(raw_line, matched)
+                || discusses_the_attack(&line)
+                || looks_like_test(&line)
+                || looks_like_usage(&line)
         }
         _ => false,
     }

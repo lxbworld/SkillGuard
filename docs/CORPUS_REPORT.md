@@ -248,7 +248,7 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | `DEP_CUSTOM_REGISTRY` | 12 | 5442 | 0.2% |
 | `PERSIST_AGENT_CONFIG` | 10 | 5442 | 0.2% |
 | `PI_INJECTION_OVERRIDE` | 10 | 5442 | 0.2% |
-| `PI_EXFIL_INSTRUCTION` | 9 | 5442 | 0.2% |
+| `PI_EXFIL_INSTRUCTION` | 7 | 5442 | 0.1% |
 | `DL_REMOTE_INSTALL` | 6 | 5442 | 0.1% |
 | `PERSIST_HOOK` | 6 | 5442 | 0.1% |
 | `PI_SYSTEM_IMPERSATION` | 6 | 5442 | 0.1% |
@@ -348,7 +348,7 @@ Gate G4: precision >= 0.85 and recall >= 0.60, per rule (no micro-average).
 | `PERSIST_HOOK` | 0 | 3 | 0 | 0.0% | n/a | below |
 | `PERSIST_SHELL_RC` | 0 | 1 | 0 | 0.0% | n/a | below |
 | `PI_CONCEALMENT` | 0 | 4 | 0 | 0.0% | n/a | below |
-| `PI_EXFIL_INSTRUCTION` | 0 | 4 | 0 | 0.0% | n/a | below |
+| `PI_EXFIL_INSTRUCTION` | 0 | 2 | 0 | 0.0% | n/a | below |
 | `PI_INJECTION_OVERRIDE` | 0 | 2 | 0 | 0.0% | n/a | below |
 | `PI_SYSTEM_IMPERSATION` | 1 | 4 | 0 | 20.0% | 100.0% | below |
 | `SECRET_ENV_DUMP` | 4 | 4 | 0 | 50.0% | 100.0% | below |
