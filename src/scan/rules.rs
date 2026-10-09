@@ -392,8 +392,9 @@ static TABLE: &[RuleSpec] = &[
             r"\brglob\s*\(",
             r"\bfs\.readdir\b|\breaddirSync\b",
             r"\bfind\s+[^\n]{0,80}-name\b",
-            r"\bshutil\.(?:copytree|rmtree)\b",
-            r"\brmtree\s*\(",
+            // `rmtree` and `copytree` recurse, but they delete and copy — they
+            // are not a recursive *walk*. GOLD-v5/SKILL-v3: every sampled
+            // finding was one of them, so the rule read 0% precision.
             r"\bwalkdir\b",
             r"(?i)\bfor\s+[^\n]{0,40}\bin\s+Path\([^\n]{0,60}\)\.(?:rglob|glob)\(",
         ],
@@ -988,7 +989,7 @@ pub fn rule_count() -> usize {
 /// rev 9: quoted or documentation-shaped lines are not `PI_*` instructions.
 /// rev 10: nor is a line that *discusses* the attack (security training
 /// material), and `score()` no longer counts stale `tp`/`fp` labels.
-pub const SCAN_LOGIC_REVISION: u32 = 16;
+pub const SCAN_LOGIC_REVISION: u32 = 17;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};
