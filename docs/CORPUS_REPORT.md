@@ -226,7 +226,7 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | `SHELL_EXEC` | 422 | 5442 | 7.8% |
 | `NET_DOMAIN_LITERAL` | 383 | 5442 | 7.0% |
 | `PI_DESCRIPTION_MISMATCH` | 257 | 5442 | 4.7% |
-| `NET_FETCH_CALL` | 164 | 5442 | 3.0% |
+| `NET_FETCH_CALL` | 165 | 5442 | 3.0% |
 | `FS_PATH_ESCAPE` | 141 | 5442 | 2.6% |
 | `FS_RECURSIVE_WALK` | 133 | 5442 | 2.4% |
 | `FS_HOME_ACCESS` | 123 | 5442 | 2.3% |
@@ -234,7 +234,7 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | `FS_ABSOLUTE_PATH` | 78 | 5442 | 1.4% |
 | `PARSE_FAILED` | 71 | 5442 | 1.3% |
 | `SECRET_ENV_DUMP` | 64 | 5442 | 1.2% |
-| `NET_HTTP_CLIENT` | 53 | 5442 | 1.0% |
+| `NET_HTTP_CLIENT` | 54 | 5442 | 1.0% |
 | `LICENSE_RESTRICTIVE` | 52 | 5442 | 1.0% |
 | `SECRET_GENERIC_ASSIGN` | 36 | 5442 | 0.7% |
 | `OBFUSC_TRACKING_PIXEL` | 33 | 5442 | 0.6% |
@@ -242,29 +242,30 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | `PI_CONCEALMENT` | 29 | 5442 | 0.5% |
 | `NET_DYNAMIC_URL` | 24 | 5442 | 0.4% |
 | `MISMATCH_OVER_DECLARED` | 22 | 5442 | 0.4% |
+| `PERSIST_AGENT_CONFIG` | 17 | 5442 | 0.3% |
+| `SECRET_PATH_READ` | 17 | 5442 | 0.3% |
 | `FS_SENSITIVE_PATH` | 16 | 5442 | 0.3% |
 | `SHELL_EVAL` | 15 | 5442 | 0.3% |
 | `SHELL_PRIVILEGE_ESCALATION` | 14 | 5442 | 0.3% |
 | `DEP_CUSTOM_REGISTRY` | 12 | 5442 | 0.2% |
-| `PERSIST_AGENT_CONFIG` | 10 | 5442 | 0.2% |
 | `PI_INJECTION_OVERRIDE` | 10 | 5442 | 0.2% |
 | `PI_EXFIL_INSTRUCTION` | 7 | 5442 | 0.1% |
 | `DL_REMOTE_INSTALL` | 6 | 5442 | 0.1% |
 | `PERSIST_HOOK` | 6 | 5442 | 0.1% |
 | `PI_SYSTEM_IMPERSATION` | 6 | 5442 | 0.1% |
 | `SECRET_PROVIDER_TOKEN` | 6 | 5442 | 0.1% |
+| `PERSIST_SHELL_RC` | 5 | 5442 | 0.1% |
 | `SECRET_PRIVATE_KEY` | 4 | 5442 | 0.1% |
 | `DEP_UNPINNED_SCRIPT` | 3 | 5442 | 0.1% |
 | `FS_MODE_UNRESOLVED` | 3 | 5442 | 0.1% |
+| `DL_PIPE_TO_SHELL` | 2 | 5442 | 0.0% |
 | `PERSIST_CRON` | 2 | 5442 | 0.0% |
-| `SECRET_PATH_READ` | 2 | 5442 | 0.0% |
 | `SHELL_DESTRUCTIVE` | 2 | 5442 | 0.0% |
 | `DL_CHAIN_FETCH_EXECUTE` | 1 | 5442 | 0.0% |
 | `DL_PASSWORD_ARCHIVE` | 1 | 5442 | 0.0% |
-| `DL_PIPE_TO_SHELL` | 1 | 5442 | 0.0% |
 | `LICENSE_MISMATCH` | 1 | 5442 | 0.0% |
 | `OBFUSC_ZERO_WIDTH` | 1 | 5442 | 0.0% |
-| `PERSIST_SHELL_RC` | 1 | 5442 | 0.0% |
+| `SECRET_AWS_ACCESS_KEY` | 1 | 5442 | 0.0% |
 
 ## Declaration rate (H6)
 
@@ -303,7 +304,7 @@ Every headline figure must be reported per stratum (protocol §4.2); without str
 | none | 4498 | 0 | `LICENSE_MISSING` 22.6%, `PARSE_FAILED` 1.2%, `OBFUSC_TRACKING_PIXEL` 0.4%, `LICENSE_RESTRICTIVE` 0.4%, `PI_CONCEALMENT` 0.4% |
 | other | 5 | 0 | `PI_DESCRIPTION_MISMATCH` 60.0%, `NET_DOMAIN_LITERAL` 40.0%, `SECRET_GENERIC_ASSIGN` 40.0%, `FS_HOME_ACCESS` 20.0%, `MISMATCH_UNDER_DECLARED` 20.0% |
 | python | 424 | 0 | `SHELL_EXEC` 51.7%, `NET_DOMAIN_LITERAL` 38.9%, `FS_RECURSIVE_WALK` 19.8%, `PI_DESCRIPTION_MISMATCH` 19.3%, `LICENSE_MISSING` 18.2% |
-| shell | 210 | 0 | `SHELL_EXEC` 49.5%, `NET_DOMAIN_LITERAL` 34.3%, `PI_DESCRIPTION_MISMATCH` 31.0%, `LICENSE_MISSING` 23.3%, `NET_HTTP_CLIENT` 23.3% |
+| shell | 210 | 0 | `SHELL_EXEC` 49.5%, `NET_DOMAIN_LITERAL` 34.3%, `PI_DESCRIPTION_MISMATCH` 31.0%, `NET_HTTP_CLIENT` 23.8%, `LICENSE_MISSING` 23.3% |
 ### by `declared`
 
 | value | n | failed | top rules |
@@ -327,7 +328,7 @@ Gate G4: precision >= 0.85 and recall >= 0.60, per rule (no micro-average).
 | `DEP_UNPINNED_SCRIPT` | 3 | 0 | 0 | 100.0% | 100.0% | pass |
 | `DL_CHAIN_FETCH_EXECUTE` | 1 | 0 | 0 | 100.0% | 100.0% | pass |
 | `DL_PASSWORD_ARCHIVE` | 0 | 1 | 0 | 0.0% | n/a | below |
-| `DL_PIPE_TO_SHELL` | 0 | 1 | 0 | 0.0% | n/a | below |
+| `DL_PIPE_TO_SHELL` | 0 | 2 | 0 | 0.0% | n/a | below |
 | `DL_REMOTE_INSTALL` | 1 | 5 | 0 | 16.7% | 100.0% | below |
 | `DL_UNTRUSTED_DOMAIN` | 1 | 7 | 0 | 12.5% | 100.0% | below |
 | `FS_ABSOLUTE_PATH` | 3 | 1 | 0 | 75.0% | 100.0% | below |
@@ -340,19 +341,21 @@ Gate G4: precision >= 0.85 and recall >= 0.60, per rule (no micro-average).
 | `NET_DOMAIN_LITERAL` | 5 | 2 | 0 | 71.4% | 100.0% | below |
 | `NET_DYNAMIC_URL` | 8 | 0 | 0 | 100.0% | 100.0% | pass |
 | `NET_FETCH_CALL` | 8 | 0 | 0 | 100.0% | 100.0% | pass |
-| `NET_HTTP_CLIENT` | 6 | 1 | 0 | 85.7% | 100.0% | pass |
+| `NET_HTTP_CLIENT` | 7 | 1 | 0 | 87.5% | 100.0% | pass |
 | `OBFUSC_TRACKING_PIXEL` | 4 | 2 | 0 | 66.7% | 100.0% | below |
 | `OBFUSC_ZERO_WIDTH` | 1 | 0 | 0 | 100.0% | 100.0% | pass |
-| `PERSIST_AGENT_CONFIG` | 1 | 4 | 0 | 20.0% | 100.0% | below |
+| `PERSIST_AGENT_CONFIG` | 2 | 6 | 0 | 25.0% | 100.0% | below |
 | `PERSIST_CRON` | 1 | 1 | 0 | 50.0% | 100.0% | below |
 | `PERSIST_HOOK` | 0 | 3 | 0 | 0.0% | n/a | below |
-| `PERSIST_SHELL_RC` | 0 | 1 | 0 | 0.0% | n/a | below |
+| `PERSIST_SHELL_RC` | 0 | 5 | 0 | 0.0% | n/a | below |
 | `PI_CONCEALMENT` | 0 | 4 | 0 | 0.0% | n/a | below |
 | `PI_EXFIL_INSTRUCTION` | 0 | 2 | 0 | 0.0% | n/a | below |
 | `PI_INJECTION_OVERRIDE` | 0 | 2 | 0 | 0.0% | n/a | below |
 | `PI_SYSTEM_IMPERSATION` | 1 | 4 | 0 | 20.0% | 100.0% | below |
+| `SECRET_AWS_ACCESS_KEY` | 0 | 1 | 0 | 0.0% | n/a | below |
 | `SECRET_ENV_DUMP` | 4 | 4 | 0 | 50.0% | 100.0% | below |
 | `SECRET_GENERIC_ASSIGN` | 1 | 7 | 0 | 12.5% | 100.0% | below |
+| `SECRET_PATH_READ` | 5 | 3 | 0 | 62.5% | 100.0% | below |
 | `SECRET_PRIVATE_KEY` | 0 | 4 | 0 | 0.0% | n/a | below |
 | `SECRET_PROVIDER_TOKEN` | 2 | 4 | 0 | 33.3% | 100.0% | below |
 | `SHELL_DESTRUCTIVE` | 1 | 1 | 0 | 50.0% | 100.0% | below |

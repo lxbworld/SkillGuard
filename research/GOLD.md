@@ -529,3 +529,62 @@ questions about the **executable files only**.
 - **`FS_RECURSIVE_WALK` is still 0%** — 3 false positives and no true positives
   on the code-only sample, so its pattern (`rglob`, `rmtree`, `copytree`) is
   matching recursive *deletion* and test helpers rather than a recursive walk.
+
+---
+
+## The regression CI caught (rev 17 → 19)
+
+Four fixture tests were red for a while and the local check did not show it: the
+command ended in `| head -3`, which cut the output before `tests/fixtures.rs`
+printed. `cargo test --all-targets` reports each suite as it finishes, so the
+fixtures suite was past the cut. **CI caught what the local run hid**, and only
+because the repository went public and Actions started working again.
+
+Bisect, by running the suite at each commit:
+
+| commit | rev | failing fixtures |
+|---|---|---|
+| `e7761cc` | 13 | 1 — `hardcoded_keys_are_caught_case_sensitively` |
+| `fa42978` | 15 | 4 — the above plus `credential_stealer`, `persistence`, `homoglyphs` |
+
+### What was wrong
+
+`is_documentation_or_quoted` was one function doing two jobs, applied to every
+rule in every file:
+
+- **markdown structure** (`#`, `- `, `| `, ```` ``` ````) — correct for a `.md`
+  file, wrong in code. It suppressed `#сurl … | bash` in a shell script, where
+  the homoglyph exists precisely to survive a crude marker check and where the
+  careful `match_in_comment` already does this job — and returns *false* there,
+  because after folding the match is no longer in the raw text.
+- **quote parity** — correct for a *command* (`'… rm -rf / …'` is a string in a
+  test fixture or a user-facing message) and wrong for a *path*, where a quoted
+  path is how ordinary code writes one: `cat > "$HOME/.bashrc"`,
+  `Path.home() / ".ssh" / "id_rsa"`. It hid a real `PERSIST_SHELL_RC` and a real
+  `SECRET_PATH_READ` in two malicious fixtures.
+
+Plus `SECRET_AWS_ACCESS_KEY` skipped `AKIAIOSFODNN7EXAMPLE` unconditionally. That
+is right for the doc table it was added for and wrong for a `config.sh` that
+assigns it.
+
+### The fix
+
+Two predicates, chosen per rule, plus the file kind:
+
+| predicate | applies to | why |
+|---|---|---|
+| `is_documentation_structure` + not executable | path and write rules | a quoted path is normal code |
+| `is_quoted_example` anywhere | command rules | a command in a literal is prose |
+| `!executable && structure` | command rules | markdown is documentation; `#` in code is `match_in_comment`'s job |
+
+| rule | rev17 | rev19 |
+|---|---|---|
+| `SHELL_DESTRUCTIVE` | P 50% (1 tp, 1 fp) | unchanged |
+| `PERSIST_CRON` | P 50% | unchanged |
+| `NET_HTTP_CLIENT` | P 85.7% | **87.5%** |
+| `PERSIST_AGENT_CONFIG` | P 20% | **25%** |
+| `SECRET_PATH_READ` | suppressed out of the table | **P 62.5%, R 100%** |
+| fixtures | 4 failing | 22 passing |
+
+The lesson is not "run the tests". It is that **a truncated command is a silent
+one**: `| head -3` turned a red suite into a green report.
