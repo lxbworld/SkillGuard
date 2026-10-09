@@ -149,7 +149,7 @@ only one of the three with a plain email address.
 |---|---|---|---|---|
 | skills.sh | GitHub discussion on `vercel-labs/skills` (no email, no `SECURITY.md`) | not yet | — | excluded until reply |
 | ClawHub | `openclaw/clawhub` — Discord `discord.gg/clawd` or a repo issue; listing reports for findings | not yet | — | excluded until reply |
-| skillsmp.com | `support@skillsmp.com` | not yet | — | excluded until reply |
+| skillsmp.com | `support@skillsmp.com` | **2026-10-09** | — | excluded until reply |
 | GitHub (L3) | n/a — API docs | n/a | n/a | **permitted**, proceed |
 
 While these are unanswered, the study runs on **L3 only**
@@ -166,7 +166,10 @@ the evidence stays on the scanning machine.
 
 | Date (UTC) | Finding | Reported to | Deadline | Outcome |
 |---|---|---|---|---|
-| — | — | — | — | — |
+| 2026-10-09 | permission request, no finding yet | skillsmp.com `support@` | 2026-10-16 | awaiting reply |
+
+The request cites <https://github.com/lxbworld/SkillGuard>, which became public on
+2026-10-09 so that the link in the message resolves.
 
 ---
 
