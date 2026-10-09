@@ -1,16 +1,8 @@
 # CI for SkillGuard: the cheap path.
 #
-# ⚠️ TEMPORARILY DISABLED (2026-10-09). All four workflows are disabled on
-# GitHub (`disabled_manually`) because the account is a free plan with a shared
-# 2,000-minute/month Actions allowance, and this project's macOS runner (billed
-# at 10x) was consuming most of it. Re-enable with:
-#
-#     gh workflow enable CI && gh workflow enable cross-platform \
-#         && gh workflow enable "Action self-test" && gh workflow enable Release
-#
-# The local equivalents (`cargo fmt`, `cargo clippy -D warnings`, `cargo test
-# --all-targets`, `cargo deny check`) are all green, so nothing is unverified —
-# it is just not verified *on GitHub* right now.
+# All four workflows were briefly disabled while the account's shared,
+# free-plan Actions allowance was exhausted. The repository is public now, so
+# Actions minutes are unlimited and everything is enabled again.
 #
 # This runs on every commit and pull request, on Linux only. It is ~1.5 billed
 # minutes.

@@ -5,9 +5,11 @@
 # and fails the job when the gate fails. It is the cheapest way to keep the
 # action from silently rotting between releases.
 #
-# The SARIF upload is disabled here: on a private repository Code Scanning needs
-# GitHub Advanced Security, so an upload would fail for a reason unrelated to
-# the action. The scan and the gate are what this checks.
+# The SARIF upload is exercised on push: the repository is public, so Code
+# Scanning is free, and an upload that silently stopped working would otherwise
+# go unnoticed until someone relied on it. Pull requests skip the upload because
+# a fork gets no `security-events: write` permission, which would fail for a
+# reason unrelated to the action.
 
 name: Action self-test
 
@@ -33,6 +35,7 @@ on:
 
 permissions:
   contents: read
+  security-events: write
 
 # Pushing three times in a row should cost one run, not three.
 concurrency:
@@ -55,7 +58,7 @@ jobs:
         with:
           path: tests/fixtures/malicious/download-execute
           fail-on: critical
-          upload-sarif: "false"
+          upload-sarif: ${{ github.event_name == 'push' }}
           version: ""
 
       - name: The action must report its exit code and a SARIF path
