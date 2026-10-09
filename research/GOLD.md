@@ -458,3 +458,35 @@ that simply runs `python3 foo.py` or `bash bar.sh`.
 skill text, docs included, so those recall figures are understated by
 construction. Recall for code-only rules needs a code-only worksheet; that is
 GOLD-v6 work.
+
+---
+
+## Rule fixes driven by GOLD (v1 → v5)
+
+Every fix below came from a labelled false positive, not from reading code. The
+`SCAN_LOGIC_REVISION` counter is bumped so the findings cache is invalidated.
+
+| revision | fix | effect |
+|---|---|---|
+| 2 | `description_mismatch` admits Chinese and inflected verbs | prevalence down, precision up |
+| 3 | a capability declared in `allowed-tools` is admitted | stops duplicating declared-vs-observed |
+| 4 | behavioural rules skip comment lines; `OBFUSC_ZERO_WIDTH` needs the zero-width char inside a word | `PERSIST_*`, `FS_HOME_ACCESS`, `NET_HTTP_CLIENT` FPs removed |
+| 5 | `NET_DOMAIN_LITERAL` needs URL context for ambiguous TLDs; `PERSIST_*` needs a write; `OBFUSC_HOMOGLYPH` needs a mixed-script word | `NET_DOMAIN_LITERAL` 12.5% → 50%; `OBFUSC_HOMOGLYPH` left the report |
+| 6 | trailing comments are comments; `/dev/null` checks the line; `DL_BASE64_BLOB` needs a payload shape; `FS_HOME_ACCESS` is code-only | `FS_ABSOLUTE_PATH` 25% → 50% |
+| 7 | `PI_DESCRIPTION_MISMATCH` drops its network and shell branches (0/6 correct) | prevalence 10.7% → 6.4% |
+| 8 | test assertions are not behaviour; `-P` needs whitespace; `eval` needs a command | `DL_PASSWORD_ARCHIVE`, `SHELL_EVAL` FPs removed |
+| 9–10 | quoted/documentation-shaped lines and attack *discussion* are not `PI_*` instructions | `PI_CONCEALMENT` 50 → 29, `PI_INJECTION_OVERRIDE` 24 → 10 |
+| 11–12 | `SHELL_EXEC` widened, then usage text excluded | recall 8.3% → 37.5% |
+| 13 | `OBFUSC_ZERO_WIDTH` needs ASCII neighbours; the AWS example key is not a credential; tracking-pixel and cron/path-read tightening | `OBFUSC_ZERO_WIDTH` 33% → 100% |
+| 14 | the `PI_*` rules left at 0% are demoted to `Info` | a false `Critical` can no longer fail a gate |
+| 15–16 | documentation structure, relative paths, email/DTD, `assert`/usage | `FS_ABSOLUTE_PATH` 62.5% → 75%, `NET_DOMAIN_LITERAL` 62.5% → 71.4% |
+
+### Two structural bugs found on the way
+
+1. **The precision table was frozen.** `corpus report --gold` scored the labels
+   alone and never checked whether those findings still existed, so a rule could
+   go from 8 false positives to 4 and the table still read 8. `score()` now takes
+   the set of live `(source_id, rule)` pairs and drops stale `tp`/`fp` labels.
+2. **`corpus index` was ~5 `git` subprocesses per skill.** On a 5,442-skill
+   mirror that is ~27,000 spawns and ~13 minutes, all discarded. The enclosing
+   repository is now resolved once; index is **24 seconds**.
