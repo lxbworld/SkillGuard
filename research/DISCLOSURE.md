@@ -36,6 +36,10 @@ report and when, and what we will *not* publish.
 
 ### 2.1 skills.sh
 
+**Channel**: no email and no `SECURITY.md` in `vercel-labs/skills` (the operator
+repo behind skills.sh, per its homepage). Open a GitHub **discussion** or issue
+there. Vercel Labs owns the repo, so the maintainers are the operators.
+
 > **Subject: research request — automated enumeration of the skills.sh index**
 >
 > Hello,
@@ -73,6 +77,16 @@ report and when, and what we will *not* publish.
 
 ### 2.2 ClawHub
 
+**Channel**: `openclaw/clawhub`. For genuinely malicious or deceptive *listings*
+its `SECURITY.md` names **listing reports** as the channel, not advisories —
+that applies to what the study finds, not to the standing permission below. Ask
+for the permission in the community **Discord** (`discord.gg/clawd`) or an issue
+on the repo. Note the policy sentence that matters here: *"Do not use ClawHub
+advisories for vulnerabilities in a third-party skill or plugin's own source
+code. Report those directly to the publisher or source repository."* That is
+exactly the study's subject matter, so the operator conversation has to happen
+first.
+
 > **Subject: research request — private findings before publication (ClawHub)**
 >
 > Hello,
@@ -103,6 +117,9 @@ report and when, and what we will *not* publish.
 
 ### 2.3 skillsmp.com
 
+**Channel**: `support@skillsmp.com` (from the site's own `mailto:` link). The
+only one of the three with a plain email address.
+
 > **Subject: research request — may I enumerate skillsmp.com?**
 >
 > Hello,
@@ -130,9 +147,9 @@ report and when, and what we will *not* publish.
 
 | Source | Contact route | Sent | Reply | Decision |
 |---|---|---|---|---|
-| skills.sh | [operator contact] | not yet | — | excluded until reply |
-| ClawHub | [operator contact] | not yet | — | excluded until reply |
-| skillsmp.com | [operator contact] | not yet | — | excluded until reply |
+| skills.sh | GitHub discussion on `vercel-labs/skills` (no email, no `SECURITY.md`) | not yet | — | excluded until reply |
+| ClawHub | `openclaw/clawhub` — Discord `discord.gg/clawd` or a repo issue; listing reports for findings | not yet | — | excluded until reply |
+| skillsmp.com | `support@skillsmp.com` | not yet | — | excluded until reply |
 | GitHub (L3) | n/a — API docs | n/a | n/a | **permitted**, proceed |
 
 While these are unanswered, the study runs on **L3 only**
