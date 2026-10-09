@@ -14,11 +14,30 @@ name: Action self-test
 on:
   push:
     branches: [main]
+    # A documentation or corpus-data change cannot change how the action
+    # behaves; skipping it keeps the account's Actions allowance for code.
+    paths-ignore:
+      - "research/**"
+      - "docs/**"
+      - "**/*.md"
+      - "LICENSE"
+      - "NOTICE"
   pull_request:
+    paths-ignore:
+      - "research/**"
+      - "docs/**"
+      - "**/*.md"
+      - "LICENSE"
+      - "NOTICE"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Pushing three times in a row should cost one run, not three.
+concurrency:
+  group: self-test-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   action:
