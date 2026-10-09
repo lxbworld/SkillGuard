@@ -211,3 +211,58 @@ The request cites <https://github.com/lxbworld/SkillGuard>, which became public 
 4. **A removal request is honored**, and the study re-runs.
 5. **A cooperator is credited** if they want to be. Going public with the fix is
    a better story than going public with the hole.
+
+---
+
+## 6. What ClawHub's review changed (2026-10-09)
+
+`openclaw/clawhub#3931` got an automated maintainer-side review within five
+minutes. Two of its points need recording because they are correct.
+
+### 6.1 The re-identification point — our wording was too strong
+
+The review: *"paths, commit SHAs, and digests can link findings back to public
+publishers despite omitting author names."*
+
+That is right, and the drafts above said **"not author identity"**, which is not
+something we can deliver. A repo path plus a commit SHA identifies the artifact,
+and through it the publisher, however carefully names are dropped. The protocol
+was already narrower than its own summary — `PROTOCOL.md` says *"`commit` author
+metadata discarded in the public dataset"* and *"no author profiling"*, which is
+true — but "not author identity" is not.
+
+Corrected wording for any message from here on:
+
+> No author names, no commit-author metadata, no email addresses. I publish rule
+> id, content digest and path — which does identify the artifact, and I say so
+> rather than claiming anonymity. If the registry prefers, aggregates only is an
+> acceptable outcome, and I will not publish a path at all.
+
+### 6.2 The RFC asked the wrong question — access was already granted
+
+ClawHub's own `docs/api.md` already decides collection:
+
+> *"You can build a third-party catalog, directory, or search surface on top of
+> ClawHub's public read APIs."*
+
+with `Read: 3000/min per IP, 12000/min per key`, public read requiring no token,
+and a deterministic enumeration route (`GET /api/v1/skills?prefix=&cursor=`,
+continue with `nextCursor`). Our request asked to crawl at **1 request per
+second**, which is 1/50th of what their docs already allow.
+
+So the reviewed summary was exactly right: *"Existing catalog-reuse guidance
+answers access mechanics, but does not settle research publication terms or a
+disclosure window."*
+
+**The ask narrows to publication terms**: may aggregates be published, may a
+finding name an artifact, through which channel, and within what window. The
+collector should use their documented read API rather than a crawler.
+
+### 6.3 The review's recommendation
+
+> **Publish standing research terms**: Permit public-surface research under
+> existing API limits with explicit attribution, privacy, reporting, and
+> publication conditions.
+
+Labels applied: `type: rfc`, `status: review`, `clawhub:needs-product-decision`,
+`clawhub:needs-security-review`, `impact:security`. It is with a policy owner now.
