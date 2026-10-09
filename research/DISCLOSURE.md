@@ -196,6 +196,7 @@ the evidence stays on the scanning machine.
 | 2026-10-09 | permission request, no finding yet | skills.sh — `vercel-labs/skills` issue #2442 | 2026-10-16 | awaiting reply |
 | 2026-10-09 | permission request, no finding yet | ClawHub — RFC `openclaw/clawhub#3931` | 2026-10-23 | awaiting policy owner |
 | 2026-10-09 | reply accepting the re-identification point, narrowing the ask to publication terms | ClawHub — comment 6075720307 | — | sent |
+| 2026-10-09 | follow-up: propose the export endpoint + a scoped token instead of a standing policy | ClawHub — comment 6075752106 | — | sent |
 
 The request cites <https://github.com/lxbworld/SkillGuard>, which became public on
 2026-10-09 so that the link in the message resolves.
