@@ -490,3 +490,42 @@ Every fix below came from a labelled false positive, not from reading code. The
 2. **`corpus index` was ~5 `git` subprocesses per skill.** On a 5,442-skill
    mirror that is ~27,000 spawns and ~13 minutes, all discarded. The enclosing
    repository is now resolved once; index is **24 seconds**.
+
+---
+
+## SKILL-v3: code only, so recall is not confounded by documentation
+
+`SKILL-v2` showed `SHELL_EXEC` at 8.3% recall. But `FS_HOME_ACCESS` and
+`FS_ABSOLUTE_PATH` set `docs_confidence: None`, and the annotators read the whole
+skill — READMEs included — so their "misses" included paths a README mentions
+and the rule deliberately ignores. `SKILL-v3` re-asks the same rule-shaped
+questions about the **executable files only**.
+
+| | |
+|---|---|
+| items | 30 skills × 10 rules, code only |
+| agreement | 295/300 (98.3%), **Cohen's κ 0.906** |
+
+| rule | precision | recall | vs. SKILL-v2 (whole skill) |
+|---|---|---|---|
+| `FS_PATH_ESCAPE` | 100% | 100% | unchanged |
+| `SHELL_EXEC` | 63.6–72.7% | **70–80%** | recall was 8.3% before the fix, 37.5% with docs |
+| `NET_FETCH_CALL` | 60.0% | 60.0% | 25% / 50% |
+| `FS_ABSOLUTE_PATH` | 33.3% | 50.0% | 25% / 50% |
+| `NET_DOMAIN_LITERAL` | 33.3% | 40–50% | 60% / 50% |
+| `FS_HOME_ACCESS` | 33.3% | 25.0% | 100% / 22% |
+| `FS_RECURSIVE_WALK` | 0% (3 fp) | — | 0% (2 fp) |
+| `PERSIST_AGENT_CONFIG` | — | 0% (1 fn) | — / 0% |
+
+### What this settles
+
+- **The docs confound was real but small.** Removing it raised `SHELL_EXEC`'s
+  recall from 37.5% to ~75% and `FS_HOME_ACCESS` dropped from a tautological 100%
+  to 33%, which is the number to trust.
+- **Precision falls when the unit is a skill.** `NET_DOMAIN_LITERAL` was 71% at
+  the line level and is 33% here: a line-level rater asks "is this line a
+  hostname", a skill-level one asks "does this skill contact a host", and the two
+  are different questions. Both are reported; neither is the whole truth.
+- **`FS_RECURSIVE_WALK` is still 0%** — 3 false positives and no true positives
+  on the code-only sample, so its pattern (`rglob`, `rmtree`, `copytree`) is
+  matching recursive *deletion* and test helpers rather than a recursive walk.
