@@ -174,7 +174,7 @@ only one of the three with a plain email address.
 | Source | Contact route | Sent | Reply | Decision |
 |---|---|---|---|---|
 | skills.sh | GitHub issue [#2442](https://github.com/vercel-labs/skills/issues/2442) on `vercel-labs/skills` (no email, no `SECURITY.md`) | **2026-10-09** | — | excluded until reply |
-| ClawHub | RFC [openclaw/clawhub#3931](https://github.com/openclaw/clawhub/issues/3931) — `type: rfc`, `status: review` | **2026-10-09** | — | excluded until reply |
+| ClawHub | RFC [openclaw/clawhub#3931](https://github.com/openclaw/clawhub/issues/3931) — `type: rfc`, `status: review` | **2026-10-09** | automated review 2026-10-09; **recommends standing terms**; policy owner pending | excluded until reply |
 | skillsmp.com | `support@skillsmp.com` | **2026-10-09** | — | excluded until reply |
 | GitHub (L3) | n/a — API docs | n/a | n/a | **permitted**, proceed |
 
@@ -194,7 +194,8 @@ the evidence stays on the scanning machine.
 |---|---|---|---|---|
 | 2026-10-09 | permission request, no finding yet | skillsmp.com `support@` | 2026-10-16 | awaiting reply |
 | 2026-10-09 | permission request, no finding yet | skills.sh — `vercel-labs/skills` issue #2442 | 2026-10-16 | awaiting reply |
-| 2026-10-09 | permission request, no finding yet | ClawHub — RFC `openclaw/clawhub#3931` | 2026-10-23 | awaiting reply |
+| 2026-10-09 | permission request, no finding yet | ClawHub — RFC `openclaw/clawhub#3931` | 2026-10-23 | awaiting policy owner |
+| 2026-10-09 | reply accepting the re-identification point, narrowing the ask to publication terms | ClawHub — comment 6075720307 | — | sent |
 
 The request cites <https://github.com/lxbworld/SkillGuard>, which became public on
 2026-10-09 so that the link in the message resolves.
@@ -266,3 +267,38 @@ collector should use their documented read API rather than a crawler.
 
 Labels applied: `type: rfc`, `status: review`, `clawhub:needs-product-decision`,
 `clawhub:needs-security-review`, `impact:security`. It is with a policy owner now.
+
+### 6.4 The bulk export endpoint is the intended route
+
+The review pointed at `docs/http-api.md`, which documents an endpoint
+purpose-built for this study:
+
+```
+GET /api/v1/skills/export      # "Bulk export of latest public skills for offline analysis"
+  auth:    API token required
+  params:  startDate, endDate (Unix ms on updatedAt), limit (1-250, default 250), cursor
+  returns: ZIP, each skill rooted at {publisher}/{slug}/
+           _manifest.json at the root
+           _source_handoff.json per GitHub-backed skill, carrying
+             repo, commit, path, content hash, archive URL
+           every hosted file bound to a signed manifest by path, size and SHA-256
+```
+
+This is better than crawling on every axis that matters here: it is
+server-rendered and reproducible, it hands back the **commit and content hash**
+the protocol requires rather than a page we would have to resolve ourselves, and
+the integrity of the archive is signed, so a truncated stream is detected rather
+than silently half-read.
+
+It also gives ClawHub the control point that makes "yes" cheap: the token can be
+rate-limited, scoped, revoked, or issued for a fixed window without writing a
+standing policy first. Whatever the policy answer is, **this is the mechanism to
+ask about**, not `prefix`/`cursor` pagination.
+
+### 6.5 Discord is not used
+
+The OpenClaw Discord (`discord.gg/clawd`, ~177k members) was held in reserve as
+a nudge if the RFC went quiet. It did not: an automated review landed in five
+minutes and the thread is now with a policy owner. **Sending it would be noise**,
+so it is dropped. It stays recorded here only so a future reader knows it was
+considered and why it was not used.
