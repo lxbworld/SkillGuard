@@ -342,7 +342,8 @@ reproduce` re-derives every digest) and offline.
 ## Status
 
 **Phases 1–4 are implemented.** 52 rules, declared-vs-observed verification, a
-policy engine, a content-addressed lockfile, CI on three platforms, a GitHub
+policy engine, a content-addressed lockfile, CI on Linux for every commit and
+on all three platforms weekly and for every release, a GitHub
 Action, a pre-commit hook and prebuilt binaries for five platforms.
 
 The Phase 0 corpus pipeline (`index` / `scan` / `stats` / `report` /
@@ -352,8 +353,9 @@ findings, κ 0.907, two independent model annotators — no human, and not the r
 author); the protocol's two-annotator human GOLD and the full study are still
 open.
 
-Test suite and CI are green, and `cargo fmt`, `cargo clippy -D warnings` and
-`cargo deny check` are clean on every platform in the matrix.
+Test suite and CI are green: Linux on every commit (about 1.5 billed minutes),
+Windows and macOS on release tags and weekly, and `cargo fmt`, `cargo clippy -D
+warnings` and `cargo deny check` are clean on every platform in the matrix.
 
 | Phase | Scope | Status |
 |---|---|---|

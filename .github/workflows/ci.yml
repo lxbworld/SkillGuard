@@ -1,37 +1,55 @@
-# CI for SkillGuard itself.
+# CI for SkillGuard: the cheap path.
 #
-# The tool's whole pitch is deterministic, verifiable behaviour, so something
-# has to verify that a push to `main` still builds. Issue #6.
+# This runs on every commit and pull request, on Linux only. It is ~1.5 billed
+# minutes.
 #
-# The three-OS matrix is not optional: `sgdir-v1` promises the same content
-# produces the same digest on any machine, and two of its details (the
-# executable bit and path separators) only differ on non-Unix platforms. A
-# single-OS run cannot test that promise.
+# The three-OS matrix is **not** here on purpose. `sgdir-v1` promises the same
+# content produces the same digest on any machine, and two of its details (the
+# executable bit and path separators) only differ on non-Unix platforms, so
+# cross-platform coverage matters — it lives in `cross-platform.yml`, which runs
+# on release tags, weekly, and on demand. On a free account the macOS runner is
+# billed at 10x and Windows at 2x: the old per-commit matrix cost ~13.5 billed
+# minutes for ~2.8 minutes of wall clock, and two of four jobs were 90% of the
+# bill.
 
 name: CI
 
 on:
   push:
     branches: [main]
+    # A documentation or corpus-data change cannot break the Rust code, and the
+    # corpus tree is not even committed. Skipping these keeps the allowance for
+    # the commits that matter.
+    paths-ignore:
+      - "research/**"
+      - "docs/**"
+      - "**/*.md"
+      - "LICENSE"
+      - "NOTICE"
   pull_request:
+    paths-ignore:
+      - "research/**"
+      - "docs/**"
+      - "**/*.md"
+      - "LICENSE"
+      - "NOTICE"
 
 permissions:
   contents: read
+
+# Pushing three times in a row should cost one run, not three.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
 
 jobs:
-  # fmt does not depend on the OS, but running it everywhere keeps the matrix
-  # honest and is cheap.
   check:
-    name: ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+    name: linux
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 

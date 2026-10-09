@@ -1,0 +1,62 @@
+# Cross-platform verification for SkillGuard, kept off the per-commit path.
+#
+# `sgdir-v1` promises a skill's digest is the same on any machine. Two of its
+# details only differ off Unix: the executable bit and path separators. And
+# `docs/RULES.md` is generated, which caught a real CRLF bug on Windows once.
+# So the matrix is not optional — it is just not needed on every commit.
+#
+# On a free account macOS is billed at 10x and Windows at 2x, so the old
+# per-commit matrix cost ~13.5 billed minutes per run (~90% of it in those two
+# jobs) for ~2.8 minutes of wall clock. Here it runs on release tags, once a
+# week, and on demand: a few minutes a month instead of hundreds.
+
+name: cross-platform
+
+on:
+  push:
+    tags: ["v*"]
+  schedule:
+    # Mondays 04:00 UTC, so a platform regression surfaces within a week.
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-platform-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --all-targets
+
+      - name: Build (release)
+        run: cargo build --release
