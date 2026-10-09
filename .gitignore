@@ -16,6 +16,8 @@ SKILLGUARD.policy.yaml
 # Phase 0 corpus: fetched skill bytes are never committed (only digests,
 # the manifest and the findings are). See research/DISCLOSURE.md.
 /research/raw/
+# L1/L2 listings (third-party paths and counts, not redistributable content).
+/research/lists/
 research/.corpus-cache.json
 
 # Precision/labelling worksheets contain raw source snippets from third-party

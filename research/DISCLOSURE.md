@@ -303,3 +303,40 @@ a nudge if the RFC went quiet. It did not: an automated review landed in five
 minutes and the thread is now with a policy owner. **Sending it would be noise**,
 so it is dropped. It stays recorded here only so a future reader knows it was
 considered and why it was not used.
+
+---
+
+## 7. The L1/L2 collectors, written but not runnable
+
+`research/collect_clawhub.py` and `research/collect_skills_sh.py` are written and
+committed **before permission exists**, on purpose: when an answer arrives the
+collection should be one command, not a week of work. Neither can run by
+accident — both require an explicit `--i-have-permission` flag and exit 1
+without it, and the ClawHub one additionally requires a token it does not have.
+
+### 7.1 What inspecting the two sources changed
+
+**L2 (ClawHub)** — the review pointed at `GET /api/v1/skills/export`, documented
+as a bulk export "for offline analysis": API-token gated, a ZIP rooted at
+`{publisher}/{slug}/`, files bound to a signed manifest, and a
+`_source_handoff.json` per GitHub-backed skill carrying **repo, commit, path and
+content hash**. So L2 does not need a crawler at all, and the export hands back
+the commit the protocol requires instead of a page we would resolve ourselves.
+
+**L1 (skills.sh)** — inspecting one skill page (allowed: `robots.txt` is
+`Allow: /`) shows it carries **install counts and a growth sparkline**,
+`GitHub Stars`, `First Seen`, and the source repository:
+
+    "userInteractionCount": 3759755    # schema.org InstallAction
+    "Installs": "3.8M"  "GitHub Stars": "33.4K"  "First Seen": "Jan 26, 2026"
+    "values": [92685, 99722, 102581, ...]   # weekly sparkline
+
+It carries **no commit SHA**. That is not a defect — a directory is not a
+package lock — but it fixes L1's role: it is a *discovery and popularity* layer.
+Install-count stratification, the one dimension L3 cannot provide, comes from
+here; the content must still be pinned to a commit through GitHub. The script
+therefore writes a **listing** (`research/lists/`, gitignored) and does not
+pretend to produce a reproducible corpus on its own.
+
+That also means the two layers compose rather than duplicate: L1 says which
+skills are popular, the L3 collector says what bytes were at a given commit.
