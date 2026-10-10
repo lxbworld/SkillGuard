@@ -171,6 +171,7 @@ mod tests {
         );
         Report::new(vec![SkillReport {
             name: "suspicious-skill".into(),
+            source_path: None,
             rule_set_version: "0.1.0".into(),
             description: Some("does things".into()),
             declared_permissions_raw: None,

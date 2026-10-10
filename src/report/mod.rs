@@ -12,6 +12,7 @@ pub mod text;
 use crate::models::{Confidence, Finding, Severity, SkippedFile};
 use crate::scan::ScanOutcome;
 use serde::{Deserialize, Serialize};
+use std::path::{Component, Path};
 
 pub use json::to_json;
 pub use markdown::to_markdown;
@@ -30,6 +31,12 @@ pub enum Format {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillReport {
     pub name: String,
+    /// Where the skill lives, relative to the working directory, with forward
+    /// slashes. `None` when it is the working directory itself or cannot be
+    /// expressed relative to it. SARIF needs this to point at the right file:
+    /// every `Finding::file` is relative to the *skill*, not the repository.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
     pub rule_set_version: String,
     pub description: Option<String>,
     pub declared_permissions_raw: Option<String>,
@@ -148,6 +155,7 @@ impl SkillReport {
     pub fn from_outcome(out: &ScanOutcome) -> SkillReport {
         SkillReport {
             name: out.skill_name.clone(),
+            source_path: out.root.as_deref().and_then(source_prefix),
             rule_set_version: crate::RULE_SET_VERSION.to_owned(),
             description: out.description.clone(),
             declared_permissions_raw: out.declared_permissions_raw.clone(),
@@ -160,6 +168,43 @@ impl SkillReport {
             findings: out.findings.clone(),
             skipped: out.skipped.clone(),
         }
+    }
+}
+
+/// Repository-relative, slash-separated prefix for a skill's own files.
+///
+/// `Finding::file` is relative to the *skill* directory (`scripts/run.sh`), but
+/// a SARIF consumer resolves `artifactLocation.uri` against the *repository*
+/// root. Without this prefix, a skill vendored at `skills/foo/` would annotate
+/// `scripts/run.sh` — a file that may not exist, or worse, a different one.
+///
+/// Returns `None` when there is nothing safe to prefix: the working directory
+/// itself, an absolute path outside it, or anything containing `..`.
+fn source_prefix(root: &Path) -> Option<String> {
+    let relative = if root.is_absolute() {
+        // An absolute path outside the working directory has no
+        // repository-relative form. Emitting it would leak the machine's layout
+        // and is not a location Code Scanning can use.
+        root.strip_prefix(std::env::current_dir().ok()?).ok()?
+    } else {
+        root
+    };
+
+    let mut parts: Vec<String> = Vec::new();
+    for component in relative.components() {
+        match component {
+            Component::CurDir => {}
+            Component::Normal(s) => parts.push(s.to_string_lossy().to_string()),
+            // `..`, a root, or a Windows prefix: not expressible as a
+            // repository-relative URI, so do not pretend otherwise.
+            _ => return None,
+        }
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("/"))
     }
 }
 
@@ -226,6 +271,24 @@ mod tests {
     use super::*;
     use crate::models::{Evidence, RuleId};
 
+    #[test]
+    fn source_prefix_normalises_and_rejects() {
+        // Leading `./` from walking `.` must not reach the URI.
+        assert_eq!(
+            source_prefix(Path::new("./skills/foo")),
+            Some("skills/foo".to_owned())
+        );
+        assert_eq!(
+            source_prefix(Path::new("skills/foo")),
+            Some("skills/foo".to_owned())
+        );
+        // Nothing to prefix for the repository root itself.
+        assert_eq!(source_prefix(Path::new(".")), None);
+        assert_eq!(source_prefix(Path::new("")), None);
+        // Never emit a URI that escapes the repository.
+        assert_eq!(source_prefix(Path::new("../outside")), None);
+    }
+
     fn finding(sev: Severity) -> Finding {
         Finding::new(
             RuleId::from("TEST_RULE"),
@@ -245,6 +308,7 @@ mod tests {
     fn skill_report(f: Finding) -> SkillReport {
         SkillReport {
             name: "a".into(),
+            source_path: None,
             rule_set_version: "0".into(),
             description: None,
             declared_permissions_raw: None,

@@ -229,6 +229,7 @@ mod tests {
     fn skill(name: &str, findings: Vec<Finding>) -> SkillReport {
         SkillReport {
             name: name.into(),
+            source_path: None,
             rule_set_version: "0.1.0".into(),
             description: Some("A test skill".into()),
             declared_permissions_raw: None,

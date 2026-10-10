@@ -31,41 +31,47 @@ pub fn to_sarif(report: &Report) -> String {
         .collect();
 
     let mut results: Vec<Value> = Vec::new();
-    for (skill, f) in report.all_findings() {
-        let mut physical = json!({
-            "artifactLocation": { "uri": f.file, "uriBaseId": "%SRCROOT%" },
-        });
-        if f.primary_line() > 0 {
-            physical["region"] = json!({ "startLine": f.primary_line() });
-        }
+    for skill in &report.skills {
+        let name = skill.name.as_str();
+        for f in &skill.findings {
+            let mut physical = json!({
+                "artifactLocation": {
+                    "uri": sarif_uri(skill.source_path.as_deref(), &f.file),
+                    "uriBaseId": "%SRCROOT%",
+                },
+            });
+            if f.primary_line() > 0 {
+                physical["region"] = json!({ "startLine": f.primary_line() });
+            }
 
-        let mut msg = f.message.clone();
-        if let Some(ev) = f.evidence.first() {
-            msg.push_str(&format!("\n  {}: {}", ev.line, ev.text));
-        }
-        if let Some(sec) = f.evidence.first().and_then(|e| e.secondary.as_ref()) {
-            msg.push_str(&format!("\n  {}: {}", sec.line, sec.text));
-        }
+            let mut msg = f.message.clone();
+            if let Some(ev) = f.evidence.first() {
+                msg.push_str(&format!("\n  {}: {}", ev.line, ev.text));
+            }
+            if let Some(sec) = f.evidence.first().and_then(|e| e.secondary.as_ref()) {
+                msg.push_str(&format!("\n  {}: {}", sec.line, sec.text));
+            }
 
-        results.push(json!({
-            "ruleId": f.rule.as_str(),
-            "level": sarif_level(f.severity),
-            "message": { "text": msg },
-            "locations": [{
-                "physicalLocation": physical,
-                "logicalLocations": [{
-                    "name": skill,
-                    "fullyQualifiedName": format!("{skill}/SKILL.md"),
-                    "kind": "module",
+            results.push(json!({
+                "ruleId": f.rule.as_str(),
+                "level": sarif_level(f.severity),
+                "message": { "text": msg },
+                "locations": [{
+                    "physicalLocation": physical,
+                    "logicalLocations": [{
+                        "name": name,
+                        "fullyQualifiedName": format!("{name}/SKILL.md"),
+                        "kind": "module",
+                    }],
                 }],
-            }],
-            "partialFingerprints": { "skillguard/v1": fingerprint(f) },
-            "properties": {
-                "confidence": f.confidence.as_str(),
-                "capability": f.capability.clone().unwrap_or_default(),
-                "skill": skill,
-            },
-        }));
+                "partialFingerprints": { "skillguard/v1": fingerprint(f) },
+                "properties": {
+                    "confidence": f.confidence.as_str(),
+                    "capability": f.capability.clone().unwrap_or_default(),
+                    "skill": name,
+                },
+            }));
+        }
     }
 
     let doc = json!({
@@ -112,6 +118,18 @@ fn sarif_level(sev: Severity) -> &'static str {
     }
 }
 
+/// The repository-relative URI for a finding.
+///
+/// `source_path` is the skill's own location (see [`SkillReport::source_path`]);
+/// `file` is relative to the skill. When there is no usable prefix the file is
+/// emitted as-is, which is the best location available.
+fn sarif_uri(source_path: Option<&str>, file: &str) -> String {
+    match source_path {
+        Some(prefix) if !prefix.is_empty() && !file.is_empty() => format!("{prefix}/{file}"),
+        _ => file.to_owned(),
+    }
+}
+
 /// A stable fingerprint from the content of the finding, so that inserting an
 /// unrelated line above it does not create a new alert.
 fn fingerprint(f: &crate::models::Finding) -> String {
@@ -154,6 +172,7 @@ mod tests {
         );
         Report::new(vec![SkillReport {
             name: "s".into(),
+            source_path: None,
             rule_set_version: "0.1.0".into(),
             description: None,
             declared_permissions_raw: None,
@@ -210,6 +229,21 @@ mod tests {
             2
         );
         assert!(r["partialFingerprints"]["skillguard/v1"].as_str().is_some());
+    }
+
+    #[test]
+    fn skill_location_prefixes_the_uri() {
+        // A skill vendored below the repository root must annotate its own
+        // files, not a path relative to the skill directory. This is the
+        // difference between a usable Code Scanning alert and a broken one.
+        let mut r = report();
+        r.skills[0].source_path = Some("skills/vendor".into());
+        let v: Value = serde_json::from_str(&to_sarif(&r)).unwrap();
+        assert_eq!(
+            v["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]
+                ["uri"],
+            "skills/vendor/scripts/a.sh"
+        );
     }
 
     #[test]

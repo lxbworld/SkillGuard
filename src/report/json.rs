@@ -33,6 +33,7 @@ mod tests {
         .with_capability("shell.execute");
         Report::new(vec![SkillReport {
             name: "s".into(),
+            source_path: None,
             rule_set_version: "0.1.0".into(),
             description: None,
             declared_permissions_raw: None,
