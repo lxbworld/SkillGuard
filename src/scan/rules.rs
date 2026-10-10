@@ -998,8 +998,9 @@ pub fn rule_count() -> usize {
 /// material), and `score()` no longer counts stale `tp`/`fp` labels.
 /// rev 20: `DL_UNTRUSTED_DOMAIN` requires network context for a raw IPv4, so a
 /// user-agent version (`Chrome/120.0.0.0`) or a dotted version is not an
-/// endpoint.
-pub const SCAN_LOGIC_REVISION: u32 = 20;
+/// endpoint. rev 21: capability derivation skips comment-only lines, so a path
+/// or host named only in a comment is not an observed capability.
+pub const SCAN_LOGIC_REVISION: u32 = 21;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

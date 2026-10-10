@@ -116,6 +116,34 @@ impl NormLine {
         self.line == 1 && self.norm.starts_with("#!")
     }
 
+    /// True when the line is *only* a comment: no code precedes the marker.
+    ///
+    /// Rules ask [`NormLine::match_in_comment`] because they have the matched
+    /// text and need to know whether it sits after a trailing marker. Capability
+    /// derivation reads a whole line, so it needs the coarser question. A
+    /// comment is not behaviour, so a path, host or command named only inside one
+    /// must not become a capability: `research/GOLD.md` records `fs read`
+    /// appearing for a documentation path mentioned in a `//` comment, which then
+    /// drives a false declared-vs-observed mismatch.
+    ///
+    /// Only meaningful for executable artifacts: a Markdown `#` is a heading.
+    pub fn comment_only(&self) -> bool {
+        // A folded homoglyph or a stripped zero-width changes what the line
+        // looks like. `#сurl ... | bash` reads as a comment to a crude marker
+        // check, and the obfuscation is the point (GOLD.md, rev 19). Only trust
+        // the marker when normalization did not rewrite the line.
+        if self.raw != self.norm {
+            return false;
+        }
+        let t = self.raw.trim_start();
+        t.starts_with('#')
+            || t.starts_with("//")
+            || t.starts_with("/*")
+            || t.starts_with("*/")
+            || t.starts_with('*')
+            || t.starts_with("<!--")
+    }
+
     /// True when the line is a comment, or the match sits after a trailing
     /// comment marker.
     ///

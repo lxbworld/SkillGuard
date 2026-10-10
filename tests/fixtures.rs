@@ -129,6 +129,31 @@ fn a_version_string_is_not_an_ip_endpoint() {
     );
 }
 
+#[test]
+fn a_comment_is_not_a_capability() {
+    // `research/GOLD.md` records a documentation path mentioned in a `//`
+    // comment being counted as `fs read`. A comment describes behaviour; it does
+    // not perform it, so it must not grant a capability that then drives a
+    // declared-vs-observed mismatch.
+    let out = scan_fixture("safe", "comment-mentions");
+    assert!(
+        out.capabilities.filesystem_read.is_empty(),
+        "a commented path is not a read: {:#?}",
+        out.capabilities
+    );
+    assert!(
+        out.capabilities.network_outbound.is_empty(),
+        "a commented host is not an outbound call: {:#?}",
+        out.capabilities
+    );
+    assert!(!out.capabilities.secrets_read);
+    assert!(
+        out.findings.is_empty(),
+        "a comment mention is not a finding: {:#?}",
+        out.findings
+    );
+}
+
 // ---------------------------------------------------------------------------
 // malicious: must trip the declared rules
 // ---------------------------------------------------------------------------

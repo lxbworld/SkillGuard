@@ -273,7 +273,11 @@ pub fn scan_walked(name: &str, walked: Walked) -> ScanOutcome {
         // Capability derivation: code only. Documentation is explanation.
         if f.kind.is_executable() {
             for l in &norm.lines {
-                if l.is_shebang() {
+                // A shebang is metadata and a comment is description; neither
+                // performs the path, host or command it names. Counting either
+                // makes the declared-vs-observed diff accuse a skill of
+                // behaviour it only mentions (GOLD.md; rev 21).
+                if l.is_shebang() || l.comment_only() {
                     continue;
                 }
                 // A path whose access mode could not be resolved is surfaced as
@@ -581,7 +585,16 @@ const SAFE_HOSTS: &[&str] = &[
 /// not, because that text *is* their subject.
 fn is_behavioural(id: &str) -> bool {
     const PREFIXES: &[&str] = &["FS_", "NET_", "DL_", "PERSIST_", "SHELL_", "DEP_"];
-    PREFIXES.iter().any(|p| id.starts_with(p))
+    if PREFIXES.iter().any(|p| id.starts_with(p)) {
+        return true;
+    }
+    // Secret rules split by claim. A hardcoded *value* in a comment is still a
+    // leaked secret, so `SECRET_PRIVATE_KEY`, `SECRET_GITHUB_TOKEN` and friends
+    // must keep matching comment text. A rule whose claim is that the code
+    // *references a path* or *enumerates the environment* is about an action,
+    // and a comment is not one: `#   ~/.ssh/id_rsa is read here` performs
+    // nothing. GOLD-v4/v5 measured both as false positives.
+    matches!(id, "SECRET_PATH_READ" | "SECRET_ENV_DUMP")
 }
 
 fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -> bool {
