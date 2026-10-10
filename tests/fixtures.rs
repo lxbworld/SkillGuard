@@ -106,6 +106,29 @@ fn safe_fixture_capabilities_are_empty() {
     assert!(out.license_file_found);
 }
 
+#[test]
+fn a_version_string_is_not_an_ip_endpoint() {
+    // `research/GOLD.md` records `DL_UNTRUSTED_DOMAIN` reporting `Chrome/120.0.0.0`
+    // (a user-agent version) as a raw IP endpoint. A dotted number is not a
+    // destination, so the rule now requires network context.
+    let out = scan_fixture("safe", "version-strings");
+    assert!(
+        !rules(&out).contains("DL_UNTRUSTED_DOMAIN"),
+        "a version string is not an endpoint: {:#?}",
+        out.findings
+    );
+    let noisy: Vec<String> = out
+        .findings
+        .iter()
+        .filter(|f| f.severity >= Severity::Medium)
+        .map(|f| f.rule.as_str().to_owned())
+        .collect();
+    assert!(
+        noisy.is_empty(),
+        "version-strings should be quiet: {noisy:?}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // malicious: must trip the declared rules
 // ---------------------------------------------------------------------------
@@ -232,6 +255,13 @@ fn undeclared_network_access_is_caught() {
         out.declared_permissions_raw.is_none(),
         "this fixture declares nothing, which is the point"
     );
+}
+
+#[test]
+fn a_raw_ip_endpoint_is_caught() {
+    // Tightening the IPv4 pattern must not blind the rule to a real destination.
+    let out = scan_fixture("suspicious", "raw-ip-endpoint");
+    assert_trips(&out, &["DL_UNTRUSTED_DOMAIN"]);
 }
 
 #[test]

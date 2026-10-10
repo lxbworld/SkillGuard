@@ -513,7 +513,14 @@ static TABLE: &[RuleSpec] = &[
             // identifiers (`state.work`) and prose. Require URL context, and
             // drop `zip`/`mov`, which are far more often file extensions.
             r#"(?i)(?:https?://|ftp://|www\.)[^\s'"`<>]*\b[a-z0-9-]+\.(?:tk|ml|ga|cf|gq|top|xyz|click|rest|lol|work|surf|quest)\b"#,
-            r"(?i)\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b",
+            // A bare `\d+.\d+.\d+.\d+` matched version strings: `research/GOLD.md`
+            // records `Chrome/120.0.0.0` (a user-agent version) and `"1.2.3.4"`
+            // reported as endpoints. The claim is that an endpoint is *contacted*,
+            // so require network context: a URL authority, a network-shaped key,
+            // or a network command. A number on its own is not a destination.
+            r#"(?i)(?:https?|ftps?|wss?|tcp|udp)://[^\s'"`<>]*\b\d{1,3}(?:\.\d{1,3}){3}\b"#,
+            r#"(?i)\b(?:host|hostname|endpoint|address|addr|server|proxy|dns|nameserver)\b\s*[:=]\s*["']?\d{1,3}(?:\.\d{1,3}){3}\b"#,
+            r"(?i)\b(?:curl|wget|nc|ncat|netcat|telnet|ssh|scp|ping|nslookup|dig)\b[^\n]{0,60}\b\d{1,3}(?:\.\d{1,3}){3}\b",
             r"(?i)\b[a-z0-9]{20,}\.(?:com|net|org)\b",
         ],
         message: "A low-reputation TLD or a raw IP endpoint is contacted",
@@ -989,7 +996,10 @@ pub fn rule_count() -> usize {
 /// rev 9: quoted or documentation-shaped lines are not `PI_*` instructions.
 /// rev 10: nor is a line that *discusses* the attack (security training
 /// material), and `score()` no longer counts stale `tp`/`fp` labels.
-pub const SCAN_LOGIC_REVISION: u32 = 19;
+/// rev 20: `DL_UNTRUSTED_DOMAIN` requires network context for a raw IPv4, so a
+/// user-agent version (`Chrome/120.0.0.0`) or a dotted version is not an
+/// endpoint.
+pub const SCAN_LOGIC_REVISION: u32 = 20;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};
