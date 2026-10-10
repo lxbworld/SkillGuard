@@ -482,8 +482,9 @@ Every fix below came from a labelled false positive, not from reading code. The
 | 15–16 | documentation structure, relative paths, email/DTD, `assert`/usage | `FS_ABSOLUTE_PATH` 62.5% → 75%, `NET_DOMAIN_LITERAL` 62.5% → 71.4% |
 | 20 | `DL_UNTRUSTED_DOMAIN` requires network context for a raw IPv4 | a user-agent version (`Chrome/120.0.0.0`) and a dotted version are no longer endpoints |
 | 21 | capability derivation and `SECRET_PATH_READ`/`SECRET_ENV_DUMP` skip comment-only lines | a path or host named only in a comment is no longer an observed capability |
+| 22 | `NET_DOMAIN_LITERAL` needs host position, not just URL context; a version-shaped token is not a filesystem read | a URL path segment (`…/install.sh`) is not a host; `Chrome/120.0.0.0` is not a read |
 
-Revisions 20 and 21 were reproduced from the false-positive notes above and
+Revisions 20 to 22 were reproduced from the false-positive notes above and
 carry fixtures (`safe/version-strings`, `suspicious/raw-ip-endpoint`,
 `safe/comment-mentions`), but they are **not re-measured**: the corpus mirror is
 not in the repository, so the precision column still reflects rev 8. They await a
