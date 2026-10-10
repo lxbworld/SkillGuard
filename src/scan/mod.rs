@@ -597,6 +597,20 @@ fn is_behavioural(id: &str) -> bool {
     matches!(id, "SECRET_PATH_READ" | "SECRET_ENV_DUMP")
 }
 
+/// True when the text before a match sits inside the *path* of a URL, i.e. a
+/// scheme authority has already ended with a `/`.
+///
+/// `http://198.51.100.7/install.sh` puts `install.sh` in the path, so it is not
+/// the contacted host, while `https://api.example.sh/x` puts the host before any
+/// `/`, so it is. Regex lookbehind is unavailable here by policy, so this is
+/// decided from the prefix instead of from the pattern.
+fn after_url_authority(before: &str) -> bool {
+    match before.rfind("://") {
+        Some(i) => before[i + 3..].contains('/'),
+        None => false,
+    }
+}
+
 fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -> bool {
     let line = raw_line.to_lowercase();
     let m = matched.to_lowercase();
@@ -679,11 +693,17 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
                 ".sh", ".app", ".info", ".dev", ".ai", ".io", ".co", ".me", ".so", ".cc", ".to",
                 ".tv", ".gg", ".live", ".site", ".online", ".cloud",
             ];
+            let match_at = raw_line.find(matched);
             let url_context = line.contains("://") || line.contains("www.") || line.contains('@');
-            (AMBIGUOUS.iter().any(|t| m.ends_with(t)) && !url_context)
+            // A URL's authority ends at the first `/`: `http://198.51.100.7/install.sh`
+            // names `install.sh` in the path, not as the host. URL context alone
+            // let it through, because `://` is present. An ambiguous TLD in a
+            // path is still a filename (GOLD-v5 lists `comet-state.sh`).
+            let in_url_path = match_at.is_some_and(|i| after_url_authority(&raw_line[..i]));
+            (AMBIGUOUS.iter().any(|t| m.ends_with(t)) && (!url_context || in_url_path))
                 // An email address (`x@gmail.com`) is not a contacted host, and a
                 // DTD identifier is not a URL (GOLD-v5).
-                || raw_line.find(matched).is_some_and(|i| raw_line[..i].ends_with('@'))
+                || match_at.is_some_and(|i| raw_line[..i].ends_with('@'))
                 || line.contains("doctype")
                 || line.contains("public \"")
                 // XML namespaces (`xmlns="http://schemas..."`) are identifiers,

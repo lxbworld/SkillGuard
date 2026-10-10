@@ -999,8 +999,11 @@ pub fn rule_count() -> usize {
 /// rev 20: `DL_UNTRUSTED_DOMAIN` requires network context for a raw IPv4, so a
 /// user-agent version (`Chrome/120.0.0.0`) or a dotted version is not an
 /// endpoint. rev 21: capability derivation skips comment-only lines, so a path
-/// or host named only in a comment is not an observed capability.
-pub const SCAN_LOGIC_REVISION: u32 = 21;
+/// or host named only in a comment is not an observed capability. rev 22:
+/// `NET_DOMAIN_LITERAL` needs host position, not just URL context, so a URL path
+/// segment (`http://host/install.sh`) is not a host; a version-shaped token
+/// (`Chrome/120.0.0.0`) is not a filesystem read.
+pub const SCAN_LOGIC_REVISION: u32 = 22;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

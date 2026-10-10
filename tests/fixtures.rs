@@ -127,6 +127,11 @@ fn a_version_string_is_not_an_ip_endpoint() {
         noisy.is_empty(),
         "version-strings should be quiet: {noisy:?}"
     );
+    assert!(
+        out.capabilities.filesystem_read.is_empty(),
+        "a user-agent version is not a path: {:#?}",
+        out.capabilities
+    );
 }
 
 #[test]
@@ -287,6 +292,26 @@ fn a_raw_ip_endpoint_is_caught() {
     // Tightening the IPv4 pattern must not blind the rule to a real destination.
     let out = scan_fixture("suspicious", "raw-ip-endpoint");
     assert_trips(&out, &["DL_UNTRUSTED_DOMAIN"]);
+}
+
+#[test]
+fn a_url_path_segment_is_not_a_host() {
+    // `http://198.51.100.7/install.sh` names `install.sh` in the path. `.sh` is a
+    // TLD too, but the URL authority ended at the first `/`.
+    let out = scan_fixture("suspicious", "raw-ip-endpoint");
+    assert!(
+        !rules(&out).contains("NET_DOMAIN_LITERAL"),
+        "a path segment is not a host: {:#?}",
+        out.findings
+    );
+}
+
+#[test]
+fn an_ambiguous_tld_in_host_position_is_still_a_host() {
+    // The path fix must not blind the rule to a real host whose TLD looks like a
+    // file extension.
+    let out = scan_fixture("suspicious", "ambiguous-tld-host");
+    assert_trips(&out, &["NET_DOMAIN_LITERAL"]);
 }
 
 #[test]

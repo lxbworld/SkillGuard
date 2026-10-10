@@ -466,6 +466,14 @@ fn normalize_path_token(t: &str) -> String {
     if !t.contains('/') && !t.starts_with('~') && !t.starts_with('$') && !is_config_file(t) {
         return String::new();
     }
+    // A version is not a path. `Chrome/120.0.0.0`, `AppleWebKit/537.36` and
+    // `Mozilla/5.0` end in a segment that is only digits and dots, and the path
+    // regex reads them as directories under a browser name. Rejecting them costs
+    // at most a missed *read* (informational), while keeping them produces a
+    // false capability that feeds declared-vs-observed.
+    if is_version_segment(t) {
+        return String::new();
+    }
     if t.matches('.').count() > 3 {
         return String::new();
     }
@@ -473,6 +481,17 @@ fn normalize_path_token(t: &str) -> String {
         return String::new();
     }
     t.replace('\\', "/")
+}
+
+/// True when a token's last `/`-separated segment is only digits and dots.
+///
+/// `120.0.0.0`, `537.36`, `5.0`. The token has to contain a dot, so a plain
+/// number (`logs/2024`) is left alone.
+fn is_version_segment(t: &str) -> bool {
+    match t.rsplit('/').next() {
+        Some(last) => last.contains('.') && last.chars().all(|c| c.is_ascii_digit() || c == '.'),
+        None => false,
+    }
 }
 
 /// Dotfiles that are genuinely paths.
@@ -963,6 +982,34 @@ mod tests {
             cap.network_outbound
         );
         assert_eq!(split_shell_segments("a — b; c").len(), 2);
+    }
+
+    #[test]
+    fn a_version_is_not_a_filesystem_path() {
+        // A user-agent string put `Chrome/120.0.0.0` and `Safari/537.36` into
+        // `fs read`, which then fed declared-vs-observed. A version segment is
+        // not a directory.
+        let mut a = Accumulator::new();
+        a.add_text("const ua = \"Chrome/120.0.0.0 Safari/537.36\";");
+        let cap = a.finish();
+        assert!(
+            cap.filesystem_read.is_empty(),
+            "a version is not a path: {:#?}",
+            cap.filesystem_read
+        );
+    }
+
+    #[test]
+    fn a_relative_path_is_still_a_path() {
+        // The version check must not swallow ordinary relative paths.
+        let mut a = Accumulator::new();
+        a.add_text("open('data/input.txt')");
+        let cap = a.finish();
+        assert!(
+            cap.filesystem_read.iter().any(|p| p.ends_with("input.txt")),
+            "{:#?}",
+            cap.filesystem_read
+        );
     }
 
     #[test]
