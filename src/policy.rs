@@ -830,7 +830,20 @@ pub fn render_decision(decision: &PolicyDecision) -> String {
         ));
     }
     if decision.violations.is_empty() {
-        o.push_str("    no policy violations\n");
+        // A block with no capability violation came from the findings threshold:
+        // `findings.deny_severity`. Saying "no policy violations" there is both
+        // wrong and unhelpful — the developer needs to know which rule tripped.
+        match (decision.decision.blocks(), decision.worst_finding) {
+            (true, Some(worst)) => o.push_str(&format!(
+                "    findings at or above the deny threshold (worst: {worst}); review the scan evidence\n"
+            )),
+            _ => o.push_str("    no policy violations\n"),
+        }
+    }
+    if decision.decision.blocks() && !decision.violations.is_empty() {
+        if let Some(worst) = decision.worst_finding {
+            o.push_str(&format!("    (worst finding: {worst})\n"));
+        }
     }
     if decision.decision.blocks() {
         o.push_str("\n  installation blocked.\n");
@@ -1197,6 +1210,29 @@ mod tests {
         let out = render_decision(&d);
         assert!(!out.contains('\u{1B}'));
         assert!(out.contains("BLOCKED"));
+    }
+
+    #[test]
+    fn decision_render_explains_a_findings_block() {
+        // Deny with no capability violation: the findings threshold blocked it.
+        // Reporting "no policy violations" here would be actively misleading.
+        let d = PolicyDecision {
+            decision: Decision::Deny,
+            violations: vec![],
+            worst_finding: Some(Severity::High),
+        };
+        let out = render_decision(&d);
+        assert!(out.contains("BLOCKED"), "{out}");
+        assert!(out.contains("deny threshold"), "{out}");
+        assert!(out.contains("HIGH"), "{out}");
+        assert!(!out.contains("no policy violations"), "{out}");
+    }
+
+    #[test]
+    fn decision_render_reports_a_clean_allow() {
+        let out = render_decision(&PolicyDecision::allow());
+        assert!(out.contains("no policy violations"), "{out}");
+        assert!(!out.contains("installation blocked"), "{out}");
     }
 
     // ── issue #2: naming the files that changed ───────────────────────────
