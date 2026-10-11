@@ -278,21 +278,28 @@ chain rule 匹配同一条命令或相邻两行内的序列，severity 提升到
 
 ## 6. 哈希规范（可复现安装的基石）
 
-**目录摘要算法 `sgdir-v1`：**
+**目录摘要算法 `sgdir-v1`（与 `src/hash.rs::digest_dir` 逐字节等价）：**
 
 ```
-1. 遍历文件，按 POSIX 风格相对路径（'/' 分隔，Unicode NFC）字典序升序排序
-2. 对每个文件：
-     h_i = SHA256( b"sfg1\0" + relpath_bytes + b"\0" + mode_octal + b"\0" + content_bytes )
-3. digest = SHA256( b"SKILLGUARD-DIR-v1\0" + concat(h_i) )
+1. 遍历文件（不跟随 symlink），跳过排除项，按 POSIX 风格相对路径
+   （'/' 分隔，Unicode NFC）字典序升序排序
+2. 每个文件生成一条记录，字节序列为
+     R_i = b"sfg1\0" + relpath_bytes + b"\0" + mode + b"\0" + sha256_hex(content) + b"\0"
+   其中 mode 为 b"755"（可执行）或 b"644"（否则）；sha256_hex 是文件内容的 64 位小写
+   十六进制摘要，不带 "sha256:" 前缀
+3. digest = SHA256( b"SKILLGUARD-DIR-v1\0" + R_1 + R_2 + ... + R_n )
+   这是**单次流式哈希**：记录直接拼进同一个哈希，而不是「每文件先 SHA256、再拼接摘要」
 4. 输出 "sha256:" + hex(digest)
 ```
 
-`mode_octal` 只纳入可执行位（`0o755` / `0o644`），避免跨平台 umask 差异导致不可复现。
-**明确排除**：`.git/`、`*.lock`（防止自指）、`SKILLGUARD.lock` 自身。
+`mode` 只纳入可执行位（`755` / `644`），避免跨平台 umask 差异导致不可复现。
+路径经 Unicode NFC 归一，所以 macOS 返回的 NFD 名与 Linux 的 NFC 名得到同一摘要。
+**明确排除**：目录 `.git/`、`node_modules/`、`__pycache__/`、`.venv/`、`target/`，
+以及文件 `SKILLGUARD.lock`、`.DS_Store`、`Thumbs.db`（`SKILLGUARD.lock` 排除是为了防止自指）。
 
-这与 `skills-lock.json` 的 `computedHash` 不兼容 → `lockfile::migrate` 提供转换，
-并在转换时**保留原 `computedHash`** 作为 `legacy_digest` 以便回溯校验。
+这与 `skills-lock.json` 的 `computedHash` 不兼容：`skillguard import` 读取外来锁文件，
+并**保留原 `computedHash`** 作为 `legacy_digest` 以便回溯校验（它不会写进 `content_digest`，
+因为那是 `sgdir-v1` 摘要）。
 
 ---
 

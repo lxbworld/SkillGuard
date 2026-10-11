@@ -24,7 +24,9 @@ use sha2::Sha256;
 // Imported under an alias: this module defines its own `Digest` type, which
 // would otherwise shadow the trait that provides `Sha256::new()`.
 use sha2::Digest as Sha2Digest;
+// `rel_posix` normalises path text, and `text.rs` normalises file content.
 use std::path::{Path, PathBuf};
+use unicode_normalization::UnicodeNormalization;
 
 /// Version tag mixed into every digest, so the algorithm can change later
 /// without silently invalidating old lockfiles.
@@ -147,12 +149,17 @@ fn is_executable(path: &Path) -> bool {
 
 /// Slash-separated relative path, NFC-normalised.
 fn rel_posix(root: &Path, path: &Path) -> String {
-    path.strip_prefix(root)
+    // Unicode NFC last: macOS hands back NFD from the filesystem and Linux hands
+    // back NFC, so the same skill would otherwise hash differently per platform.
+    // ASCII is already NFC, so this is a no-op for every existing digest.
+    let joined = path
+        .strip_prefix(root)
         .unwrap_or(path)
         .components()
         .map(|c| c.as_os_str().to_string_lossy().to_string())
         .collect::<Vec<_>>()
-        .join("/")
+        .join("/");
+    joined.nfc().collect()
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -406,6 +413,22 @@ mod tests {
             base,
             digest_dir(&d).unwrap_or_default().0,
             ".git, the lockfile and vendored deps must not affect the digest"
+        );
+    }
+
+    #[test]
+    fn digest_is_stable_across_unicode_normalisation_of_names() {
+        // macOS stores and returns NFD; Linux returns what was written. If the
+        // path is not normalised, the same skill hashes differently per
+        // platform, which is exactly the promise `sgdir-v1` makes.
+        let nfc = tmp("nfc-name");
+        write(&nfc, "caf\u{e9}.md", "x");
+        let nfd = tmp("nfd-name");
+        write(&nfd, "cafe\u{301}.md", "x");
+        assert_eq!(
+            digest_dir(&nfc).unwrap_or_default().0,
+            digest_dir(&nfd).unwrap_or_default().0,
+            "NFC and NFD spellings of the same name must digest identically"
         );
     }
 
