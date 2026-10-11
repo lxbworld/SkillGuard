@@ -85,7 +85,7 @@ The full loop, and the history of which round changed what, is in
 | `tests/cli.rs` | The command-line surface |
 | `tests/distribution.rs` | The Action, the installer and the pre-commit hook |
 
-251 tests in total. A new rule should come with a fixture; a new behaviour on an
+268 tests in total. A new rule should come with a fixture; a new behaviour on an
 existing rule should come with the fixture that would have caught it.
 
 ## Research and disclosure
