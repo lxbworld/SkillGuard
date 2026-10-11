@@ -112,7 +112,8 @@ If you are adding a data source, read `research/PROTOCOL.md` and
 SkillGuard itself is a security tool, so it has an obvious attack surface: the
 parsers, the digest, and the policy engine. Please do not open a public issue
 for a vulnerability in SkillGuard. Use GitHub's private vulnerability reporting
-on the Security tab, and give us a chance to fix it before it is public.
+on the Security tab, and give us a chance to fix it before it is public. The
+full policy is in [`.github/SECURITY.md`](.github/SECURITY.md).
 
 This is separate from findings *about a skill*, which are the point of the tool
 and belong in a normal issue (with the payload omitted — see above).
