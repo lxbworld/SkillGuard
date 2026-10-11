@@ -138,11 +138,13 @@ static TABLE: &[RuleSpec] = &[
             r"(?i)\bos\.environ\.items\s*\(",
             r"(?i)\bos\.environ\.keys\s*\(",
             r"(?i)\b(?:dict|list|json\.dumps)\s*\(\s*os\.environ",
-            r"(?i)\bin\s+os\.environ\b",
+            // `for k in os.environ` enumerates; `"K" in os.environ` reads one
+            // key by name, which is not a dump.
+            r"(?i)\bfor\s+[^\n:]{0,40}\bin\s+os\.environ\b",
             r"(?i)\bprocess\.env\.keys\s*\(",
             r"(?i)\bObject\.(?:keys|entries|assign|values)\s*\(\s*process\.env\b",
             r"(?i)\bJSON\.stringify\s*\(\s*process\.env\b",
-            r"(?i)\bin\s+process\.env\b",
+            r"(?i)\bfor\s+[^\n:]{0,40}\bin\s+process\.env\b",
             // Handing the whole environment to a child process leaks it just
             // as effectively as printing it.
             r"(?i)\benv\s*=\s*(?:os\.environ|process\.env)\b",
@@ -1034,7 +1036,10 @@ pub fn rule_count() -> usize {
 /// a `.env` *template* (`.env.example`) is not a key store, so `cat .env.example`
 /// is neither `FS_SENSITIVE_PATH` nor a `secrets.read` capability. rev 29:
 /// naming `.npmrc` is not pointing npm at a registry; only a write to it is.
-pub const SCAN_LOGIC_REVISION: u32 = 29;
+/// rev 30: `SECRET_ENV_DUMP` distinguishes enumeration from a keyed read, so
+/// `"K" in os.environ` and `printenv HOME` are no longer a whole-environment
+/// dump.
+pub const SCAN_LOGIC_REVISION: u32 = 30;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

@@ -490,14 +490,15 @@ Every fix below came from a labelled false positive, not from reading code. The
 | 27 | `DL_UNTRUSTED_DOMAIN` needs the untrusted TLD in host position, and its private-address exclusion looks inside the match | a path segment (`…/water.xyz`) is not a low-reputation host, and a local `http://127.0.0.1` health check is no longer untrusted |
 | 28 | a `.env` *template* is not a key store | `cat .env.example` is neither `FS_SENSITIVE_PATH` nor a `secrets.read` capability |
 | 29 | `DEP_CUSTOM_REGISTRY` needs a write to `.npmrc`, not a mention | `cat ~/.npmrc` no longer claims npm was pointed at a non-default registry |
+| 30 | `SECRET_ENV_DUMP` distinguishes enumeration from a keyed read | `"K" in os.environ` and `printenv HOME` are no longer a whole-environment dump |
 
-Revisions 20 to 29 were reproduced from the false-positive notes above and
+Revisions 20 to 30 were reproduced from the false-positive notes above and
 carry fixtures (`safe/version-strings`, `suspicious/raw-ip-endpoint`,
 `safe/comment-mentions`, `safe/tmp-chmod`, `safe/own-settings`,
-`safe/credential-names`, `safe/endpoint-context`, `safe/env-template`), but they
-are **not re-measured**: the corpus mirror is not in the repository, so the
-precision column still reflects rev 8. They await a GOLD-v6 round, and each
-should be scored there before any figure is quoted.
+`safe/credential-names`, `safe/endpoint-context`, `safe/env-template`,
+`safe/keyed-env-read`), but they are **not re-measured**: the corpus mirror is
+not in the repository, so the precision column still reflects rev 8. They await
+a GOLD-v6 round, and each should be scored there before any figure is quoted.
 
 ### Two structural bugs found on the way
 

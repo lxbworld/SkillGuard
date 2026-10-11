@@ -261,6 +261,34 @@ fn a_committed_env_template_is_not_a_key_store() {
 }
 
 #[test]
+fn a_keyed_environment_read_is_not_a_dump() {
+    // `SECRET_ENV_DUMP` claims "the whole process environment is enumerated".
+    // `if REQUIRED not in os.environ` and `printenv HOME` both read one key
+    // (rev 30).
+    let out = scan_fixture("safe", "keyed-env-read");
+    assert!(
+        !rules(&out).contains("SECRET_ENV_DUMP"),
+        "a keyed read is not a dump: {:#?}",
+        out.findings
+    );
+    assert!(
+        !out.capabilities.secrets_read,
+        "a keyed read is not a wholesale environment read: {:#?}",
+        out.capabilities
+    );
+    let noisy: Vec<String> = out
+        .findings
+        .iter()
+        .filter(|f| f.severity >= Severity::Medium)
+        .map(|f| f.rule.as_str().to_owned())
+        .collect();
+    assert!(
+        noisy.is_empty(),
+        "keyed-env-read should be quiet: {noisy:?}"
+    );
+}
+
+#[test]
 fn a_comment_is_not_a_capability() {
     // `research/GOLD.md` records a documentation path mentioned in a `//`
     // comment being counted as `fs read`. A comment describes behaviour; it does

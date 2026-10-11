@@ -367,9 +367,26 @@ fn utf8_char_len(b: u8) -> usize {
 /// The distinction matters. `os.environ['HOME']` reads one variable;
 /// `dict(os.environ)` hands every credential the agent holds to whatever comes
 /// next. Conflating them is how a scanner loses its credibility.
+/// Does this line dump the *whole* environment with `printenv`?
+///
+/// `printenv` with no argument prints every variable; `printenv HOME` reads one
+/// by key, which is exactly the keyed read the rule says is fine. A flag
+/// (`-0`), a pipe or a redirect still dumps.
+pub fn printenv_dumps(line: &str) -> bool {
+    let l = line.to_lowercase();
+    let Some(pos) = l.find("printenv") else {
+        return false;
+    };
+    let after = l[pos + "printenv".len()..].trim_start();
+    match after.chars().next() {
+        None => true,
+        Some(c) => matches!(c, '-' | '|' | ';' | '&' | ')' | '>'),
+    }
+}
+
 pub fn dumps_environment(line: &str) -> bool {
     let l = line.to_lowercase();
-    if l.contains("printenv") || l.contains("getenv()") {
+    if printenv_dumps(line) || l.contains("getenv()") {
         return true;
     }
     // `env | tee`, `set | grep`: enumerating into a pipe.
@@ -380,7 +397,14 @@ pub fn dumps_environment(line: &str) -> bool {
         let mut from = 0usize;
         while let Some(i) = l[from..].find(sym) {
             let after = &l[from + i + sym.len()..];
-            let enumerating = !after.starts_with('[')
+            // `for k in os.environ` enumerates, but `"K" in os.environ` checks a
+            // single key and is not a dump.
+            let membership = l[..from + i]
+                .trim_end()
+                .strip_suffix("in")
+                .is_some_and(|head| !head.split_whitespace().any(|w| w == "for"));
+            let enumerating = !membership
+                && !after.starts_with('[')
                 && !after.starts_with(".get")
                 && !after.starts_with(".pop")
                 && !after.starts_with(".copy()")
@@ -1003,6 +1027,12 @@ mod tests {
         assert!(dumps_environment("for k, v in process.env.items()"));
         assert!(!dumps_environment("os.environ['HOME']"));
         assert!(!dumps_environment("environment variable documentation"));
+        // rev 30: a keyed read is not a dump.
+        assert!(!dumps_environment("printenv HOME"));
+        assert!(dumps_environment("printenv | sort"));
+        assert!(!dumps_environment("if REQUIRED not in os.environ:"));
+        assert!(!dumps_environment("if 'K' in process.env"));
+        assert!(dumps_environment("for k in os.environ:"));
     }
 
     #[test]

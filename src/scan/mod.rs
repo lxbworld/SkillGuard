@@ -800,6 +800,9 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         }
         // A read of a sensitive path is a path claim, not a command one.
         "SECRET_PATH_READ" => looks_like_test(&line) || doc_in_docs,
+        // `printenv` with no argument dumps every variable; `printenv HOME`
+        // reads one by key (rev 30).
+        "SECRET_ENV_DUMP" => m == "printenv" && !crate::capability::printenv_dumps(raw_line),
         // `.env.example` and friends are templates the repository commits *on
         // purpose*, because they hold no secrets. The pattern matches up to
         // `.env`, so the suffix is read from the line (rev 28).
