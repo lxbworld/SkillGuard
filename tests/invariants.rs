@@ -198,6 +198,37 @@ fn relative_markdown_links_resolve() {
     assert!(broken.is_empty(), "broken relative links: {broken:#?}");
 }
 
+/// The README states the rule count. A count that drifts is a small lie, and
+/// `docs/RULES.md` already has a test against exactly that.
+#[test]
+fn the_readme_rule_count_matches_the_code() {
+    let readme = read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md"));
+    let expected = skillguard::scan::rules::rule_count();
+    let mut checked = 0usize;
+    for (idx, _) in readme.match_indices(" rules") {
+        let digits: String = readme[..idx]
+            .chars()
+            .rev()
+            .take_while(char::is_ascii_digit)
+            .collect();
+        if digits.is_empty() {
+            continue;
+        }
+        let n: usize = digits
+            .chars()
+            .rev()
+            .collect::<String>()
+            .parse()
+            .expect("digits parse");
+        assert_eq!(
+            n, expected,
+            "README says `{n} rules` but the code emits {expected}"
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "the README should state the rule count");
+}
+
 #[test]
 fn no_telemetry_crate_is_a_dependency() {
     // The README makes offline operation a project constraint. A usage ping

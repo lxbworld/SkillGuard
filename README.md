@@ -220,7 +220,7 @@ Other output formats: `--format json`, `--format sarif` (GitHub Code Scanning),
 | `verify <path>` | Recompute source + commit + digest; name any changed file |
 | `approve <path>` | Record an approval bound to an exact digest, with the reasons |
 | `import <file>` | Read a `skills-lock.json` into `SKILLGUARD.lock` |
-| `rules` | The rule catalogue (52 rules, `--format markdown` for docs) |
+| `rules` | The rule catalogue (55 rules, `--format markdown` for docs) |
 | `corpus …` | Offline, reproducible corpus study driver |
 
 <details>
@@ -347,7 +347,7 @@ reproduce` re-derives every digest) and offline.
 
 ## Status
 
-**Phases 1–4 are implemented.** 52 rules, declared-vs-observed verification, a
+**Phases 1–4 are implemented.** 55 rules, declared-vs-observed verification, a
 policy engine, a content-addressed lockfile, CI on Linux for every commit and
 on all three platforms weekly and for every release, a GitHub
 Action, a pre-commit hook and prebuilt binaries for five platforms.
@@ -366,7 +366,7 @@ warnings` and `cargo deny check` are clean on every platform in the matrix.
 | Phase | Scope | Status |
 |---|---|---|
 | **0** | 100k-skill corpus study, public dataset, benchmark | pilot **done** (5442 skills, H6 = 7.1%); full study blocked on [#5](https://github.com/lxbworld/SkillGuard/issues/5) |
-| 1 | Parser, finding model, scanner (52 rules) | **done** |
+| 1 | Parser, finding model, scanner (55 rules) | **done** |
 | 2 | Capability model, declared vs observed | **done** |
 | 3 | Policy engine, approval lockfile | **done** |
 | 4 | CI, SARIF, GitHub Action, rule reference | **done** |
