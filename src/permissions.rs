@@ -577,10 +577,12 @@ pub fn to_yaml(decl: &PermissionDecl) -> String {
             d.filesystem_write.join(", ")
         ));
     }
-    o.push_str(&format!(
-        "  secrets:\n    access: {}\n",
-        d.secrets_access.unwrap_or(true)
-    ));
+    // An absent `secrets_access` is the author saying nothing, not the author
+    // allowing it. Rendering `None` as `true` invented a permission that
+    // `adopt`-shaped output would then have claimed the author granted.
+    if let Some(secrets) = d.secrets_access {
+        o.push_str(&format!("  secrets:\n    access: {secrets}\n"));
+    }
     if !d.package_install.is_empty() {
         o.push_str(&format!(
             "  package_install: [{}]\n",
@@ -932,6 +934,29 @@ mod tests {
         let yaml = to_yaml(&d);
         let back = decl(&yaml);
         assert_eq!(back, d.normalized(), "{yaml}");
+    }
+
+    #[test]
+    fn an_absent_secret_declaration_is_not_rendered_as_an_allowance() {
+        // `None` means the author said nothing about secrets; `Some(true)` means
+        // secrets are allowed. `to_yaml` rendered the first as the second, so
+        // `adopt`-shaped output could invent a permission nobody granted.
+        let d = PermissionDecl {
+            network_outbound: vec!["api.example.com".to_owned()],
+            secrets_access: None,
+            declared: true,
+            ..PermissionDecl::default()
+        };
+        let yaml = to_yaml(&d);
+        assert!(
+            !yaml.contains("access: true"),
+            "an absent declaration is not an allowance: {yaml}"
+        );
+        assert_eq!(
+            decl(&yaml).secrets_access,
+            None,
+            "and it survives a round trip: {yaml}"
+        );
     }
 
     #[test]
