@@ -627,11 +627,11 @@ pub fn render(report: &DiffReport) -> String {
             text::sanitize_for_display(&m.detail)
         ));
     }
-    let blocking = report.blocking().len();
+    let undeclared = report.undeclared();
     o.push_str(&format!(
         "\n  {} mismatch(es), {} of them undeclared behaviour\n",
         report.mismatches.len(),
-        blocking
+        undeclared
     ));
     o.push('\n');
     o
@@ -812,6 +812,22 @@ mod tests {
         assert_eq!(r.mismatches.len(), 1, "{:#?}", r);
         assert_eq!(r.mismatches[0].kind, MismatchKind::Conflicting);
         assert_eq!(r.mismatches[0].severity, Severity::Critical);
+    }
+
+    #[test]
+    fn a_conflict_blocks_even_when_nothing_is_undeclared() {
+        // Every capability the code has is declared, and the declaration denies
+        // the secret read. `blocking()` counted only under-declaration, so this
+        // - the strongest mismatch there is - did not fail `diff --strict`.
+        let d =
+            decl("permissions:\n  filesystem:\n    read: [/data]\n  secrets:\n    access: false\n");
+        let mut o = obs(&[], &[], true);
+        o.filesystem_read = vec!["/data".to_owned()];
+        let r = diff(&d, &o);
+        assert_eq!(r.mismatches.len(), 1, "{:#?}", r);
+        assert_eq!(r.undeclared(), 0, "{:#?}", r);
+        assert_eq!(r.blocking().len(), 1, "{:#?}", r);
+        assert_eq!(r.blocking()[0].kind, MismatchKind::Conflicting);
     }
 
     #[test]

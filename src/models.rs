@@ -314,6 +314,18 @@ pub enum MismatchKind {
     Conflicting,
 }
 
+impl MismatchKind {
+    /// The wire name: the same spelling serde emits and the `MISMATCH_*` rule
+    /// ids use.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MismatchKind::OverDeclared => "over_declared",
+            MismatchKind::UnderDeclared => "under_declared",
+            MismatchKind::Conflicting => "conflicting",
+        }
+    }
+}
+
 /// One difference between declared and observed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Mismatch {
@@ -335,11 +347,30 @@ pub struct DiffReport {
 
 impl DiffReport {
     /// Mismatches that should block an install.
+    ///
+    /// Everything except over-declaration: declaring more than you use is
+    /// harmless, while *under*-declaring hides behaviour and a *conflict* is the
+    /// author denying behaviour the code has. `Conflicting` used to be excluded
+    /// here, so `diff --strict` exited 0 on a skill whose only mismatch was a
+    /// CRITICAL `secrets: false` in front of a key-store read, while
+    /// `policy-check` blocked the same skill through its `MISMATCH_CONFLICTING`
+    /// finding.
     pub fn blocking(&self) -> Vec<&Mismatch> {
         self.mismatches
             .iter()
-            .filter(|m| m.kind == MismatchKind::UnderDeclared)
+            .filter(|m| m.kind != MismatchKind::OverDeclared)
             .collect()
+    }
+
+    /// How much of the diff is undeclared behaviour, for the summary line.
+    ///
+    /// Not the length of [`Self::blocking`]: that also counts conflicts, and
+    /// calling a conflict "undeclared behaviour" understates it.
+    pub fn undeclared(&self) -> usize {
+        self.mismatches
+            .iter()
+            .filter(|m| m.kind == MismatchKind::UnderDeclared)
+            .count()
     }
 
     pub fn worst(&self) -> Option<Severity> {

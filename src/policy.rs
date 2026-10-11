@@ -374,13 +374,21 @@ pub fn evaluate(policy: &Policy, subject: &Subject<'_>) -> PolicyDecision {
         });
     }
 
-    // ── undeclared behaviour ──────────────────────────────────────────────
+    // ── undeclared behaviour and contradicted declarations ────────────────
     // Under-declared capability is a policy concern even without an explicit
-    // rule: a skill doing something it never said is not auditable.
+    // rule: a skill doing something it never said is not auditable. A conflict
+    // is worse - the author said the opposite - so it must not read as
+    // "undeclared".
     for m in subject.diff.blocking() {
+        let detail = match m.kind {
+            crate::models::MismatchKind::Conflicting => {
+                format!("conflicting declaration: {}", m.detail)
+            }
+            _ => format!("undeclared: {}", m.detail),
+        };
         violations.push(Violation {
             capability: m.capability.clone(),
-            detail: format!("undeclared: {}", m.detail),
+            detail,
             severity: m.severity,
         });
     }
@@ -1012,6 +1020,30 @@ mod tests {
         let r = evaluate(&Policy::new(), &subject(&c, &d, &f));
         assert_eq!(r.decision, Decision::Deny, "under-declared egress blocks");
         assert!(r.violations.iter().any(|v| v.detail.contains("undeclared")));
+    }
+
+    #[test]
+    fn a_conflicting_declaration_is_a_violation_and_says_so() {
+        let c = caps(&[], &[], true);
+        let d = DiffReport {
+            no_declaration: false,
+            mismatches: vec![Mismatch {
+                kind: MismatchKind::Conflicting,
+                capability: "secrets.read".to_owned(),
+                detail: "declared access: false, but the code reads secrets".to_owned(),
+                severity: Severity::Critical,
+            }],
+        };
+        let f: Vec<Finding> = vec![];
+        let r = evaluate(&Policy::new(), &subject(&c, &d, &f));
+        assert_eq!(r.decision, Decision::Deny, "a conflict blocks");
+        assert!(
+            r.violations
+                .iter()
+                .any(|v| v.detail.contains("conflicting")),
+            "and must not be reported as merely undeclared: {:#?}",
+            r.violations
+        );
     }
 
     #[test]

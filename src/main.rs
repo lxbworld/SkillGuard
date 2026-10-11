@@ -84,7 +84,8 @@ enum Command {
         #[arg(value_name = "PATH", required = true)]
         paths: Vec<PathBuf>,
 
-        /// Treat undeclared behaviour as a failure, not a warning.
+        /// Exit non-zero when the code does anything the declaration does not
+        /// cover: undeclared behaviour, or a declaration the code contradicts.
         #[arg(long)]
         strict: bool,
     },
