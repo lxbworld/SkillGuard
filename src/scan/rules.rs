@@ -975,6 +975,33 @@ pub fn structural_rules() -> &'static [StructuralRule] {
             message: "An open() mode could not be resolved statically; the path is counted as a read",
             remediation: "If this path is written, use a literal mode (`'w'`, `'a'`, `'x'`) or declare the write, so the capability is not under-reported.",
         },
+        // The declared-vs-observed findings are emitted by
+        // `declared_vs_observed_finding`, which is not a table rule, so without
+        // these entries the tool's central claim is missing from `rules`, from
+        // `docs/RULES.md` and from the SARIF driver's rule metadata. The
+        // severity varies with the capability; each entry carries the worst it
+        // can reach.
+        StructuralRule {
+            id: "MISMATCH_UNDER_DECLARED",
+            severity: SevHigh,
+            capability: "",
+            message: "The code does something the skill's permissions do not declare",
+            remediation: "Declare it, or remove it. Undeclared behaviour is the finding this tool exists for.",
+        },
+        StructuralRule {
+            id: "MISMATCH_OVER_DECLARED",
+            severity: Info,
+            capability: "",
+            message: "A permission is declared but never observed in executable code",
+            remediation: "Remove the unused declaration, or move the behaviour it was written for into code.",
+        },
+        StructuralRule {
+            id: "MISMATCH_CONFLICTING",
+            severity: Critical,
+            capability: "",
+            message: "A declared permission contradicts what the code does",
+            remediation: "Resolve the contradiction. `secrets.access: false` while the code reads secrets is not a mismatch to be tolerated.",
+        },
     ];
     S
 }
@@ -1045,7 +1072,10 @@ pub fn rule_count() -> usize {
 /// dump. rev 31: `git push --force-with-lease` is the safe force-push, so it is
 /// no longer `SHELL_DESTRUCTIVE`. rev 32: `PI_DESCRIPTION_MISMATCH`'s catalogue
 /// message and comment name both surviving branches, not just the credential one.
-pub const SCAN_LOGIC_REVISION: u32 = 32;
+/// rev 33: the three `MISMATCH_*` ids the declared-vs-observed findings use are
+/// in the catalogue, so `rules`, `docs/RULES.md` and the SARIF driver all carry
+/// them.
+pub const SCAN_LOGIC_REVISION: u32 = 33;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

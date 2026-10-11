@@ -494,8 +494,9 @@ Every fix below came from a labelled false positive, not from reading code. The
 | 30 | `SECRET_ENV_DUMP` distinguishes enumeration from a keyed read | `"K" in os.environ` and `printenv HOME` are no longer a whole-environment dump |
 | 31 | `SHELL_DESTRUCTIVE` excludes `--force-with-lease` | the safe force-push that aborts on a moved remote is not a history rewrite |
 | 32 | `PI_DESCRIPTION_MISMATCH` names both surviving branches in its message | the catalogue no longer describes only the credential branch while the rule also fires on high-severity findings |
+| 33 | the `MISMATCH_*` ids are in the catalogue | `rules`, `docs/RULES.md` and the SARIF driver declare the declared-vs-observed findings instead of only the table rules |
 
-Revisions 20 to 32 were reproduced from the false-positive notes above and
+Revisions 20 to 33 were reproduced from the false-positive notes above and
 carry fixtures (`safe/version-strings`, `suspicious/raw-ip-endpoint`,
 `safe/comment-mentions`, `safe/tmp-chmod`, `safe/own-settings`,
 `safe/credential-names`, `safe/endpoint-context`, `safe/env-template`,

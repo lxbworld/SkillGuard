@@ -202,12 +202,41 @@ mod tests {
 
     #[test]
     fn every_emittable_rule_is_declared_in_the_driver() {
-        let v: Value = serde_json::from_str(&to_sarif(&report())).expect("valid json");
-        let declared = v["runs"][0]["tool"]["driver"]["rules"]
+        // A result whose `ruleId` is absent from `driver.rules` loses its
+        // metadata in Code Scanning. The declared-vs-observed findings are
+        // emitted outside the rule table, so comparing counts, as this test
+        // used to, said nothing about the id that matters most.
+        let mut r = report();
+        r.skills[0].findings.push(Finding::new(
+            RuleId::from("MISMATCH_UNDER_DECLARED"),
+            Severity::High,
+            Confidence::High,
+            "SKILL.md",
+            "example.com is used but not declared in the skill's permissions",
+            vec![Evidence {
+                line: 0,
+                text: "declared vs observed: network.outbound".into(),
+                secondary: None,
+                note: None,
+            }],
+        ));
+
+        let v: Value = serde_json::from_str(&to_sarif(&r)).expect("valid json");
+        let run = &v["runs"][0];
+        let declared: std::collections::BTreeSet<&str> = run["tool"]["driver"]["rules"]
             .as_array()
             .unwrap()
-            .len();
-        assert_eq!(declared, crate::scan::rules::rule_count());
+            .iter()
+            .filter_map(|x| x["id"].as_str())
+            .collect();
+        assert_eq!(declared.len(), crate::scan::rules::rule_count());
+        for result in run["results"].as_array().unwrap() {
+            let id = result["ruleId"].as_str().unwrap_or("");
+            assert!(
+                declared.contains(id),
+                "result ruleId {id} is not declared in the driver"
+            );
+        }
     }
 
     #[test]
