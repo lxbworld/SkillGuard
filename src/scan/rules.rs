@@ -234,7 +234,10 @@ static TABLE: &[RuleSpec] = &[
             r"\bdd\s+if=\S+\s+of=/dev/",
             r"\bshred\s+",
             r">\s*/dev/(?:sd|nvme|disk)",
-            r"\bgit\s+push\s+--force\b",
+            // `--force-with-lease` is the *safe* force-push: it aborts if the
+            // remote moved, so it is the opposite of destructive. The suffix is
+            // excluded rather than the flag (rev 31).
+            r"\bgit\s+push\s+--force(?:[^-]|$)",
         ],
         message: "A destructive filesystem, device or history-rewriting operation",
         capability: Some("filesystem.write"),
@@ -1038,8 +1041,9 @@ pub fn rule_count() -> usize {
 /// naming `.npmrc` is not pointing npm at a registry; only a write to it is.
 /// rev 30: `SECRET_ENV_DUMP` distinguishes enumeration from a keyed read, so
 /// `"K" in os.environ` and `printenv HOME` are no longer a whole-environment
-/// dump.
-pub const SCAN_LOGIC_REVISION: u32 = 30;
+/// dump. rev 31: `git push --force-with-lease` is the safe force-push, so it is
+/// no longer `SHELL_DESTRUCTIVE`.
+pub const SCAN_LOGIC_REVISION: u32 = 31;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};
@@ -1286,6 +1290,9 @@ mod tests {
         assert!(m("rm -rf ~/"));
         assert!(!m("rm -rf ./build"));
         assert!(!m("rm -f tmp.log"));
+        // `--force-with-lease` is the safe force-push, not a destructive one.
+        assert!(m("git push --force origin main"));
+        assert!(!m("git push --force-with-lease origin main"));
     }
 
     #[test]

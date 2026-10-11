@@ -289,6 +289,28 @@ fn a_keyed_environment_read_is_not_a_dump() {
 }
 
 #[test]
+fn a_force_push_with_lease_is_not_destructive() {
+    // `--force-with-lease` is the *safe* force-push: it aborts if the remote
+    // moved, so it is the opposite of a history-rewriting operation (rev 31).
+    let out = scan_fixture("safe", "force-with-lease");
+    assert!(
+        !rules(&out).contains("SHELL_DESTRUCTIVE"),
+        "--force-with-lease is not destructive: {:#?}",
+        out.findings
+    );
+    let noisy: Vec<String> = out
+        .findings
+        .iter()
+        .filter(|f| f.severity >= Severity::Medium)
+        .map(|f| f.rule.as_str().to_owned())
+        .collect();
+    assert!(
+        noisy.is_empty(),
+        "force-with-lease should be quiet: {noisy:?}"
+    );
+}
+
+#[test]
 fn a_comment_is_not_a_capability() {
     // `research/GOLD.md` records a documentation path mentioned in a `//`
     // comment being counted as `fs read`. A comment describes behaviour; it does
