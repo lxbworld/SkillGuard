@@ -391,29 +391,38 @@ skills:
 
 ## 10. CLI 表面
 
+> 本节是设计时的计划；权威表面以 `skillguard --help` 与 README 的命令表为准。
+> `add` / `install` / `update` 按设计延期（issue #9），当前不存在；其余命令已实现。
+
 ```
-skillguard scan <path>...            # evidence 优先的报告 + 退出码
-skillguard inspect <path>            # 只列 capabilities / dependencies，不判定
-skillguard diff <path>               # declared vs observed
-skillguard policy check <path>       # 策略求值
-skillguard verify <path|--lock>      # source + commit + digest 三元校验
-skillguard add <source>              # 解析 → 扫描 → policy → 阻断/审批 → 写锁 → 安装
-skillguard install                   # 严格按锁文件安装
-skillguard update [name]             # 重新解析，须过 policy 与重新审批
-skillguard lock                      # 把当前状态写入锁文件
-skillguard approve <name>            # 记录审批
-skillguard import <lockfile>         # skills-lock.json / package.json+npm 迁移
-skillguard rules                     # 规则目录（含 id / severity / 说明 / 关闭方式）
+skillguard scan <path>...                 # evidence 优先的报告 + 退出码
+skillguard inspect <path>...              # 只列 capabilities / dependencies，不判定
+skillguard diff <path>...                 # declared vs observed
+skillguard policy-check <path>...         # 策略求值
+skillguard verify [path]... [--lockfile]  # source + commit + digest 三元校验
+skillguard add <source>                   # （未实现）解析 → 扫描 → policy → 阻断/审批 → 写锁 → 安装
+skillguard install                        # （未实现）严格按锁文件安装
+skillguard update [name]                  # （未实现）重新解析，须过 policy 与重新审批
+skillguard lock <path>...                 # 把当前状态写入锁文件
+skillguard approve <path>                 # 记录审批
+skillguard import <file> [--out]          # skills-lock.json / package.json+npm 迁移
+skillguard rules                          # 规则目录（含 id / severity / 说明 / 关闭方式）
 ```
 
-**退出码**：`0` 通过 · `1` 策略违规 · `2` 完整性失败 · `3` 用法错误 · `4` 内部错误。
+**退出码**：`0` 通过 · `1` 策略违规或达到 `--fail-on` · `2` 完整性失败 · `3` 用法错误。
+（没有 `4`；所有内部错误都以 `3` 返回，见 `src/lib.rs` 的 `exit`。）
 `--fail-on <SEVERITY>`、`--format text|json|sarif|markdown`、`--no-color`。
 
 ---
 
-## 11. 测试策略（对应需求 §21.10）
+## 11. 测试策略（对应需求 §21.10；实现现状见 `tests/`）
 
-1. **规则 → 测试一一映射**：新增 rule 时 CI 强制新增对应测试函数（`rule_registry.rs` 内计数断言）。
+> 下列是设计时的目标。已实现的是 2、4、5；1 的强制方式是 `docs/RULES.md`
+> 重生成校验与 `every_rule_id_in_the_catalogue_is_documented`（没有 `rule_registry.rs`）；
+> 3（`tests/golden/` 快照）与 6（property test）尚未实现。
+
+1. **规则 → 测试映射**：新增 rule 时确保 `rules --format markdown` 与 `docs/RULES.md` 一致，
+   并为其加 fixture（见第 2 条）。
 2. **fixtures 四象限**：safe（零 finding）/ malicious（必须命中）/ suspicious（有 evidence 不升级）/
    obfuscated（必须被归一化后命中）/ edge_cases（不得 panic）。
 3. **黄金输出**：`tests/golden/` 快照 text 与 json 输出，防无意变更破坏用户 CI。
