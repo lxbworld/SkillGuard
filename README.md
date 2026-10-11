@@ -211,7 +211,7 @@ Other output formats: `--format json`, `--format sarif` (GitHub Code Scanning),
 | Command | What it does |
 |---|---|
 | `scan <path>` | Evidence-grade report: text, JSON, SARIF or Markdown |
-| `inspect <path>` | Observed capabilities and dependencies only, no judgement |
+| `inspect <path>` | Observed capabilities and dependencies only, no judgement (`--format json` for tooling) |
 | `inspect --labeling <path>` | Normalized text + line numbers only (for annotators) |
 | `diff <path>` | Declared permissions vs observed behaviour |
 | `adopt <path>` | Derive a `permissions:` block from observation, for authors to review |

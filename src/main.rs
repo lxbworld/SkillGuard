@@ -1081,6 +1081,29 @@ fn run_inspect(paths: &[PathBuf], format: Format, cli: &Cli, _color: bool) -> Re
     let outcomes = scan_all(paths)?;
     let report = Report::new(outcomes.iter().map(SkillReport::from_outcome).collect());
 
+    // `inspect` used to accept every `--format` and print the text view for all
+    // of them, so `--format json` silently produced prose. It now honours text
+    // and json, and refuses the two findings formats rather than pretending.
+    match format {
+        Format::Json => {
+            let body = skillguard::report::json::inspect_to_json(&report.inspect_view());
+            emit(cli, &body)?;
+            return Ok(exit::OK);
+        }
+        Format::Sarif | Format::Markdown => {
+            let name = if format == Format::Sarif {
+                "sarif"
+            } else {
+                "markdown"
+            };
+            return Err(format!(
+                "inspect has no {name} view: it reports capabilities, not findings, and \
+                 {name} is a findings format. Use `scan --format {name}`."
+            ));
+        }
+        Format::Text => {}
+    }
+
     // Inspect prints capabilities only: no findings, no verdict.
     let mut o = String::new();
     for s in &report.skills {
@@ -1162,17 +1185,27 @@ fn run_inspect(paths: &[PathBuf], format: Format, cli: &Cli, _color: bool) -> Re
                     ));
                 }
             }
+            // A capability list that hides the files it could not read is
+            // wrong without saying so, and `scan` already reports these.
+            if !s.skipped.is_empty() {
+                o.push_str("    not scanned\n");
+                for sk in &s.skipped {
+                    o.push_str(&format!(
+                        "      {} - {}\n",
+                        text::sanitize_for_display(&sk.file),
+                        text::sanitize_for_display(&sk.reason)
+                    ));
+                }
+            }
             o.push('\n');
         };
         d(&mut o);
     }
 
-    if format == Format::Text {
-        o.insert_str(
-            0,
-            "\n  SkillGuard inspect - capabilities only, no judgement\n",
-        );
-    }
+    o.insert_str(
+        0,
+        "\n  SkillGuard inspect - capabilities only, no judgement\n",
+    );
     emit(cli, &o)?;
     Ok(exit::OK)
 }

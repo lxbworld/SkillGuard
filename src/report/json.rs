@@ -10,6 +10,16 @@ pub fn to_json(report: &Report) -> String {
     })
 }
 
+/// The `inspect` document: capabilities and dependencies only.
+///
+/// There is deliberately no `findings`, `counts` or `injection` key, because
+/// `inspect` makes no judgement and an empty `findings` array would read as a
+/// clean verdict.
+pub fn inspect_to_json(view: &crate::report::InspectReport) -> String {
+    serde_json::to_string_pretty(view)
+        .unwrap_or_else(|e| format!("{{\"error\":\"inspect serialization failed: {e}\"}}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -73,5 +83,20 @@ mod tests {
     #[test]
     fn output_is_deterministic() {
         assert_eq!(to_json(&report()), to_json(&report()));
+    }
+
+    #[test]
+    fn the_inspect_view_has_no_findings_or_verdict() {
+        // `inspect` makes no judgement, so an empty `findings` array must not be
+        // available for a consumer to read as "clean" (rev 33).
+        let s = inspect_to_json(&report().inspect_view());
+        assert!(!s.contains("findings"), "{s}");
+        assert!(!s.contains("counts"), "{s}");
+        assert!(!s.contains("injection"), "{s}");
+        assert!(s.contains("capabilities"), "{s}");
+        assert!(s.contains("rule_set_version"), "{s}");
+        // And it is still a document a consumer can parse.
+        let v: serde_json::Value = serde_json::from_str(&s).expect("valid json");
+        assert_eq!(v["skills"].as_array().map(Vec::len), Some(1));
     }
 }

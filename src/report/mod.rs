@@ -139,6 +139,39 @@ impl Counts {
     }
 }
 
+/// The capabilities-only view that `inspect` emits.
+///
+/// `inspect` promises "observed capabilities and dependencies, no judgement",
+/// so `findings`, `counts` and `injection` are **absent** rather than empty: a
+/// consumer cannot mistake an empty list for a clean verdict. Every field here
+/// is a fact read off the skill.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InspectReport {
+    pub tool: String,
+    pub tool_version: String,
+    pub rule_set_version: String,
+    pub skills: Vec<InspectSkill>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InspectSkill {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_permissions_raw: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license_declared: Option<String>,
+    pub license_file_found: bool,
+    pub capabilities: crate::models::Capability,
+    pub dependencies: Vec<crate::models::Dependency>,
+    /// Files that were not read. A capability list that hides these is a
+    /// capability list that is wrong without saying so.
+    pub skipped: Vec<SkippedFile>,
+}
+
 /// A full run over one or more skills.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Report {
@@ -262,6 +295,30 @@ impl Report {
             Format::Json => to_json(self),
             Format::Sarif => to_sarif(self),
             Format::Markdown => to_markdown(self),
+        }
+    }
+
+    /// Drop everything that is a judgement, keep everything that is a fact.
+    pub fn inspect_view(&self) -> InspectReport {
+        InspectReport {
+            tool: self.tool.clone(),
+            tool_version: self.tool_version.clone(),
+            rule_set_version: self.rule_set_version.clone(),
+            skills: self
+                .skills
+                .iter()
+                .map(|s| InspectSkill {
+                    name: s.name.clone(),
+                    source_path: s.source_path.clone(),
+                    description: s.description.clone(),
+                    declared_permissions_raw: s.declared_permissions_raw.clone(),
+                    license_declared: s.license_declared.clone(),
+                    license_file_found: s.license_file_found,
+                    capabilities: s.capabilities.clone(),
+                    dependencies: s.dependencies.clone(),
+                    skipped: s.skipped.clone(),
+                })
+                .collect(),
         }
     }
 }

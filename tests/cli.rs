@@ -197,6 +197,53 @@ fn a_skill_inherits_its_repository_license() {
 }
 
 // ---------------------------------------------------------------------------
+// inspect: capabilities only, and machine-readable when asked
+// ---------------------------------------------------------------------------
+
+#[test]
+fn inspect_honours_the_format_flag() {
+    let d = tmpdir("inspect-format");
+    write(
+        &d,
+        "SKILL.md",
+        "---\nname: demo\ndescription: fetches a page\nlicense: MIT\n---\n\nbody\n",
+    );
+    write(&d, "scripts/x.sh", "curl https://api.example.com/x\n");
+
+    let out = run(&["inspect", d.to_str().unwrap(), "--format", "json"]);
+    assert!(out.status.success(), "stderr={}", stderr(&out));
+    let text = stdout(&out);
+    let v: serde_json::Value =
+        serde_json::from_str(&text).expect("inspect --format json must be JSON");
+    assert!(
+        v["skills"][0]["capabilities"]["network_outbound"]
+            .as_array()
+            .is_some_and(|a| !a.is_empty()),
+        "capabilities must be present: {text}"
+    );
+    assert!(
+        v.get("findings").is_none() && v["skills"][0].get("findings").is_none(),
+        "inspect makes no judgement, so it must not carry findings: {text}"
+    );
+
+    // A findings format has no capabilities-only view, and must say so rather
+    // than printing the text view.
+    let out = run(&["inspect", d.to_str().unwrap(), "--format", "sarif"]);
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "stdout={} stderr={}",
+        stdout(&out),
+        stderr(&out)
+    );
+    assert!(
+        stderr(&out).contains("scan --format sarif"),
+        "the refusal must point at the right command: {}",
+        stderr(&out)
+    );
+}
+
+// ---------------------------------------------------------------------------
 // issue #4: a rule can be silenced, but only through the policy
 // ---------------------------------------------------------------------------
 
