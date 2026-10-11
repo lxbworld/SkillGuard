@@ -421,11 +421,6 @@ pub fn dumps_environment(line: &str) -> bool {
         || l.contains("json.stringify") && l.contains("process.env")
 }
 
-/// Whether a line reads the environment wholesale (used by capability diff).
-pub fn reads_environment(line: &str) -> bool {
-    dumps_environment(line)
-}
-
 /// Accumulate observed capabilities from an executable artifact's lines.
 #[derive(Debug, Default)]
 pub struct Accumulator {
@@ -922,11 +917,6 @@ fn split_top_level_args(args: &str) -> Vec<&str> {
     }
     out.push(args.get(start..).unwrap_or(""));
     out
-}
-
-/// Hosts a line contacts, for the declared-vs-observed diff.
-pub fn hosts_in(line: &str) -> Vec<String> {
-    outbound_hosts(line).into_iter().collect()
 }
 
 /// Bare hostnames only, excluding ones that appear as part of a URL.
