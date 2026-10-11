@@ -611,6 +611,27 @@ fn after_url_authority(before: &str) -> bool {
     }
 }
 
+/// Is the IPv4 inside this match a loopback or private address?
+///
+/// The pattern includes the scheme or the command (`http://10.0.0.5`,
+/// `curl … 10.0.0.5`), so the address is searched for rather than taken from the
+/// start of the match. `DL_UNTRUSTED_DOMAIN` previously compared the whole match
+/// against `10.`, which never matched and made the exclusion dead code.
+fn is_private_endpoint(matched: &str) -> bool {
+    let Some(addr) = matched
+        .split(|c: char| !c.is_ascii_digit() && c != '.')
+        .find(|t| t.matches('.').count() == 3)
+    else {
+        return false;
+    };
+    let octets: Vec<u8> = addr.split('.').filter_map(|o| o.parse().ok()).collect();
+    if octets.len() != 4 {
+        return false;
+    }
+    let (a, b) = (octets[0], octets[1]);
+    a == 0 || a == 10 || a == 127 || (a == 172 && (16..=31).contains(&b)) || (a == 192 && b == 168)
+}
+
 fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -> bool {
     let line = raw_line.to_lowercase();
     let m = matched.to_lowercase();
@@ -720,18 +741,12 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
                     .iter()
                     .any(|h| m == *h || m.ends_with(&format!(".{h}")))
         }
-        // A loopback or private address is not an untrusted endpoint.
-        "DL_UNTRUSTED_DOMAIN" => {
-            m.starts_with("127.")
-                || m.starts_with("10.")
-                || m.starts_with("192.168.")
-                || m == "0.0.0.0"
-                || (m.starts_with("172.")
-                    && m.split('.')
-                        .nth(1)
-                        .and_then(|o| o.parse::<u8>().ok())
-                        .is_some_and(|o| (16..=31).contains(&o)))
-        }
+        // A loopback or private address is not an untrusted endpoint. The
+        // address is located *within* the match, because the pattern includes
+        // the scheme (`http://10.0.0.5`) or a command (`curl … 10.0.0.5`);
+        // comparing the whole match against `10.` never fired, so every local
+        // health check was reported as a low-reputation endpoint (rev 27).
+        "DL_UNTRUSTED_DOMAIN" => is_private_endpoint(&m),
         // A badge is a static image served by a badge service, not a tracking
         // pixel. They appear in most READMEs.
         "OBFUSC_TRACKING_PIXEL" => {
@@ -1853,6 +1868,19 @@ mod tests {
         assert!(!hits(&scan_skill(&d)).contains("OBFUSC_HOMOGLYPH"));
         fs::write(d.join("scripts/b.sh"), "\u{0441}url https://x\n").unwrap_or_default();
         assert!(hits(&scan_skill(&d)).contains("OBFUSC_HOMOGLYPH"));
+    }
+
+    /// rev 27: the private-address exclusion in `DL_UNTRUSTED_DOMAIN` compared
+    /// the whole match (`http://127.0.0.1`) against `127.`, so it never fired.
+    #[test]
+    fn a_private_address_is_not_an_untrusted_endpoint() {
+        assert!(is_private_endpoint("http://127.0.0.1"));
+        assert!(is_private_endpoint("curl -sf http://10.0.0.5/metrics"));
+        assert!(is_private_endpoint("http://192.168.1.1/status"));
+        assert!(is_private_endpoint("http://172.20.0.1"));
+        assert!(is_private_endpoint("0.0.0.0"));
+        assert!(!is_private_endpoint("http://8.8.8.8"));
+        assert!(!is_private_endpoint("http://172.15.0.1"));
     }
 
     /// GOLD-v4: a test assertion about a dangerous pattern is not the pattern.

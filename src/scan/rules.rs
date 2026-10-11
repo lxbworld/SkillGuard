@@ -520,7 +520,13 @@ static TABLE: &[RuleSpec] = &[
             // A bare `word.tld` matched file names (`scan.gif`, `export.zip`),
             // identifiers (`state.work`) and prose. Require URL context, and
             // drop `zip`/`mov`, which are far more often file extensions.
-            r#"(?i)(?:https?://|ftp://|www\.)[^\s'"`<>]*\b[a-z0-9-]+\.(?:tk|ml|ga|cf|gq|top|xyz|click|rest|lol|work|surf|quest)\b"#,
+            // The untrusted TLD has to be part of the *host*, not the path:
+            // `https://host/…/data.xyz` names `.xyz` in the path, and these
+            // TLDs are also file extensions (`.xyz` coordinates, `.top`
+            // topologies, `.rest` reStructuredText). The authority cannot
+            // contain a `/`, which is what anchors it (rev 27, mirroring
+            // `NET_DOMAIN_LITERAL`'s host-position fix).
+            r#"(?i)(?:https?://|ftp://|www\.)[a-z0-9.-]+\.(?:tk|ml|ga|cf|gq|top|xyz|click|rest|lol|work|surf|quest)\b"#,
             // A bare `\d+.\d+.\d+.\d+` matched version strings: `research/GOLD.md`
             // records `Chrome/120.0.0.0` (a user-agent version) and `"1.2.3.4"`
             // reported as endpoints. The claim is that an endpoint is *contacted*,
@@ -1021,7 +1027,11 @@ pub fn rule_count() -> usize {
 /// to agent config. rev 26: `SECRET_GENERIC_ASSIGN` needs the literal to look
 /// like a secret *value*, so an environment-variable name (`"OPENAI_API_KEY"`)
 /// or a placeholder (`"your-token-goes-here"`) is not a hardcoded credential.
-pub const SCAN_LOGIC_REVISION: u32 = 26;
+/// rev 27: `DL_UNTRUSTED_DOMAIN` needs the untrusted TLD in host position, so a
+/// path segment (`…/water.xyz`) is not a low-reputation host; and the private
+/// and loopback address exclusion now looks *inside* the match, so a local
+/// `http://127.0.0.1` health check is no longer reported as untrusted.
+pub const SCAN_LOGIC_REVISION: u32 = 27;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

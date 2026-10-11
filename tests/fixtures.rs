@@ -212,6 +212,30 @@ fn a_credential_name_is_not_a_credential() {
 }
 
 #[test]
+fn an_endpoint_is_judged_by_its_host_not_its_path() {
+    // `DL_UNTRUSTED_DOMAIN` matched a `.xyz`/`.top`/`.rest` path segment as a
+    // low-reputation TLD, and its private-address exclusion never fired because
+    // it compared the whole match (`http://127.0.0.1`) against `127.`. Both are
+    // rev 27.
+    let out = scan_fixture("safe", "endpoint-context");
+    assert!(
+        !rules(&out).contains("DL_UNTRUSTED_DOMAIN"),
+        "a path segment or a local address is not an untrusted endpoint: {:#?}",
+        out.findings
+    );
+    let noisy: Vec<String> = out
+        .findings
+        .iter()
+        .filter(|f| f.severity >= Severity::Medium)
+        .map(|f| f.rule.as_str().to_owned())
+        .collect();
+    assert!(
+        noisy.is_empty(),
+        "endpoint-context should be quiet: {noisy:?}"
+    );
+}
+
+#[test]
 fn a_comment_is_not_a_capability() {
     // `research/GOLD.md` records a documentation path mentioned in a `//`
     // comment being counted as `fs read`. A comment describes behaviour; it does
