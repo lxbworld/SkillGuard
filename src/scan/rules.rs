@@ -1016,8 +1016,10 @@ pub fn rule_count() -> usize {
 /// rev 24: capability derivation does not read a filename as a host
 /// (`/tmp/build/run.sh`), and a shebang is not a filesystem read, so a
 /// skill with no network or filesystem access is not a declared-vs-observed
-/// violation.
-pub const SCAN_LOGIC_REVISION: u32 = 24;
+/// violation. rev 25: `PERSIST_AGENT_CONFIG` needs the path to be agent
+/// configuration, so a skill's own project-local `settings.json` is not a write
+/// to agent config.
+pub const SCAN_LOGIC_REVISION: u32 = 25;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

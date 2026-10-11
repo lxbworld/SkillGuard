@@ -751,7 +751,17 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         // "The skill writes agent configuration" needs a write. A line that only
         // names the path — a helper, a read, a commented example — is not a
         // write, and GOLD-v2 found every sampled PERSIST_* finding was one.
-        "PERSIST_AGENT_CONFIG" | "PERSIST_SHELL_RC" => !writes_to(&line, &m) || doc_in_docs,
+        "PERSIST_SHELL_RC" => !writes_to(&line, &m) || doc_in_docs,
+        // ...and it needs the *path* to be agent configuration. A bare
+        // `settings.json` is not: a skill's own project-local config file is the
+        // ordinary case, so `open('settings.json', 'w')` was reported as "the
+        // skill writes agent configuration, which persists into every later
+        // session". GOLD-v5 measured this rule at 25% precision. The pattern
+        // still catches the indirection a real payload uses (`cat >
+        // "$AGENT_DIR/settings.json"`), because there the directory is named.
+        "PERSIST_AGENT_CONFIG" => {
+            !writes_to(&line, &m) || doc_in_docs || !names_agent_config(&line, &m)
+        }
         // `--index-url https://pypi.org/simple` is the default registry, not a
         // custom one.
         "DEP_CUSTOM_REGISTRY" => {
@@ -820,6 +830,24 @@ fn discusses_the_attack(line: &str) -> bool {
     ]
     .iter()
     .any(|t| line.contains(t))
+}
+
+/// Does the path this match names belong to agent configuration?
+///
+/// The rule's claim is about *agent* configuration, so a bare `settings.json`
+/// needs a directory that names an agent. A skill's own project-local
+/// `settings.json` is not agent configuration; GOLD-v5 measured
+/// `PERSIST_AGENT_CONFIG` at 25% precision. The directory may itself be part of
+/// the pattern (`CLAUDE.md`, `.cursorrules`) or built from a variable a real
+/// payload uses (`"$AGENT_DIR/settings.json"`), which is why the whole prefix is
+/// searched rather than the basename alone.
+fn names_agent_config(line: &str, matched: &str) -> bool {
+    const AGENT_MARKERS: &[&str] = &["claude", "cursor", "gemini", "codex", "agent", "mcp"];
+    let end = line
+        .find(matched)
+        .map(|p| p + matched.len())
+        .unwrap_or(line.len());
+    AGENT_MARKERS.iter().any(|m| line[..end].contains(m))
 }
 
 /// Is the match inside a quotation, or on a line that is documentation
@@ -1771,6 +1799,31 @@ mod tests {
             "SHELL_DESTRUCTIVE",
             "rm -rf /tmp/x",
             "rm -rf /",
+            true
+        ));
+    }
+
+    /// GOLD-v5: `PERSIST_AGENT_CONFIG` read 25% precision because a bare
+    /// `settings.json` is not agent configuration. The claim needs an agent
+    /// directory in the path; a variable that carries one still counts.
+    #[test]
+    fn a_local_settings_file_is_not_agent_config() {
+        assert!(suppress_match(
+            "PERSIST_AGENT_CONFIG",
+            "with open('settings.json', 'w') as fh:",
+            "settings.json",
+            true
+        ));
+        assert!(!suppress_match(
+            "PERSIST_AGENT_CONFIG",
+            "cat > \"$AGENT_DIR/settings.json\" <<'JSON'",
+            "settings.json",
+            true
+        ));
+        assert!(!suppress_match(
+            "PERSIST_AGENT_CONFIG",
+            "echo '{}' > ~/.claude/settings.json",
+            ".claude/settings.json",
             true
         ));
     }

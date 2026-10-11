@@ -485,13 +485,14 @@ Every fix below came from a labelled false positive, not from reading code. The
 | 22 | `NET_DOMAIN_LITERAL` needs host position, not just URL context; a version-shaped token is not a filesystem read | a URL path segment (`…/install.sh`) is not a host; `Chrome/120.0.0.0` is not a read |
 | 23 | `DL_REMOTE_INSTALL` needs a fetch on the same line as `chmod +x` | a build script that chmods a `/tmp` file it wrote itself is no longer "installed directly from a URL" |
 | 24 | capability derivation does not read a filename as a host, and a shebang is not a filesystem read | `/tmp/build/run.sh` is not an outbound host and `#!/bin/sh` is not a read, so a clean build script is not a declared-vs-observed violation |
+| 25 | `PERSIST_AGENT_CONFIG` needs the path to name an agent directory | a skill's own project-local `settings.json` is not agent configuration |
 
-Revisions 20 to 24 were reproduced from the false-positive notes above and
+Revisions 20 to 25 were reproduced from the false-positive notes above and
 carry fixtures (`safe/version-strings`, `suspicious/raw-ip-endpoint`,
-`safe/comment-mentions`, `safe/tmp-chmod`), but they are **not re-measured**: the
-corpus mirror is not in the repository, so the precision column still reflects
-rev 8. They await a GOLD-v6 round, and each should be scored there before any
-figure is quoted.
+`safe/comment-mentions`, `safe/tmp-chmod`, `safe/own-settings`), but they are
+**not re-measured**: the corpus mirror is not in the repository, so the
+precision column still reflects rev 8. They await a GOLD-v6 round, and each
+should be scored there before any figure is quoted.
 
 ### Two structural bugs found on the way
 

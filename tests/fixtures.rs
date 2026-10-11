@@ -169,6 +169,26 @@ fn a_chmod_of_a_local_tmp_file_is_not_a_remote_install() {
 }
 
 #[test]
+fn a_project_settings_file_is_not_agent_config() {
+    // `PERSIST_AGENT_CONFIG` claims "the skill writes agent configuration". A
+    // skill's own project-local `settings.json` is not agent configuration, and
+    // GOLD-v5 measured the rule at 25% precision.
+    let out = scan_fixture("safe", "own-settings");
+    assert!(
+        !rules(&out).contains("PERSIST_AGENT_CONFIG"),
+        "a local settings file is not agent config: {:#?}",
+        out.findings
+    );
+    let noisy: Vec<String> = out
+        .findings
+        .iter()
+        .filter(|f| f.severity >= Severity::Medium)
+        .map(|f| f.rule.as_str().to_owned())
+        .collect();
+    assert!(noisy.is_empty(), "own-settings should be quiet: {noisy:?}");
+}
+
+#[test]
 fn a_comment_is_not_a_capability() {
     // `research/GOLD.md` records a documentation path mentioned in a `//`
     // comment being counted as `fs read`. A comment describes behaviour; it does
