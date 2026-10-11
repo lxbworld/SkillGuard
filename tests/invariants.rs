@@ -124,6 +124,80 @@ fn the_rule_reference_matches_the_code() {
     );
 }
 
+/// The targets of `](...)` in a Markdown body, without pulling in a regex
+/// dependency. A target stops at whitespace, so `](a b)` is not a link.
+fn link_targets(body: &str) -> Vec<String> {
+    let bytes = body.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i + 1 < bytes.len() {
+        if bytes[i] == b']' && bytes[i + 1] == b'(' {
+            let start = i + 2;
+            let mut j = start;
+            while j < bytes.len() && bytes[j] != b')' && !bytes[j].is_ascii_whitespace() {
+                j += 1;
+            }
+            if j < bytes.len() && bytes[j] == b')' {
+                if let Ok(s) = std::str::from_utf8(&bytes[start..j]) {
+                    out.push(s.to_owned());
+                }
+            }
+            i = j;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+#[test]
+fn relative_markdown_links_resolve() {
+    // A pointer to a moved file is a small lie, and this repository has already
+    // been bitten by documentation drifting from the code (the rule reference).
+    // Absolute URLs, anchors and code samples are not checked.
+    fn markdown_files(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if p.is_dir() {
+                if name != "target" && name != ".git" {
+                    markdown_files(&p, out);
+                }
+            } else if p.extension().map(|x| x == "md").unwrap_or(false) {
+                out.push(p);
+            }
+        }
+    }
+
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut files = Vec::new();
+    markdown_files(root, &mut files);
+    files.sort();
+
+    let mut broken = Vec::new();
+    for f in &files {
+        for target in link_targets(&read(f)) {
+            let t = target.split('#').next().unwrap_or("");
+            if t.is_empty() || t.starts_with("http") || t.starts_with("mailto:") {
+                continue;
+            }
+            // An inline code span can look like a link; skip it.
+            if t.contains('`') || t.contains('|') {
+                continue;
+            }
+            let resolved = f.parent().unwrap_or(root).join(t);
+            if !resolved.exists() {
+                broken.push(format!("{}: {t}", f.display()));
+            }
+        }
+    }
+    assert!(!files.is_empty(), "expected to check the docs");
+    assert!(broken.is_empty(), "broken relative links: {broken:#?}");
+}
+
 #[test]
 fn no_telemetry_crate_is_a_dependency() {
     // The README makes offline operation a project constraint. A usage ping
