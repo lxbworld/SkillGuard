@@ -183,7 +183,35 @@ fn sensitive_re() -> &'static Regex {
 }
 
 pub fn is_sensitive_path(s: &str) -> bool {
-    sensitive_re().is_match(s)
+    sensitive_re().is_match(s) && !only_env_templates(s)
+}
+
+/// Are the `.env` files this text names all *templates*?
+///
+/// `.env.example`, `.env.sample`, `.env.template` and `.env.dist` are committed
+/// on purpose *because* they hold no secrets, and `cat .env.example` is how a
+/// skill bootstraps. Treating them as a key store made a skill that only copies
+/// the template read as `secrets.read` (rev 28). A bare `.env` or `.env.local`
+/// in the same text still counts.
+fn only_env_templates(text: &str) -> bool {
+    const TEMPLATES: &[&str] = &[
+        ".env.example",
+        ".env.sample",
+        ".env.template",
+        ".env.dist",
+        ".env.defaults",
+    ];
+    let lower = text.to_ascii_lowercase();
+    if !TEMPLATES.iter().any(|t| lower.contains(t)) {
+        return false;
+    }
+    let stripped = TEMPLATES.iter().fold(lower, |acc, t| acc.replace(t, ""));
+    !bare_env_re().is_match(&stripped)
+}
+
+fn bare_env_re() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| re(r"(?i)\.env(\b|$)"))
 }
 
 /// Extract URLs and reduce them to hosts.
@@ -405,7 +433,7 @@ impl Accumulator {
         if dumps_environment(text) {
             self.cap.secrets_read = true;
         }
-        if sensitive_re().is_match(text) {
+        if is_sensitive_path(text) {
             self.cap.secrets_read = true;
         }
         self.collect_paths(text)
@@ -981,7 +1009,13 @@ mod tests {
     fn detects_sensitive_paths() {
         assert!(is_sensitive_path("cat ~/.ssh/id_rsa"));
         assert!(is_sensitive_path("cat .env"));
+        assert!(is_sensitive_path("cat .env.local"));
         assert!(is_sensitive_path("open('/etc/passwd')"));
+        // A committed template holds no secrets, but a real `.env` beside it
+        // does (rev 28).
+        assert!(!is_sensitive_path("cat .env.example"));
+        assert!(!is_sensitive_path("open('.env.example')"));
+        assert!(is_sensitive_path("cat .env.example .env"));
         assert!(!is_sensitive_path("./data/report.csv"));
         assert!(!is_sensitive_path("src/index.ts"));
     }

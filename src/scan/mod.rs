@@ -796,6 +796,10 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         }
         // A read of a sensitive path is a path claim, not a command one.
         "SECRET_PATH_READ" => looks_like_test(&line) || doc_in_docs,
+        // `.env.example` and friends are templates the repository commits *on
+        // purpose*, because they hold no secrets. The pattern matches up to
+        // `.env`, so the suffix is read from the line (rev 28).
+        "FS_SENSITIVE_PATH" => is_env_template_suffix(&line, &m),
         // The canonical AWS documentation key is not a credential — but only
         // where it is documentation. A `config.sh` that assigns it is a real
         // hardcoded credential, and the fixture that says so was failing.
@@ -931,6 +935,20 @@ fn looks_like_test(line: &str) -> bool {
     ]
     .iter()
     .any(|t| line.contains(t))
+}
+
+/// Is a `.env` match a *template* rather than the file a secret lives in?
+///
+/// `.env.example`, `.env.sample`, `.env.template` and `.env.dist` are committed
+/// on purpose, because they hold no secrets. The pattern matches up to `.env`,
+/// so the suffix is read from the line (rev 28).
+fn is_env_template_suffix(line: &str, matched: &str) -> bool {
+    const SUFFIXES: &[&str] = &[".example", ".sample", ".template", ".dist", ".defaults"];
+    let Some(pos) = line.find(matched) else {
+        return false;
+    };
+    let after = &line[pos + matched.len()..];
+    SUFFIXES.iter().any(|s| after.starts_with(s))
 }
 
 /// The quoted literal on the right of an assignment, e.g. `"OPENAI_API_KEY"`

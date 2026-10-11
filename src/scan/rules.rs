@@ -1030,8 +1030,10 @@ pub fn rule_count() -> usize {
 /// rev 27: `DL_UNTRUSTED_DOMAIN` needs the untrusted TLD in host position, so a
 /// path segment (`…/water.xyz`) is not a low-reputation host; and the private
 /// and loopback address exclusion now looks *inside* the match, so a local
-/// `http://127.0.0.1` health check is no longer reported as untrusted.
-pub const SCAN_LOGIC_REVISION: u32 = 27;
+/// `http://127.0.0.1` health check is no longer reported as untrusted. rev 28:
+/// a `.env` *template* (`.env.example`) is not a key store, so `cat .env.example`
+/// is neither `FS_SENSITIVE_PATH` nor a `secrets.read` capability.
+pub const SCAN_LOGIC_REVISION: u32 = 28;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

@@ -236,6 +236,31 @@ fn an_endpoint_is_judged_by_its_host_not_its_path() {
 }
 
 #[test]
+fn a_committed_env_template_is_not_a_key_store() {
+    // `.env.example` is committed precisely because it holds no secrets.
+    // `cat .env.example` was reported as `FS_SENSITIVE_PATH` and made the skill
+    // read as `secrets.read`; GOLD-v5 measured that rule at 25% precision.
+    let out = scan_fixture("safe", "env-template");
+    assert!(
+        !rules(&out).contains("FS_SENSITIVE_PATH"),
+        "a template is not a key store: {:#?}",
+        out.findings
+    );
+    assert!(
+        !out.capabilities.secrets_read,
+        "a template is not a secret: {:#?}",
+        out.capabilities
+    );
+    let noisy: Vec<String> = out
+        .findings
+        .iter()
+        .filter(|f| f.severity >= Severity::Medium)
+        .map(|f| f.rule.as_str().to_owned())
+        .collect();
+    assert!(noisy.is_empty(), "env-template should be quiet: {noisy:?}");
+}
+
+#[test]
 fn a_comment_is_not_a_capability() {
     // `research/GOLD.md` records a documentation path mentioned in a `//`
     // comment being counted as `fs read`. A comment describes behaviour; it does

@@ -488,14 +488,15 @@ Every fix below came from a labelled false positive, not from reading code. The
 | 25 | `PERSIST_AGENT_CONFIG` needs the path to name an agent directory | a skill's own project-local `settings.json` is not agent configuration |
 | 26 | `SECRET_GENERIC_ASSIGN` needs the literal to look like a secret *value* | an environment-variable name (`"OPENAI_API_KEY"`) and a placeholder (`"your-token-goes-here"`) are not hardcoded credentials |
 | 27 | `DL_UNTRUSTED_DOMAIN` needs the untrusted TLD in host position, and its private-address exclusion looks inside the match | a path segment (`…/water.xyz`) is not a low-reputation host, and a local `http://127.0.0.1` health check is no longer untrusted |
+| 28 | a `.env` *template* is not a key store | `cat .env.example` is neither `FS_SENSITIVE_PATH` nor a `secrets.read` capability |
 
-Revisions 20 to 27 were reproduced from the false-positive notes above and
+Revisions 20 to 28 were reproduced from the false-positive notes above and
 carry fixtures (`safe/version-strings`, `suspicious/raw-ip-endpoint`,
 `safe/comment-mentions`, `safe/tmp-chmod`, `safe/own-settings`,
-`safe/credential-names`, `safe/endpoint-context`), but they are **not
-re-measured**: the corpus mirror is not in the repository, so the precision
-column still reflects rev 8. They await a GOLD-v6 round, and each should be
-scored there before any figure is quoted.
+`safe/credential-names`, `safe/endpoint-context`, `safe/env-template`), but they
+are **not re-measured**: the corpus mirror is not in the repository, so the
+precision column still reflects rev 8. They await a GOLD-v6 round, and each
+should be scored there before any figure is quoted.
 
 ### Two structural bugs found on the way
 
