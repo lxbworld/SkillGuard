@@ -230,9 +230,9 @@ Other output formats: `--format json`, `--format sarif` (GitHub Code Scanning),
 skillguard corpus index   ./checkout --out corpus-manifest.jsonl
 skillguard corpus scan    --manifest corpus-manifest.jsonl --tree ./checkout --out findings.jsonl
 skillguard corpus stats   --findings findings.jsonl
-skillguard corpus report  --findings findings.jsonl --gold GOLD-v4.jsonl --out report.md
+skillguard corpus report  --findings findings.jsonl --gold GOLD-v5.jsonl --out report.md
 skillguard corpus reproduce --manifest corpus-manifest.jsonl --tree ./checkout
-skillguard corpus agreement research/gold/GOLD-v4.annotator-a4.jsonl research/gold/GOLD-v4.annotator-b4.jsonl
+skillguard corpus agreement research/gold/GOLD-v5.annotator-a5.jsonl research/gold/GOLD-v5.annotator-b5.jsonl
 ```
 
 </details>
@@ -337,10 +337,11 @@ The first large-scale empirical measurement of this ecosystem is the next
 milestone — see the [corpus study](docs/PHASE0_CORPUS_STUDY.md). A pilot has
 already run end to end on 5442 real GitHub skills: **7.1% declare permissions,
 92.9% declare nothing**, which rejects the H6 null at that sample. A precision
-pass (`GOLD-v4`, 151 findings, Cohen's κ 0.907, no human annotator) found that
+pass (`GOLD-v5`, 250 findings, Cohen's κ 0.949, no human annotator) found that
 **most heuristics over-fire on comments, documentation and string literals**, so
 the prevalence figures are upper bounds and the precision column is the real
-signal. The full N=100,000 stratified study is waiting on registry collection
+signal. It measured `SCAN_LOGIC_REVISION` 8; revisions 9–31 are fixed but not yet
+re-measured (`research/GOLD.md`). The full N=100,000 stratified study is waiting on registry collection
 permission, not on code — the pipeline is built, reproducible (`corpus
 reproduce` re-derives every digest) and offline.
 
@@ -353,10 +354,10 @@ Action, a pre-commit hook and prebuilt binaries for five platforms.
 
 The Phase 0 corpus pipeline (`index` / `scan` / `stats` / `report` /
 `reproduce`, plus `agreement` for Cohen's κ and GOLD precision/recall scoring)
-is implemented and offline. `GOLD-v4` is a reproducible precision pass (151
-findings, κ 0.907, two independent model annotators — no human, and not the rule
-author); the protocol's two-annotator human GOLD and the full study are still
-open.
+is implemented and offline. `GOLD-v5` is a reproducible precision pass (250
+findings, κ 0.949, two independent model annotators — no human, and not the rule
+author), measured at revision 8; the later revisions await a GOLD-v6 round, and
+the protocol's two-annotator human GOLD and the full study are still open.
 
 Test suite and CI are green: Linux on every commit (about 1.5 billed minutes),
 Windows and macOS on release tags and weekly, and `cargo fmt`, `cargo clippy -D

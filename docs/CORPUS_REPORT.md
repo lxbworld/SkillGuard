@@ -29,9 +29,12 @@
 > ## GOLD-v5
 >
 > The precision column below is measured against `research/gold/GOLD-v5.jsonl`:
-> 250 line-level findings from the **current** rule set, judged `tp`/`fp` by two
-> independent sessions of `opencode-go/deepseek-v4.1-flash` (no human, and not
-> the rule author). Cohen's kappa is **0.949**; 6 disagreements adjudicated.
+> 250 line-level findings from the rule set at `SCAN_LOGIC_REVISION` **8**, judged
+> `tp`/`fp` by two independent sessions of `opencode-go/deepseek-v4.1-flash` (no
+> human, and not the rule author). Cohen's kappa is **0.949**; 6 disagreements
+> adjudicated. The rules have since moved to revision 31, and revisions 9–31 are
+> fixed but not re-measured — treat the table as revision 8, not as the current
+> code. `research/GOLD.md` records which revisions await a GOLD-v6 round.
 >
 > Where the earlier passes did their job: `NET_FETCH_CALL` 100%,
 > `NET_HTTP_CLIENT` 87.5%, `FS_PATH_ESCAPE` 87.5%, `NET_DYNAMIC_URL` 100%
