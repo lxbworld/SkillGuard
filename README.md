@@ -428,17 +428,25 @@ terms in [NOTICE](NOTICE).
 
 ## Contributing
 
-Everything in this repository — issues, pull requests, commits, comments and
-docs — is written in **English**, so that people who do not share a first
-language can review it.
+Contributions are welcome, and the most useful ones are small: a false positive
+with the skill that caused it, a rule with a malicious fixture, or a platform
+where the build or the scan misbehaves. You do not need to be a security
+researcher to file a good report.
+
+Two things to know about how this repository works, so nothing surprises you
+later:
+
+- **English is the working language** for issues, pull requests, commits and
+docs. It is not a test to pass — a shared language is what lets someone who
+does not speak yours review your change.
+- **Every claim is measured.** A rule is a claim about the world, so a rule
+change ships with a fixture and a re-measurement, and a false positive is
+treated as a false accusation rather than a tuning problem.
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before a non-trivial change: it covers
 the architectural invariants (no socket, no `unsafe`, no process spawn outside
-`src/hash.rs`), how to change a rule without breaking the precision table, and
-the disclosure rules in `research/`.
-
-Every new security rule ships with a regression test and a fixture, and every
-rule must be deterministic and evidence-bearing.
+`src/hash.rs`), the rule-change checklist, and the disclosure rules in
+`research/`.
 
 ```bash
 cargo fmt --all
@@ -447,7 +455,12 @@ cargo test --all-targets
 cargo deny check
 ```
 
-Good first contributions: a new rule with a malicious fixture, a false-positive
-report with a real skill, or a registry integration. Open an
-[issue](https://github.com/lxbworld/SkillGuard/issues) first for anything
-larger than a rule.
+Good first contributions:
+
+- a **false positive**, with the skill (or a minimal reproduction) that triggers it;
+- a **new rule**, with a malicious fixture that trips it and a safe fixture it leaves alone;
+- **labelling a GOLD set** — the precision numbers need human annotators ([#11](https://github.com/lxbworld/SkillGuard/issues/11));
+- a **platform bug**: a scan or a build that misbehaves on your OS.
+
+Open an [issue](https://github.com/lxbworld/SkillGuard/issues) for anything
+larger than a rule, so we can agree on the approach before you write the code.
