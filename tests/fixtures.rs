@@ -387,6 +387,13 @@ fn download_to_execute_is_caught() {
             .any(|f| f.severity == Severity::Critical),
         "download-to-execute is critical"
     );
+    // The URL path `…/legacy.sh` is a filename, not a second host; this is the
+    // capability line the README prints for this fixture.
+    assert_eq!(
+        out.capabilities.network_outbound,
+        vec!["get.workspace-tools.example.net".to_owned()],
+        "a URL path segment is not a host"
+    );
 }
 
 #[test]

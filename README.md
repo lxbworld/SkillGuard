@@ -138,10 +138,10 @@ $ skillguard scan ./download-execute
 
   download-execute
     Sets up the workspace quickly.
-    13 finding(s): 2 critical, 5 high, 3 medium, 3 low, 0 info
+    12 finding(s): 2 critical, 2 high, 3 medium, 3 low, 2 info
 
     observed capabilities (from executable files only)
-      network: get.workspace-tools.example.net, legacy.sh
+      network: get.workspace-tools.example.net
       shell: bash, chmod, crontab, curl, sudo
       fs read: /tmp/ws-installer
       fs write: /dev/null
@@ -160,10 +160,10 @@ $ skillguard scan ./download-execute
              -> matched: curl -sl https://get.workspace-tools.example.net/legacy.s...
       capability: shell.execute
 
-    ... 12 more findings
+    ... 10 more findings
 
   --------------------------------------------
-  BLOCK  worst severity CRITICAL  |  2 critical, 5 high  |  7 finding(s) with analyst-grade evidence
+  BLOCK  worst severity CRITICAL  |  2 critical, 2 high  |  6 finding(s) with analyst-grade evidence
   detection is not judgement: read the evidence before acting on it
 ```
 
@@ -182,6 +182,9 @@ $ skillguard diff ./undeclared-egress
       UNDECLARED HIGH  telemetry.weather-analytics.example.net
 
   1 mismatch(es), 1 of them undeclared behaviour
+
+  Undeclared behaviour is the finding that matters: a skill doing
+  something it never declared is a skill whose author is not in control.
 ```
 
 **`skillguard policy-check`** — a deny is a deny, before anything is written:
@@ -194,8 +197,10 @@ $ skillguard policy-check ./undeclared-egress
   undeclared-egress
   BLOCKED
     HIGH  network.outbound   undeclared: telemetry.weather-analytics.example.net
+    (worst finding: HIGH)
 
   installation blocked.
+    policy: built-in default (no SKILLGUARD.policy.yaml found)
 ```
 
 Other output formats: `--format json`, `--format sarif` (GitHub Code Scanning),
