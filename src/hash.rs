@@ -193,6 +193,16 @@ pub struct Provenance {
     pub license_source: Option<String>,
     /// True when we could not establish source *and* commit.
     pub incomplete: bool,
+    /// True when the worktree had uncommitted changes under this skill when we
+    /// looked.
+    ///
+    /// `commit` answers "where did this come from", and it can only answer for
+    /// content a commit contains. With a dirty worktree the recorded commit is
+    /// an *ancestor* of the content, not its origin: `lock` reports it and the
+    /// lockfile records it, because a lockfile whose commit does not contain its
+    /// content is a provenance claim nothing can check.
+    #[serde(default)]
+    pub uncommitted: bool,
     /// Why provenance is incomplete.
     pub note: Option<String>,
 }
@@ -248,6 +258,7 @@ fn read_git_provenance(root: &Path, declared_license: Option<&str>) -> Provenanc
         .filter(|s| !s.is_empty());
 
     let incomplete = commit.is_none() || repository.is_none();
+    let uncommitted = worktree_is_dirty(&repo_root, root);
     Provenance {
         source: repository
             .as_ref()
@@ -258,11 +269,59 @@ fn read_git_provenance(root: &Path, declared_license: Option<&str>) -> Provenanc
         license: declared_license.map(str::to_owned),
         license_source: declared_license.map(|_| "frontmatter".to_owned()),
         incomplete,
-        note: incomplete.then(|| {
-            "source or commit could not be established; treat this install as unreproducible"
-                .to_owned()
-        }),
+        uncommitted,
+        note: provenance_note(incomplete, uncommitted),
     }
+}
+
+/// Why a lockfile written now could not pin the content to a commit.
+///
+/// Naming the missing half matters: the previous wording said "source or commit
+/// could not be established" even when the commit was read, checked and matched.
+fn provenance_note(incomplete: bool, uncommitted: bool) -> Option<String> {
+    let mut parts: Vec<&str> = Vec::new();
+    if incomplete {
+        parts.push("source or commit could not be established");
+    }
+    if uncommitted {
+        parts.push(
+            "uncommitted changes under this skill, so the commit does not contain the content \
+             (commit them, then re-run `skillguard lock`)",
+        );
+    }
+    if parts.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "{}; treat this install as unreproducible",
+        parts.join("; ")
+    ))
+}
+
+/// Are there uncommitted changes under `skill`?
+///
+/// Only this skill's subtree is examined, and paths the digest already ignores
+/// do not count: `git status` knows nothing about [`is_excluded`], and
+/// `SKILLGUARD.lock` - which `lock` itself creates - must not make every skill
+/// look dirty.
+fn worktree_is_dirty(repo_root: &Path, skill: &Path) -> bool {
+    let rel = skill.strip_prefix(repo_root).unwrap_or(Path::new(""));
+    let rel = if rel.as_os_str().is_empty() {
+        ".".to_owned()
+    } else {
+        rel.to_string_lossy().replace('\\', "/")
+    };
+    let Some(out) = git(repo_root, &["status", "--porcelain", "--", &rel]) else {
+        // git failed, so we cannot tell. Inventing "dirty" would refuse to lock
+        // on a machine where git is present but unhappy.
+        return false;
+    };
+    out.lines().any(|line| {
+        // Porcelain is `XY <path>`, and a rename is `XY <old> -> <new>`.
+        let path = line.get(3..).unwrap_or("").trim();
+        let path = path.rsplit(" -> ").next().unwrap_or(path);
+        !is_excluded(path.trim_matches('"'))
+    })
 }
 
 /// The repository root containing `path`, or `None` if it is not in a
