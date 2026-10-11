@@ -222,7 +222,7 @@ base64 块、零宽字符、同形字、HTML 注释中的指令、超长不可�
 | S2 | `policy_decision == Deny` 时，agent 目录与 skill 目录的文件系统快照完全不变 |
 | S3 | 所有 Finding 必含 `file` + `line` + 原文 `evidence`（无证据不报 finding） |
 | S4 | 同一输入的 `content_digest` 跨机器、跨 OS 一致 |
-| S5 | 任何被写入终端的字符串都经过 ANSI 清理与长度限制 |
+| S5 | 任何被写入终端的字符串都经过 ANSI / 双向控制符清理（`text::sanitize_controls`）；从 skill 引用的内容串另加 200 字符上限（`sanitize_for_display`），路径只用前者，因为截断会隐藏文件名 |
 | S6 | 任何读取磁盘的路径都经过 `resolve_safe_path` |
 | S7 | 扫描器对任意输入（含随机字节）不 panic |
 | S8 | lockfile 中的 `declared_permissions` 与 `observed_capabilities` 在类型层面不可互相赋值 |

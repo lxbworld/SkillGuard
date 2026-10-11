@@ -406,14 +406,14 @@ fn skill_dir_of(path: &std::path::Path) -> Result<PathBuf, String> {
         return path.parent().map(Path::to_path_buf).ok_or_else(|| {
             format!(
                 "cannot determine the skill directory for {}",
-                path.display()
+                clean_path(path)
             )
         });
     }
     if path.join("SKILL.md").is_file() {
         return Ok(path.to_path_buf());
     }
-    Err(format!("no SKILL.md in {}", path.display()))
+    Err(format!("no SKILL.md in {}", clean_path(path)))
 }
 
 fn default_lockfile(dir: &std::path::Path) -> PathBuf {
@@ -463,12 +463,12 @@ fn run_policy_check(
         };
         let decision = skillguard::policy::evaluate(&policy, &subject);
 
-        o.push_str(&format!("\n  {}\n", out.skill_name));
+        o.push_str(&format!("\n  {}\n", clean(&out.skill_name)));
         o.push_str(&skillguard::policy::render_decision(&decision));
         o.push_str(&format!(
             "    policy: {}\n",
             if policy_file.is_file() {
-                policy_file.display().to_string()
+                clean_path(&policy_file)
             } else {
                 "built-in default (no SKILLGUARD.policy.yaml found)".to_owned()
             }
@@ -514,8 +514,9 @@ fn run_verify(
 
         let Some(entry) = lock.skills.get(&name) else {
             o.push_str(&format!(
-                "\n  {name}\n    [FAIL] not_locked     {} has no entry\n",
-                lock_path.display()
+                "\n  {}\n    [FAIL] not_locked     {} has no entry\n",
+                clean(&name),
+                clean_path(&lock_path)
             ));
             all_ok = false;
             continue;
@@ -528,7 +529,7 @@ fn run_verify(
                 all_ok &= report.ok;
             }
             Err(e) => {
-                o.push_str(&format!("\n  {name}\n    [FAIL] {e}\n"));
+                o.push_str(&format!("\n  {}\n    [FAIL] {}\n", clean(&name), clean(&e)));
                 all_ok = false;
             }
         }
@@ -611,19 +612,21 @@ fn run_lock(paths: &[PathBuf], out: Option<&std::path::Path>, cli: &Cli) -> Resu
         lock.save(&lock_path)?;
         o.push_str(&format!(
             "    {}  {}  {}  -> {}\n",
-            name,
+            clean(&name),
             if existed { "updated" } else { "created" },
             collected.digest,
-            lock_path.display()
+            clean_path(&lock_path)
         ));
         if collected.provenance.incomplete {
             o.push_str(&format!(
                 "      note: {}\n",
-                collected
-                    .provenance
-                    .note
-                    .as_deref()
-                    .unwrap_or("provenance incomplete")
+                clean(
+                    collected
+                        .provenance
+                        .note
+                        .as_deref()
+                        .unwrap_or("provenance incomplete")
+                )
             ));
         }
         if decision.decision.blocks() {
@@ -782,7 +785,7 @@ fn run_approve(
             ));
         }
     }
-    o.push_str(&format!("    file:      {}\n", lock_path.display()));
+    o.push_str(&format!("    file:      {}\n", clean_path(&lock_path)));
     o.push_str("\n  This approval is bound to that digest. If the content changes,\n");
     o.push_str("  the approval stops applying and must be granted again.\n\n");
     emit(cli, &o)?;
@@ -838,7 +841,7 @@ fn run_import(
     o.push_str(&format!(
         "\n  {} entr(ies) -> {}\n",
         lock.skills.len(),
-        dest.display()
+        clean_path(&dest)
     ));
     o.push_str("  Imported digests are recorded as legacy_digest and are NOT verified\n");
     o.push_str("  against content. Re-run `skillguard lock` after verifying on disk.\n\n");
@@ -852,7 +855,7 @@ fn run_diff(paths: &[PathBuf], strict: bool, cli: &Cli) -> Result<i32, String> {
     let mut blocking_total = 0usize;
 
     for out in &outcomes {
-        o.push_str(&format!("\n  {}\n", out.skill_name));
+        o.push_str(&format!("\n  {}\n", clean(&out.skill_name)));
         o.push_str(&skillguard::permissions::render(&out.diff));
         blocking_total += out.diff.blocking().len();
     }
@@ -878,13 +881,17 @@ fn run_adopt(paths: &[PathBuf], dry_run: bool, cli: &Cli) -> Result<i32, String>
         let block = skillguard::permissions::to_yaml(&out.declared_from_observed());
 
         if dry_run {
-            o.push_str(&format!("\n  {}\n{block}", out.skill_name));
+            o.push_str(&format!("\n  {}\n{block}", clean(&out.skill_name)));
             continue;
         }
 
         match adopt_into_skill_md(t, &block) {
-            Ok(action) => o.push_str(&format!("\n  {}  {action}\n", out.skill_name)),
-            Err(e) => o.push_str(&format!("\n  {}  skipped: {e}\n", out.skill_name)),
+            Ok(action) => o.push_str(&format!("\n  {}  {action}\n", clean(&out.skill_name))),
+            Err(e) => o.push_str(&format!(
+                "\n  {}  skipped: {}\n",
+                clean(&out.skill_name),
+                clean(&e)
+            )),
         }
     }
 
@@ -975,7 +982,7 @@ fn resolve_targets(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
     let mut out: Vec<PathBuf> = Vec::new();
     for p in paths {
         if !p.exists() {
-            return Err(format!("path does not exist: {}", p.display()));
+            return Err(format!("path does not exist: {}", clean_path(p)));
         }
         if p.is_file() {
             // Accept a SKILL.md, or *any* file inside a skill. pre-commit hands
@@ -987,7 +994,7 @@ fn resolve_targets(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
                 None => {
                     return Err(format!(
                         "not a skill: {} (no SKILL.md in it or any parent directory)",
-                        p.display()
+                        clean_path(p)
                     ))
                 }
             }
@@ -997,7 +1004,7 @@ fn resolve_targets(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
         if found.is_empty() {
             return Err(format!(
                 "no SKILL.md found in {} (is this a skill directory?)",
-                p.display()
+                clean_path(p)
             ));
         }
         out.extend(found);
@@ -1018,10 +1025,30 @@ fn scan_all(paths: &[PathBuf]) -> Result<Vec<ScanOutcome>, String> {
     Ok(out)
 }
 
+/// Invariant S5 at the CLI boundary.
+///
+/// `scan --format text` renders through `report::text::to_text`, which cleans
+/// everything. The commands below build their own strings, and the skill name
+/// (the directory name) plus anything quoted from the skill is skill-controlled,
+/// so each has to come through here. A directory named `gnp\u{202E}exe` round
+/// trips into the output otherwise.
+fn clean(s: &str) -> String {
+    text::sanitize_for_display(s)
+}
+
+/// A filesystem path, cleaned for display (S5).
+///
+/// A path a scanned skill chose - its own directory name, or the name of a file
+/// inside it - is skill-controlled text like any other. Paths take the control
+/// strip without the length cap, so the file name at the end survives.
+fn clean_path(p: &std::path::Path) -> String {
+    text::sanitize_controls(&p.display().to_string())
+}
+
 fn emit(cli: &Cli, body: &str) -> Result<(), String> {
     match &cli.output {
         Some(p) => {
-            std::fs::write(p, body).map_err(|e| format!("cannot write {}: {e}", p.display()))
+            std::fs::write(p, body).map_err(|e| format!("cannot write {}: {e}", clean_path(p)))
         }
         None => {
             let stdout = std::io::stdout();
@@ -1110,23 +1137,23 @@ fn run_inspect(paths: &[PathBuf], format: Format, cli: &Cli, _color: bool) -> Re
     let mut o = String::new();
     for s in &report.skills {
         let d: &dyn Fn(&mut String) = &mut |o: &mut String| {
-            o.push_str(&format!("\n  {}\n", s.name));
+            o.push_str(&format!("\n  {}\n", clean(&s.name)));
             if let Some(d) = &s.description {
                 o.push_str(&format!(
                     "    description: {}\n",
-                    text::truncate_chars(d, 100)
+                    clean(&text::truncate_chars(d, 100))
                 ));
             }
             o.push_str(&format!(
                 "    declared permissions: {}\n",
                 s.declared_permissions_raw
                     .as_deref()
-                    .map(|d| text::truncate_chars(d, 100))
+                    .map(|d| clean(&text::truncate_chars(d, 100)))
                     .unwrap_or_else(|| "none".to_owned())
             ));
             o.push_str(&format!(
                 "    license: declared={} file={}\n",
-                s.license_declared.as_deref().unwrap_or("none"),
+                clean(s.license_declared.as_deref().unwrap_or("none")),
                 if s.license_file_found { "yes" } else { "no" }
             ));
             let c = &s.capabilities;
@@ -1137,31 +1164,31 @@ fn run_inspect(paths: &[PathBuf], format: Format, cli: &Cli, _color: bool) -> Re
                 if !c.network_outbound.is_empty() {
                     o.push_str(&format!(
                         "      network.outbound: {}\n",
-                        c.network_outbound.join(", ")
+                        clean(&c.network_outbound.join(", "))
                     ));
                 }
                 if !c.shell_execute.is_empty() {
                     o.push_str(&format!(
                         "      shell.execute: {}\n",
-                        c.shell_execute.join(", ")
+                        clean(&c.shell_execute.join(", "))
                     ));
                 }
                 if !c.filesystem_read.is_empty() {
                     o.push_str(&format!(
                         "      filesystem.read: {}\n",
-                        c.filesystem_read.join(", ")
+                        clean(&c.filesystem_read.join(", "))
                     ));
                 }
                 if !c.filesystem_write.is_empty() {
                     o.push_str(&format!(
                         "      filesystem.write: {}\n",
-                        c.filesystem_write.join(", ")
+                        clean(&c.filesystem_write.join(", "))
                     ));
                 }
                 if !c.package_install.is_empty() {
                     o.push_str(&format!(
                         "      package_install: {}\n",
-                        c.package_install.join(", ")
+                        clean(&c.package_install.join(", "))
                     ));
                 }
                 if c.secrets_read {
@@ -1175,9 +1202,9 @@ fn run_inspect(paths: &[PathBuf], format: Format, cli: &Cli, _color: bool) -> Re
                 for d in s.dependencies.iter().take(200) {
                     o.push_str(&format!(
                         "      {}:{} {}\n",
-                        d.ecosystem,
-                        d.name,
-                        d.version_spec.as_deref().unwrap_or("")
+                        clean(&d.ecosystem),
+                        clean(&d.name),
+                        clean(d.version_spec.as_deref().unwrap_or(""))
                     ));
                 }
                 if s.dependencies.len() > 200 {
@@ -1341,7 +1368,7 @@ fn run_corpus(command: &CorpusCommand, cli: &Cli) -> Result<i32, String> {
             let failed = records.len() - scanned;
             let mut o = format!(
                 "\n  SkillGuard corpus scan\n    scanned {scanned}\n    failed  {failed}\n    output  {}\n",
-                out.display()
+                clean_path(out)
             );
             for r in records.iter().filter(|r| !r.is_scanned()).take(20) {
                 o.push_str(&format!(
@@ -1407,12 +1434,12 @@ fn run_corpus(command: &CorpusCommand, cli: &Cli) -> Result<i32, String> {
             if let Some(parent) = out.parent() {
                 if !parent.as_os_str().is_empty() {
                     std::fs::create_dir_all(parent)
-                        .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
+                        .map_err(|e| format!("cannot create {}: {e}", clean_path(parent)))?;
                 }
             }
             std::fs::write(out, &body)
-                .map_err(|e| format!("cannot write {}: {e}", out.display()))?;
-            emit(cli, &format!("\n  wrote {}\n\n", out.display()))?;
+                .map_err(|e| format!("cannot write {}: {e}", clean_path(out)))?;
+            emit(cli, &format!("\n  wrote {}\n\n", clean_path(out)))?;
             Ok(exit::OK)
         }
 
@@ -1489,14 +1516,14 @@ fn run_labeling(paths: &[PathBuf], cli: &Cli) -> Result<i32, String> {
     );
 
     for t in &targets {
-        o.push_str(&format!("\n  == {} ==\n", t.display()));
+        o.push_str(&format!("\n  == {} ==\n", clean_path(t)));
         let walked = walk::walk_skill(t);
         for f in &walked.files {
             if !f.scanned {
                 o.push_str(&format!(
                     "  {}: SKIPPED ({})\n",
-                    f.rel,
-                    f.note.as_deref().unwrap_or("")
+                    clean(&f.rel),
+                    clean(f.note.as_deref().unwrap_or(""))
                 ));
                 continue;
             }
@@ -1507,7 +1534,7 @@ fn run_labeling(paths: &[PathBuf], cli: &Cli) -> Result<i32, String> {
             for l in &norm.lines {
                 o.push_str(&format!(
                     "{}:{} | {}\n",
-                    f.rel,
+                    clean(&f.rel),
                     l.line,
                     text::sanitize_for_display(&l.norm)
                 ));
@@ -1537,7 +1564,7 @@ fn index_into(
         &format!(
             "\n  SkillGuard corpus index\n    {} skill(s) -> {}\n\n",
             entries.len(),
-            out.display()
+            clean_path(out)
         ),
     )?;
     Ok(exit::OK)

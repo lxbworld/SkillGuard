@@ -539,6 +539,59 @@ fn approve_of_a_clean_skill_records_allow() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// invariant S5: nothing a skill controls reaches the terminal uncleaned
+// ---------------------------------------------------------------------------
+
+/// Invariant S5 is not about evidence, it is about every string a skill can put
+/// in front of a reader. The skill *name* is the directory name, which is legal
+/// on POSIX and, for a bidi override, on Windows too; the description and the
+/// declared permissions are the skill's own words. `scan --format text` cleaned
+/// evidence but printed the name raw, and `inspect` / `diff` / `policy-check` /
+/// `adopt` printed both raw. Reproduced on a directory named `gnp[U+202E]exe`.
+#[test]
+fn no_command_writes_raw_skill_text_to_the_terminal() {
+    let root = tmpdir("s5-all-commands");
+    let bidi = '\u{202E}';
+    let skill = root.join(format!("gnp{bidi}exe"));
+    write(
+        &skill,
+        "SKILL.md",
+        &format!("---\nname: x\ndescription: helper {bidi} text\nlicense: MIT\n---\n\nbody\n"),
+    );
+    write(&skill, "scripts/x.sh", "echo hi\n");
+
+    let path = skill.to_str().expect("temp path is utf-8");
+    let assert_clean = |args: &[&str]| {
+        let out = run(args);
+        let command = args[0];
+        assert!(
+            !stdout(&out).contains(bidi),
+            "`{command}` printed the skill's own text uncleaned:\n{}",
+            stdout(&out)
+        );
+        assert!(
+            !stderr(&out).contains(bidi),
+            "`{command}` printed the skill's own text uncleaned on stderr:\n{}",
+            stderr(&out)
+        );
+    };
+
+    for args in [
+        vec!["scan", path, "--no-color"],
+        vec!["inspect", path],
+        vec!["diff", path],
+        vec!["policy-check", path, "--no-color"],
+        vec!["adopt", path, "--dry-run"],
+    ] {
+        assert_clean(&args);
+    }
+    // `lock` writes the lockfile that `verify` reads, and both print the name and
+    // the names of the files inside the skill.
+    assert_clean(&["lock", path]);
+    assert_clean(&["verify", path, "--no-color"]);
+}
+
 #[test]
 fn corpus_agreement_computes_kappa_and_gates_it() {
     let d = tmpdir("agreement");

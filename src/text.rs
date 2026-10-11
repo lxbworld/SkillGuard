@@ -319,6 +319,15 @@ pub fn normalize_line(line: &str) -> (String, NormFlags) {
 /// Invariant S5: nothing reaches a terminal without going through here, so a
 /// malicious skill cannot repaint the scanner's own output (S14/T14).
 pub fn sanitize_for_display(input: &str) -> String {
+    truncate_chars(&sanitize_controls(input), MAX_DISPLAY_CHARS)
+}
+
+/// The same cleaning, without the length cap.
+///
+/// A filesystem path is a display string too - a skill's own directory name is
+/// part of it - but it must not be truncated: the tail of a path is the part
+/// that says *which* file the message is about.
+pub fn sanitize_controls(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let mut chars = input.chars().peekable();
     while let Some(c) = chars.next() {
@@ -345,7 +354,7 @@ pub fn sanitize_for_display(input: &str) -> String {
             _ => out.push(c),
         }
     }
-    truncate_chars(&out, MAX_DISPLAY_CHARS)
+    out
 }
 
 /// Truncate to at most `max` characters, appending an ASCII `...` marker.
@@ -474,6 +483,19 @@ mod tests {
     fn sanitizes_ansi_escape() {
         let s = sanitize_for_display("\u{1B}[31mCRITICAL\u{1B}[0m");
         assert_eq!(s, "CRITICAL");
+    }
+
+    #[test]
+    fn stripping_controls_does_not_truncate() {
+        // Paths go through the control strip, not the display cap: a truncated
+        // path hides the file name, which is the only part that matters in an
+        // error message.
+        let long = format!("{}/deep/file.sh", "d".repeat(400));
+        let cleaned = sanitize_controls(&format!("\u{1B}[31m{long}\u{202E}"));
+        assert!(cleaned.ends_with("/deep/file.sh\u{FFFD}"), "got {cleaned}");
+        assert!(!cleaned.contains('\u{1B}'));
+        // The display version still caps length.
+        assert!(sanitize_for_display(&long).chars().count() <= MAX_DISPLAY_CHARS);
     }
 
     #[test]

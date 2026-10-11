@@ -738,10 +738,20 @@ impl VerifyReport {
 
     pub fn render(&self) -> String {
         let mut o = String::new();
-        o.push_str(&format!("\n  {}\n", self.skill));
+        // S5: the skill name is the directory name and `detail` names files from
+        // inside the skill, so both are skill-controlled strings on their way to
+        // a terminal.
+        o.push_str(&format!(
+            "\n  {}\n",
+            text::sanitize_for_display(&self.skill)
+        ));
         for c in &self.checks {
             let mark = if c.ok { "ok  " } else { "FAIL" };
-            o.push_str(&format!("    [{mark}] {:<16} {}\n", c.name, c.detail));
+            o.push_str(&format!(
+                "    [{mark}] {:<16} {}\n",
+                c.name,
+                text::sanitize_for_display(&c.detail)
+            ));
         }
         o.push('\n');
         o
@@ -1229,6 +1239,26 @@ mod tests {
         let out = render_decision(&d);
         assert!(!out.contains('\u{1B}'));
         assert!(out.contains("BLOCKED"));
+    }
+
+    #[test]
+    fn verify_render_is_escape_free() {
+        // `verify` prints the skill name and the names of the files that
+        // changed. Both are the skill author's to choose: the name is the
+        // directory name, and a file name is whatever they called the file.
+        let r = VerifyReport {
+            skill: "evil\u{202E}gnp.exe".to_owned(),
+            ok: false,
+            checks: vec![VerifyCheck {
+                name: "changed_files".to_owned(),
+                ok: false,
+                detail: "added: scripts/\u{1B}[2Jpwn.sh".to_owned(),
+            }],
+        };
+        let out = r.render();
+        assert!(!out.contains('\u{1B}'), "{out}");
+        assert!(!out.contains('\u{202E}'), "{out}");
+        assert!(out.contains("changed_files"), "{out}");
     }
 
     #[test]
