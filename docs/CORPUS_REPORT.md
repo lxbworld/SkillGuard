@@ -58,10 +58,10 @@
 > output) measured `PI_DESCRIPTION_MISMATCH` directly: precision **17.6% / 35.3%**,
 > and the underlying "is the description understated?" judgment has **κ 0.359** —
 > the annotators cannot agree on it. Breaking it down by branch: the **network
-> and shell branches scored 0/6 correct**, the credential branch 1-2/4. The two
-> dead branches have been **removed**; what remains is the checkable case (the
-> code reads credentials and the description mentions neither credentials nor
-> security). Prevalence fell 10.7% -> 6.4%. See `research/GOLD.md`.
+> and shell branches scored 0/6 correct**, the credential branch 1-2/4, and the
+> **high-severity-findings branch 1/1**. The two dead branches are **removed**;
+> what remains are the credential branch and the high-severity-findings branch.
+> Prevalence fell 10.7% -> 6.4%. See `research/GOLD.md`.
 >
 > The remaining `PI_*` heuristics are **unmeasured upper bounds**. A
 > single-annotator read-through is not `GOLD` (research/GOLD.md) and the report

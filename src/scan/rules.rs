@@ -924,13 +924,14 @@ pub fn structural_rules() -> &'static [StructuralRule] {
         StructuralRule {
             id: "PI_DESCRIPTION_MISMATCH",
             // Was SevMedium with four branches. On a skill-level GOLD the network
-            // and shell branches scored 0/6 correct, so the claim is now the one
-            // case that is checkable and high-value: the code reads credentials
-            // and the description acknowledges neither credentials nor security.
+            // and shell branches scored 0/6 correct and were removed. Two remain:
+            // the code reads credentials and the description acknowledges neither
+            // credentials nor security, and (1/1 on the same GOLD) the code has a
+            // high-severity finding the description does not acknowledge.
             severity: SevMedium,
             capability: "agent.injection",
-            message: "The code reads credentials, but the description does not mention credentials or security",
-            remediation: "Make the description honest, or remove the credential access.",
+            message: "The description does not acknowledge the credential access or the high-severity findings in the code",
+            remediation: "Make the description honest, or remove the access.",
         },
         StructuralRule {
             id: "PARSE_FAILED",
@@ -1042,8 +1043,9 @@ pub fn rule_count() -> usize {
 /// rev 30: `SECRET_ENV_DUMP` distinguishes enumeration from a keyed read, so
 /// `"K" in os.environ` and `printenv HOME` are no longer a whole-environment
 /// dump. rev 31: `git push --force-with-lease` is the safe force-push, so it is
-/// no longer `SHELL_DESTRUCTIVE`.
-pub const SCAN_LOGIC_REVISION: u32 = 31;
+/// no longer `SHELL_DESTRUCTIVE`. rev 32: `PI_DESCRIPTION_MISMATCH`'s catalogue
+/// message and comment name both surviving branches, not just the credential one.
+pub const SCAN_LOGIC_REVISION: u32 = 32;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

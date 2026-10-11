@@ -353,7 +353,8 @@ description does not mention network access" is not a judgeable claim — a skil
 that fetches a template is not lying about being a template formatter. Both
 branches were **removed** (`SCAN_LOGIC_REVISION` 7). What remains is the
 checkable, high-value case: the code reads credentials and the description
-mentions neither credentials nor security.
+mentions neither credentials nor security. The high-severity-findings branch
+(1/1 on the same sample) is kept as well.
 
 Prevalence fell 10.7% → **6.4%** (585 → 347 of 5442). The rule is still not a
 G4-grade signal — the credential branch is 1-2/4 on a 30-skill sample — but it no
@@ -492,8 +493,9 @@ Every fix below came from a labelled false positive, not from reading code. The
 | 29 | `DEP_CUSTOM_REGISTRY` needs a write to `.npmrc`, not a mention | `cat ~/.npmrc` no longer claims npm was pointed at a non-default registry |
 | 30 | `SECRET_ENV_DUMP` distinguishes enumeration from a keyed read | `"K" in os.environ` and `printenv HOME` are no longer a whole-environment dump |
 | 31 | `SHELL_DESTRUCTIVE` excludes `--force-with-lease` | the safe force-push that aborts on a moved remote is not a history rewrite |
+| 32 | `PI_DESCRIPTION_MISMATCH` names both surviving branches in its message | the catalogue no longer describes only the credential branch while the rule also fires on high-severity findings |
 
-Revisions 20 to 31 were reproduced from the false-positive notes above and
+Revisions 20 to 32 were reproduced from the false-positive notes above and
 carry fixtures (`safe/version-strings`, `suspicious/raw-ip-endpoint`,
 `safe/comment-mentions`, `safe/tmp-chmod`, `safe/own-settings`,
 `safe/credential-names`, `safe/endpoint-context`, `safe/env-template`,

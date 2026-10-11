@@ -1552,9 +1552,9 @@ fn description_mismatch(
     // The network and shell branches were removed: on a skill-level GOLD they
     // scored 0/6 correct (research/GOLD.md, SKILL-v1). "The description does not
     // mention network access" is not judgeable — a skill that fetches a template
-    // is not lying about being a template formatter. What survives is the
-    // high-value, checkable case: the code reads credentials and the description
-    // mentions neither credentials nor security.
+    // is not lying about being a template formatter. Two branches survive:
+    // credential access, and (1/1 on the same GOLD) a high-severity finding the
+    // description does not acknowledge.
     if has_high && !admits(&d, &["security", "credential", "安全", "凭据", "凭证"]) {
         return Some(mismatch_finding(
             "the description does not acknowledge the high-severity findings in this skill",
