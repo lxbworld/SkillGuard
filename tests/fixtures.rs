@@ -135,6 +135,40 @@ fn a_version_string_is_not_an_ip_endpoint() {
 }
 
 #[test]
+fn a_chmod_of_a_local_tmp_file_is_not_a_remote_install() {
+    // A build script chmods a file it wrote to `/tmp` itself. The old
+    // `DL_REMOTE_INSTALL` pattern accepted any `/tmp/` on a `chmod +x` line and
+    // reported "installed directly from a URL" for a pure local build. The
+    // script name must not become an observed outbound host either.
+    let out = scan_fixture("safe", "tmp-chmod");
+    assert!(
+        !rules(&out).contains("DL_REMOTE_INSTALL"),
+        "a local chmod is not a remote install: {:#?}",
+        out.findings
+    );
+    assert!(
+        out.capabilities.network_outbound.is_empty(),
+        "a filename is not a host: {:#?}",
+        out.capabilities.network_outbound
+    );
+    assert!(
+        !out.capabilities
+            .filesystem_read
+            .iter()
+            .any(|p| p == "/bin/sh"),
+        "a shebang is not a read: {:#?}",
+        out.capabilities.filesystem_read
+    );
+    let noisy: Vec<String> = out
+        .findings
+        .iter()
+        .filter(|f| f.severity >= Severity::Medium)
+        .map(|f| f.rule.as_str().to_owned())
+        .collect();
+    assert!(noisy.is_empty(), "tmp-chmod should be quiet: {noisy:?}");
+}
+
+#[test]
 fn a_comment_is_not_a_capability() {
     // `research/GOLD.md` records a documentation path mentioned in a `//`
     // comment being counted as `fs read`. A comment describes behaviour; it does

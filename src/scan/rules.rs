@@ -468,7 +468,15 @@ static TABLE: &[RuleSpec] = &[
             r"(?i)\bbrew\s+install\s+https?://",
             r"(?i)\bapt(?:-get)?\s+install\s+(?:\./|https?://)",
             r"(?i)\bcurl[^\n|]{0,200}\|\s*sudo\s+tar\b",
-            r"(?i)\bchmod\s+\+x\s+[^\n]{0,80}(?:curl|wget|/tmp/)",
+            // `chmod +x` marks a file executable. On its own that is not a
+            // *remote* install: a build or CI script routinely chmods a file
+            // it wrote to `/tmp` itself. The old pattern accepted any `/tmp/`
+            // on the line, so `chmod +x /tmp/build/run.sh` was reported as "a
+            // package or executable is installed directly from a URL". GOLD-v5
+            // measured this rule at 16.7% precision. Require the fetch and the
+            // chmod to share a line; a download-then-execute across lines is
+            // `DL_CHAIN_FETCH_EXECUTE`'s job.
+            r"(?i)(?:\b(?:curl|wget)\b[^\n]{0,200}\bchmod\s+\+x\b|\bchmod\s+\+x\b[^\n]{0,200}\b(?:curl|wget)\b)",
         ],
         message: "A package or executable is installed directly from a URL, bypassing the registry",
         capability: Some("package_install"),
@@ -1002,8 +1010,14 @@ pub fn rule_count() -> usize {
 /// or host named only in a comment is not an observed capability. rev 22:
 /// `NET_DOMAIN_LITERAL` needs host position, not just URL context, so a URL path
 /// segment (`http://host/install.sh`) is not a host; a version-shaped token
-/// (`Chrome/120.0.0.0`) is not a filesystem read.
-pub const SCAN_LOGIC_REVISION: u32 = 22;
+/// (`Chrome/120.0.0.0`) is not a filesystem read. rev 23:
+/// `DL_REMOTE_INSTALL` needs a fetch on the same line as `chmod +x`, so a
+/// `chmod +x /tmp/…` on a file the skill built itself is not a remote install.
+/// rev 24: capability derivation does not read a filename as a host
+/// (`/tmp/build/run.sh`), and a shebang is not a filesystem read, so a
+/// skill with no network or filesystem access is not a declared-vs-observed
+/// violation.
+pub const SCAN_LOGIC_REVISION: u32 = 24;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

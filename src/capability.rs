@@ -42,6 +42,36 @@ fn bare_host_re() -> &'static Regex {
     })
 }
 
+/// TLDs that collide with file extensions and English words.
+///
+/// A bare `word.tld` with one of these is only a host in *network context*,
+/// mirroring `NET_DOMAIN_LITERAL`. Without this, a script the skill names
+/// (`/tmp/build-output/run.sh`) was recorded as an observed outbound host, so a
+/// skill with no network code became a declared-vs-observed `network` violation
+/// — a false accusation that blocks (rev 24). `com`/`net`/`org` stay out of the
+/// list because they are not file extensions.
+const AMBIGUOUS_TLDS: &[&str] = &[
+    ".sh", ".app", ".info", ".dev", ".ai", ".io", ".co", ".me", ".so", ".cc", ".to", ".tv", ".gg",
+    ".live", ".site", ".online", ".cloud",
+];
+
+/// Commands that mean the text is about the network, so a bare ambiguous-TLD
+/// host near one of them is a real endpoint rather than a filename.
+const NETWORK_COMMANDS: &[&str] = &[
+    "curl", "wget", "ssh", "scp", "sftp", "rsync", "nc", "ncat", "netcat", "telnet", "ping",
+    "nslookup", "dig", "ftp", "host", "getent",
+];
+
+fn has_network_context(text: &str) -> bool {
+    let t = text.to_ascii_lowercase();
+    t.contains("://")
+        || t.contains("www.")
+        || t.contains('@')
+        || invoked_commands(text)
+            .iter()
+            .any(|c| NETWORK_COMMANDS.contains(&c.as_str()))
+}
+
 /// Commands that mean "this runs something" or "this reaches the network".
 pub const SHELL_BINARIES: &[&str] = &[
     "bash",
@@ -168,9 +198,17 @@ pub fn outbound_hosts(text: &str) -> BTreeSet<String> {
     // Bare hostnames (curl example.com, --host example.com).
     for m in domain_re().find_iter(text) {
         let h = m.as_str().to_ascii_lowercase();
-        if !out.contains(&h) {
-            out.insert(h);
+        if out.contains(&h) {
+            continue;
         }
+        // A path component is not a host: `/tmp/build/run.sh`, `dir/foo.io`.
+        let before = &text[..m.start()];
+        let in_path = before.ends_with('/') || before.ends_with('\\');
+        let ambiguous = AMBIGUOUS_TLDS.iter().any(|t| h.ends_with(t));
+        if in_path || (ambiguous && !has_network_context(text)) {
+            continue;
+        }
+        out.insert(h);
     }
     out
 }
@@ -374,6 +412,13 @@ impl Accumulator {
     }
 
     fn collect_paths(&mut self, text: &str) -> Vec<String> {
+        // A shebang names the interpreter that runs the file, not a path the
+        // skill reads. `#!/bin/sh` made a clean build script look like it read
+        // `/bin/sh`, which the declared-vs-observed diff then treats as
+        // undeclared filesystem access (rev 24).
+        if text.starts_with("#!") {
+            return Vec::new();
+        }
         let mut reads = BTreeSet::new();
         let mut writes = BTreeSet::new();
         let mut notes = Vec::new();
@@ -881,6 +926,19 @@ mod tests {
         assert!(v.is_empty(), "{v:?}");
         let v2 = bare_hosts("nslookup b.example.com");
         assert_eq!(v2, vec!["b.example.com".to_owned()]);
+    }
+
+    #[test]
+    fn a_filename_is_not_a_host() {
+        // `/tmp/build-output/run.sh` is a path component, and `.sh` is a
+        // file extension before it is a TLD. Neither is an outbound host.
+        assert!(outbound_hosts("chmod +x /tmp/build-output/run.sh").is_empty());
+        assert!(outbound_hosts("cat dir/foo.io").is_empty());
+        // Ambiguous TLDs still count with network context.
+        assert!(outbound_hosts("curl example.sh").contains("example.sh"));
+        assert!(outbound_hosts("nc example.co 443").contains("example.co"));
+        // A non-ambiguous TLD is a host with or without a command.
+        assert!(outbound_hosts("example.com").contains("example.com"));
     }
 
     #[test]
