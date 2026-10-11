@@ -1091,54 +1091,6 @@ pub fn is_case_sensitive(spec: &RuleSpec) -> bool {
     CASE_SENSITIVE.contains(&spec.id)
 }
 
-/// Hostnames that are unremarkable enough not to be worth reporting.
-pub fn is_well_known_host(host: &str) -> bool {
-    const KNOWN: &[&str] = &[
-        "github.com",
-        "raw.githubusercontent.com",
-        "gist.github.com",
-        "codeload.github.com",
-        "gitlab.com",
-        "bitbucket.org",
-        "docs.github.com",
-        "developer.mozilla.org",
-        "www.npmjs.com",
-        "npmjs.com",
-        "registry.npmjs.org",
-        "pypi.org",
-        "files.pythonhosted.org",
-        "crates.io",
-        "static.crates.io",
-        "golang.org",
-        "pkg.go.dev",
-        "example.com",
-        "example.org",
-        "example.net",
-        "localhost",
-        "127.0.0.1",
-        "0.0.0.0",
-        "schema.org",
-        "json-schema.org",
-        "w3.org",
-        "opensource.org",
-        "spdx.org",
-        "www.apache.org",
-        "opensource.apple.com",
-    ];
-    KNOWN.contains(&host)
-}
-
-/// Hosts that are neither well known nor an RFC-reserved example domain.
-pub fn unexpected_hosts(hosts: &[String]) -> Vec<String> {
-    hosts
-        .iter()
-        .filter(|h| {
-            !is_well_known_host(h) && !h.ends_with(".example.com") && !h.ends_with(".example.org")
-        })
-        .cloned()
-        .collect()
-}
-
 pub fn is_code_only(spec: &RuleSpec) -> bool {
     !spec.kinds.is_empty() && spec.kinds.iter().all(|k| k.is_executable())
 }
@@ -1341,16 +1293,6 @@ mod tests {
         assert!(!m("os.environ['HOME']"));
         assert!(!m("os.environ.get('HOME')"));
         assert!(!m("process.env.HOME"));
-    }
-
-    #[test]
-    fn well_known_hosts_are_quiet() {
-        assert!(is_well_known_host("github.com"));
-        assert!(!is_well_known_host("sketchy.co"));
-        assert_eq!(
-            unexpected_hosts(&["github.com".into(), "evil.co".into()]),
-            vec!["evil.co".to_owned()]
-        );
     }
 
     #[test]

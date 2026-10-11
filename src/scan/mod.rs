@@ -1878,6 +1878,26 @@ mod tests {
         assert!(h.contains("PERSIST_AGENT_CONFIG"), "{h:?}");
     }
 
+    /// `NET_DOMAIN_LITERAL` is quiet on the hosts in `SAFE_HOSTS`. This scans
+    /// the list the rule actually consults; a green test over a different,
+    /// unused list proved nothing.
+    #[test]
+    fn the_rule_is_quiet_on_the_hosts_it_calls_safe() {
+        let d = tmp("safe-hosts");
+        fs::write(d.join("SKILL.md"), "---\nname: x\ndescription: f\n---\n").unwrap_or_default();
+        fs::create_dir_all(d.join("scripts")).unwrap_or_default();
+        let body: String = SAFE_HOSTS
+            .iter()
+            .map(|h| format!("curl https://{h}/x\n"))
+            .collect();
+        fs::write(d.join("scripts/a.sh"), body).unwrap_or_default();
+        let h = hits(&scan_skill(&d));
+        assert!(
+            !h.contains("NET_DOMAIN_LITERAL"),
+            "a safe host fired: {h:?}"
+        );
+    }
+
     /// GOLD-v2: `OBFUSC_HOMOGLYPH` fired on Russian prose and on a URL that
     /// contained a Greek beta. Only a lookalike *inside a word* is an attack.
     #[test]
