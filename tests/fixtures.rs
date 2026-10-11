@@ -335,6 +335,36 @@ fn a_comment_is_not_a_capability() {
     );
 }
 
+#[test]
+fn a_multi_line_description_is_read_as_its_lines() {
+    // The frontmatter reader took a block scalar's `|` indicator as the value,
+    // so `description` was the one-character string "|". serde_yaml accepted
+    // the document, so nothing raised PARSE_FAILED: `admits()` simply compared
+    // the credential vocabulary against a pipe and never matched. A skill that
+    // declared its credential access in a multi-line description - the
+    // documented way to write one - was reported as not mentioning credentials.
+    let out = scan_fixture("suspicious", "block-scalar-description");
+    let desc = out.description.clone().unwrap_or_default();
+    assert!(
+        desc.contains("reads the API token"),
+        "the block scalar is the value, not the indicator: {desc:?}"
+    );
+    assert!(
+        out.findings.iter().any(|f| f.rule.0 == "SECRET_PATH_READ"),
+        "the read is still reported: {:#?}",
+        out.findings
+    );
+    let mismatch: Vec<&skillguard::models::Finding> = out
+        .findings
+        .iter()
+        .filter(|f| f.rule.0 == "PI_DESCRIPTION_MISMATCH")
+        .collect();
+    assert!(
+        mismatch.is_empty(),
+        "the description names the credential access, so the mismatch rule must not fire: {mismatch:#?}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // malicious: must trip the declared rules
 // ---------------------------------------------------------------------------

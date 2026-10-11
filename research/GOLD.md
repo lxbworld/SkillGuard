@@ -495,17 +495,19 @@ Every fix below came from a labelled false positive, not from reading code. The
 | 31 | `SHELL_DESTRUCTIVE` excludes `--force-with-lease` | the safe force-push that aborts on a moved remote is not a history rewrite |
 | 32 | `PI_DESCRIPTION_MISMATCH` names both surviving branches in its message | the catalogue no longer describes only the credential branch while the rule also fires on high-severity findings |
 | 33 | the `MISMATCH_*` ids are in the catalogue | `rules`, `docs/RULES.md` and the SARIF driver declare the declared-vs-observed findings instead of only the table rules |
+| 34 | the frontmatter reader takes a block scalar's *lines*, not its `\|` indicator; the renderers clean the skill name and fence the description | a multi-line description is no longer the one-character string `\|`, which had disabled the description-vs-behaviour check for every skill that wrote one; and no skill-authored text can forge or repaint a report |
 
-Revisions 20 to 33 were reproduced from the false-positive notes above and
+Revisions 20 to 34 were reproduced from the false-positive notes above and
 carry fixtures (`safe/version-strings`, `suspicious/raw-ip-endpoint`,
 `safe/comment-mentions`, `safe/tmp-chmod`, `safe/own-settings`,
 `safe/credential-names`, `safe/endpoint-context`, `safe/env-template`,
-`safe/keyed-env-read`, `safe/force-with-lease`), but they are **not re-measured**:
+`safe/keyed-env-read`, `safe/force-with-lease`,
+`suspicious/block-scalar-description`), but they are **not re-measured**:
 the corpus mirror is not in the repository, so the precision column still
 reflects rev 8. They await a GOLD-v6 round, and each should be scored there
 before any figure is quoted.
 
-### Two structural bugs found on the way
+### Structural bugs found on the way
 
 1. **The precision table was frozen.** `corpus report --gold` scored the labels
    alone and never checked whether those findings still existed, so a rule could
@@ -514,6 +516,25 @@ before any figure is quoted.
 2. **`corpus index` was ~5 `git` subprocesses per skill.** On a 5,442-skill
    mirror that is ~27,000 spawns and ~13 minutes, all discarded. The enclosing
    repository is now resolved once; index is **24 seconds**.
+3. **Every `description: |` was read as the literal string `|`.** serde_yaml
+   parses the document fine, so the fallback flattener ran and took the
+   *indicator* as the value. Nothing failed and nothing warned: `admits()` just
+   compared the credential vocabulary against a pipe, so `PI_DESCRIPTION_MISMATCH`
+   could not fire its credential branch on any skill that wrote its description
+   as a block — which is the documented way to write a multi-line one. It was
+   found by chasing a report-integrity bug: that multi-line description is
+   `PI_DESCRIPTION_MISMATCH`'s evidence, and the `|`-indicator bug is what made
+   the evidence multi-line in the first place.
+4. **The report renderers trusted the skill.** The text renderer cleaned evidence
+   but printed the skill *name* (the directory name, which on POSIX may hold an
+   ESC or a bidi override) and the description raw, so a skill could repaint the
+   terminal and break invariant S5 — reproduced with `--no-color` on a directory
+   named `gnp\u{202E}exe`. The Markdown renderer, which exists for PR comments,
+   cleaned nothing: a newline in evidence ended the table row, a backtick
+   (`` eval `curl x` ``) closed the code span, and the description was rendered as
+   the skill's own Markdown, so a `description: |` block containing a summary
+   table and the line `**SkillGuard verdict: PASS**` printed both under the BLOCK
+   banner.
 
 ---
 

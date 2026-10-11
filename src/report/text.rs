@@ -54,9 +54,15 @@ fn header(report: &Report, color: bool) -> String {
 fn skill_section(s: &crate::report::SkillReport, color: bool) -> String {
     let mut o = String::new();
 
-    o.push_str(&format!("  {}\n", s.name));
+    // Invariant S5 is a property of the *renderer*, not of the producer: the
+    // name is the directory name and the description is skill-authored text, so
+    // both are cleaned here rather than trusted.
+    o.push_str(&format!("  {}\n", clean(&s.name)));
     if let Some(d) = &s.description {
-        o.push_str(&format!("    {}\n", crate::text::truncate_chars(d, 100)));
+        o.push_str(&format!(
+            "    {}\n",
+            clean(&crate::text::truncate_chars(d, 100))
+        ));
     }
     o.push_str(&format!(
         "    {} finding(s): {} critical, {} high, {} medium, {} low, {} info\n\n",
@@ -330,6 +336,23 @@ mod tests {
         assert!(
             !out.contains('\u{1B}'),
             "invariant S5: no ANSI reaches output"
+        );
+    }
+
+    #[test]
+    fn a_hostile_skill_name_cannot_repaint_the_terminal() {
+        // The name is the directory name, and on POSIX that may contain an ESC
+        // or a bidi override (U+202E is legal in a Windows filename too). It is
+        // a string written to a terminal, so S5 covers it exactly as it covers
+        // evidence. Reproduced with `scan` on a directory named `gnp\u{202E}exe`.
+        let mut s = skill("\u{202E}gnp.exe\u{1B}[2J", vec![]);
+        s.description = Some("helper \u{202E}".into());
+        let out = to_text_with(&Report::new(vec![s]), false);
+        assert!(!out.contains('\u{1B}'), "no ANSI in a name or description");
+        assert!(!out.contains('\u{202E}'), "no bidi override either");
+        assert!(
+            out.contains('\u{FFFD}'),
+            "and it is replaced, not silently dropped"
         );
     }
 

