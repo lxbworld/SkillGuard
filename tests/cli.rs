@@ -197,6 +197,63 @@ fn a_skill_inherits_its_repository_license() {
 }
 
 // ---------------------------------------------------------------------------
+// import: a foreign digest is retained as legacy, never as our content digest
+// ---------------------------------------------------------------------------
+
+#[test]
+fn import_records_a_foreign_digest_as_legacy_only() {
+    let d = tmpdir("import-legacy");
+    write(
+        &d,
+        "demo-skill/SKILL.md",
+        "---\nname: demo-skill\ndescription: d\nlicense: MIT\n---\n\nbody\n",
+    );
+    let foreign = "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67";
+    write(
+        &d,
+        "skills-lock.json",
+        &format!(
+            "{{\"version\":1,\"skills\":{{\"demo-skill\":{{\"source\":\"anthropics/skills\",\"computedHash\":\"{foreign}\"}}}}}}"
+        ),
+    );
+    let lock = d.join("SKILLGUARD.lock");
+
+    let out = run(&[
+        "import",
+        d.join("skills-lock.json").to_str().unwrap(),
+        "--out",
+        lock.to_str().unwrap(),
+    ]);
+    assert!(out.status.success(), "stderr={}", stderr(&out));
+
+    // The foreign hash goes to `legacy_digest`. `content_digest` is the
+    // `sgdir-v1` digest and we have not computed one, so it must stay empty
+    // rather than borrow a hash from a tool whose algorithm we do not know.
+    let text = std::fs::read_to_string(&lock).expect("lockfile written");
+    let v: serde_json::Value = serde_json::from_str(&text).expect("valid json");
+    let entry = &v["skills"]["demo-skill"];
+    assert_eq!(entry["legacy_digest"], foreign, "{text}");
+    assert_eq!(
+        entry["content_digest"], "",
+        "a foreign hash must not occupy the sgdir-v1 field: {text}"
+    );
+
+    // `verify` must say *why* it cannot confirm the content, not compare a
+    // foreign hash against ours.
+    let out = run(&[
+        "verify",
+        d.join("demo-skill").to_str().unwrap(),
+        "--lockfile",
+        lock.to_str().unwrap(),
+        "--no-color",
+    ]);
+    assert_eq!(out.status.code(), Some(2), "stdout={}", stdout(&out));
+    let text = stdout(&out);
+    assert!(text.contains("no content digest recorded"), "{text}");
+    assert!(!text.contains("expected 063a0e"), "{text}");
+}
+
+// ---------------------------------------------------------------------------
 // inspect: capabilities only, and machine-readable when asked
 // ---------------------------------------------------------------------------
 

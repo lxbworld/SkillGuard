@@ -130,7 +130,7 @@ precision 测试集**（至少 30 个真实 skill 手工标注），达不到 0.
 ### 验收标准
 1. 同一目录两次计算 digest 一致；改 1 字节必变（跨 3 个平台 CI 验证）。
 2. `verify` 能检出：commit 不匹配、digest 不匹配、lock 被手改。
-3. `import skills-lock.json` 保留 `computedHash` 为 `legacy_digest`，且可 `verify` 通过。
+3. `import skills-lock.json` 保留 `computedHash` 为 `legacy_digest`。导入条目**没有** `sgdir-v1` 摘要，所以 `verify` 明确报告「无内容摘要，需重跑 `lock`」，而不是拿外来哈希与本工具摘要比较（`legacy_digest` 的算法未知，比较只会产生假的不匹配）。
 4. tag / branch 形式的版本输入被拒绝并给出提示。
 
 ---

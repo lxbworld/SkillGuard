@@ -815,10 +815,12 @@ fn run_import(
                 source: Some(e.source.clone()),
                 repository: None,
                 commit: e.commit.clone(),
-                content_digest: digest.clone(),
+                content_digest: String::new(),
                 // Not recorded: a foreign lockfile has no per-file inventory.
                 files: vec![],
-                // Retained so the original tool's verification still works.
+                // The foreign digest lives here, and only here: `content_digest`
+                // is the `sgdir-v1` digest, and writing a hash from an unknown
+                // algorithm into it made `verify` compare two different things.
                 legacy_digest: e.digest.clone(),
                 version: e.version.clone(),
                 license: None,

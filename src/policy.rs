@@ -617,20 +617,39 @@ impl VerifyReport {
         let mut checks: Vec<VerifyCheck> = Vec::new();
 
         let (actual_digest, files) = crate::hash::digest_dir(root)?;
-        let digest_ok = actual_digest.as_str() == entry.content_digest;
-        checks.push(VerifyCheck {
-            name: "content_digest".to_owned(),
-            ok: digest_ok,
-            detail: if digest_ok {
-                format!("matches {}", entry.content_digest)
-            } else {
-                format!(
-                    "expected {}, found {}",
-                    entry.content_digest,
-                    actual_digest.as_str()
-                )
-            },
-        });
+        // An imported entry has no `sgdir-v1` digest: the foreign digest is kept
+        // as `legacy_digest` and proves nothing here. Report that plainly rather
+        // than comparing against a hash from an algorithm we do not know.
+        let digest_ok = if entry.content_digest.is_empty() {
+            checks.push(VerifyCheck {
+                name: "content_digest".to_owned(),
+                ok: false,
+                detail: match &entry.legacy_digest {
+                    Some(d) => format!(
+                        "no content digest recorded: legacy digest {d} comes from a foreign \
+                         lockfile and is not reproducible here; run `skillguard lock`"
+                    ),
+                    None => "no content digest recorded; run `skillguard lock`".to_owned(),
+                },
+            });
+            false
+        } else {
+            let ok = actual_digest.as_str() == entry.content_digest;
+            checks.push(VerifyCheck {
+                name: "content_digest".to_owned(),
+                ok,
+                detail: if ok {
+                    format!("matches {}", entry.content_digest)
+                } else {
+                    format!(
+                        "expected {}, found {}",
+                        entry.content_digest,
+                        actual_digest.as_str()
+                    )
+                },
+            });
+            ok
+        };
 
         if !digest_ok {
             checks.push(VerifyCheck {
