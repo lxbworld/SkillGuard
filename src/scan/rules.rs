@@ -1018,8 +1018,10 @@ pub fn rule_count() -> usize {
 /// skill with no network or filesystem access is not a declared-vs-observed
 /// violation. rev 25: `PERSIST_AGENT_CONFIG` needs the path to be agent
 /// configuration, so a skill's own project-local `settings.json` is not a write
-/// to agent config.
-pub const SCAN_LOGIC_REVISION: u32 = 25;
+/// to agent config. rev 26: `SECRET_GENERIC_ASSIGN` needs the literal to look
+/// like a secret *value*, so an environment-variable name (`"OPENAI_API_KEY"`)
+/// or a placeholder (`"your-token-goes-here"`) is not a hardcoded credential.
+pub const SCAN_LOGIC_REVISION: u32 = 26;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

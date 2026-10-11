@@ -486,13 +486,14 @@ Every fix below came from a labelled false positive, not from reading code. The
 | 23 | `DL_REMOTE_INSTALL` needs a fetch on the same line as `chmod +x` | a build script that chmods a `/tmp` file it wrote itself is no longer "installed directly from a URL" |
 | 24 | capability derivation does not read a filename as a host, and a shebang is not a filesystem read | `/tmp/build/run.sh` is not an outbound host and `#!/bin/sh` is not a read, so a clean build script is not a declared-vs-observed violation |
 | 25 | `PERSIST_AGENT_CONFIG` needs the path to name an agent directory | a skill's own project-local `settings.json` is not agent configuration |
+| 26 | `SECRET_GENERIC_ASSIGN` needs the literal to look like a secret *value* | an environment-variable name (`"OPENAI_API_KEY"`) and a placeholder (`"your-token-goes-here"`) are not hardcoded credentials |
 
-Revisions 20 to 25 were reproduced from the false-positive notes above and
+Revisions 20 to 26 were reproduced from the false-positive notes above and
 carry fixtures (`safe/version-strings`, `suspicious/raw-ip-endpoint`,
-`safe/comment-mentions`, `safe/tmp-chmod`, `safe/own-settings`), but they are
-**not re-measured**: the corpus mirror is not in the repository, so the
-precision column still reflects rev 8. They await a GOLD-v6 round, and each
-should be scored there before any figure is quoted.
+`safe/comment-mentions`, `safe/tmp-chmod`, `safe/own-settings`,
+`safe/credential-names`), but they are **not re-measured**: the corpus mirror is
+not in the repository, so the precision column still reflects rev 8. They await
+a GOLD-v6 round, and each should be scored there before any figure is quoted.
 
 ### Two structural bugs found on the way
 

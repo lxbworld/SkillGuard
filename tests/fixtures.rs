@@ -189,6 +189,29 @@ fn a_project_settings_file_is_not_agent_config() {
 }
 
 #[test]
+fn a_credential_name_is_not_a_credential() {
+    // `SECRET_GENERIC_ASSIGN` claims "a credential-shaped value is assigned to a
+    // literal". Naming the environment variable, the field or a placeholder is
+    // not assigning a credential; GOLD-v5 measured the rule at 12.5% precision.
+    let out = scan_fixture("safe", "credential-names");
+    assert!(
+        !rules(&out).contains("SECRET_GENERIC_ASSIGN"),
+        "a name is not a value: {:#?}",
+        out.findings
+    );
+    let noisy: Vec<String> = out
+        .findings
+        .iter()
+        .filter(|f| f.severity >= Severity::Medium)
+        .map(|f| f.rule.as_str().to_owned())
+        .collect();
+    assert!(
+        noisy.is_empty(),
+        "credential-names should be quiet: {noisy:?}"
+    );
+}
+
+#[test]
 fn a_comment_is_not_a_capability() {
     // `research/GOLD.md` records a documentation path mentioned in a `//`
     // comment being counted as `fs read`. A comment describes behaviour; it does

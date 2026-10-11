@@ -785,6 +785,11 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         // where it is documentation. A `config.sh` that assigns it is a real
         // hardcoded credential, and the fixture that says so was failing.
         "SECRET_AWS_ACCESS_KEY" => m.contains("akiaiosfodnn7example") && doc_in_docs,
+        // A credential-shaped *value* is the claim, so the literal has to look
+        // like a value and not like the *name* of one. GOLD-v5 measured this
+        // rule at 12.5% precision; the names and placeholders below are the
+        // ordinary way to reference a credential without shipping one.
+        "SECRET_GENERIC_ASSIGN" => !looks_like_secret_value(assigned_literal(&m)),
         // A docstring that documents how to run the skill is not the skill
         // running it. Widening SHELL_EXEC to catch `python3 foo.py` also caught
         // `Usage: python add_slide.py <unpacked_dir> <source>` in every
@@ -911,6 +916,76 @@ fn looks_like_test(line: &str) -> bool {
     ]
     .iter()
     .any(|t| line.contains(t))
+}
+
+/// The quoted literal on the right of an assignment, e.g. `"OPENAI_API_KEY"`
+/// from `key_env = "OPENAI_API_KEY"`.
+fn assigned_literal(matched: &str) -> &str {
+    let rest = matched
+        .find(['=', ':'])
+        .map(|i| &matched[i + 1..])
+        .unwrap_or(matched);
+    rest.trim().trim_matches(|c| c == '"' || c == '\'')
+}
+
+/// Does an assigned literal look like a secret *value*, or like the *name* of
+/// one?
+///
+/// The rule claims "a credential-shaped value is assigned to a literal", so
+/// the literal has to be shaped like a value. GOLD-v5 measured the rule at
+/// 12.5% precision because these are not, and each is an ordinary way to name a
+/// credential without shipping one:
+///
+///   DEFAULT_API_KEY_ENV = "OPENAI_API_KEY"     an environment-variable name
+///   SECRET_NAME = "MY_SERVICE_SECRET"         a constant name
+///   PASSWORD_FIELD = "password"               the field's own name
+///   EXAMPLE_TOKEN = "your-token-goes-here"    a documented placeholder
+fn looks_like_secret_value(value: &str) -> bool {
+    let flat: String = value
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .collect::<String>()
+        .to_ascii_lowercase();
+    // `..._API_KEY`, `..._SECRET`, `..._TOKEN`: a name *for* a credential.
+    const NAMES: &[&str] = &[
+        "apikey",
+        "apisecret",
+        "secret",
+        "token",
+        "passwd",
+        "password",
+        "credential",
+        "credentials",
+        "accesskey",
+        "authkey",
+        "privatekey",
+    ];
+    if NAMES.iter().any(|w| flat.ends_with(w)) {
+        return false;
+    }
+    // A placeholder the operator is expected to replace. `example` is
+    // deliberately not a marker: `tests/fixtures/malicious/hardcoded-keys`
+    // assigns the canonical AWS example key in a `config.sh`, and
+    // `research/GOLD.md` records that only *documentation* may skip it.
+    const PLACEHOLDERS: &[&str] = &[
+        "placeholder",
+        "changeme",
+        "change-me",
+        "change_me",
+        "your-",
+        "your_",
+        "xxxx",
+        "dummy",
+        "redacted",
+        "replace-me",
+        "replace_me",
+        "not-a-real",
+        "notreal",
+        "goes-here",
+        "goes_here",
+    ];
+    let lower = value.to_ascii_lowercase();
+    !PLACEHOLDERS.iter().any(|p| lower.contains(p))
 }
 
 /// Does the match look like an encoded payload rather than a path or an
