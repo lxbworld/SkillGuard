@@ -169,14 +169,15 @@ pub fn scan_walked(name: &str, walked: Walked) -> ScanOutcome {
             declared_permissions_raw = crate::parser::declared_permissions_raw(&frontmatter_map);
             deps.extend(crate::parser::frontmatter_dependencies(&frontmatter_map));
 
-            let fm_text = split
-                .frontmatter
-                .clone()
-                .map(|(y, _)| y)
-                .unwrap_or_default();
-            let combined = format!("{}\n{}", fm_text, split.body);
+            // Scan the file's own text, so a reported line is the line a reader
+            // will find. `frontmatter + "\n" + body` was used here and drifts:
+            // it drops the two `---` fences and rejoins the parts, so a match
+            // after the frontmatter was reported one line early, and a match in
+            // a file with no frontmatter one line late. Evidence that names the
+            // wrong line is worse than no evidence, and a finding is supposed to
+            // carry the file, the line and the original text.
             skill_md = Some(crate::text::normalize_file(
-                &combined,
+                textsrc,
                 walk::limits::MAX_FILE_BYTES as usize,
             ));
             continue;
@@ -1827,6 +1828,53 @@ mod tests {
         assert!(h.contains("SECRET_AWS_ACCESS_KEY"), "{h:?}");
         assert!(h.contains("SECRET_GITHUB_TOKEN"), "{h:?}");
         assert!(h.contains("NET_HTTP_CLIENT"), "{h:?}");
+    }
+
+    /// A finding's line must be the line a reader will find in the file.
+    ///
+    /// `SKILL.md` was scanned as `frontmatter + "\n" + body`, which drops the two
+    /// `---` fences and rejoins the parts. Measured on a controlled pair: an
+    /// image on line 7 of a file with frontmatter was reported on line 6, and one
+    /// on line 2 of a file without was reported on line 3.
+    #[test]
+    fn a_reported_line_is_the_line_in_the_file() {
+        let d = tmp("line-numbers");
+        fs::write(
+            d.join("SKILL.md"),
+            "---\nname: x\ndescription: d\n---\n\nl6\nl7 ![a](https://t2-host.com/p.gif)\nl8\n",
+        )
+        .unwrap_or_default();
+        let out = scan_skill(&d);
+        let f = out
+            .findings
+            .iter()
+            .find(|f| f.rule.as_str() == "OBFUSC_TRACKING_PIXEL")
+            .expect("the image must be reported");
+        assert_eq!(
+            f.primary_line(),
+            7,
+            "the image is on line 7: {:#?}",
+            out.findings
+        );
+
+        let e = tmp("line-numbers-nofm");
+        fs::write(
+            e.join("SKILL.md"),
+            "line1\nline2 ![a](https://t1-host.com/p.gif)\n",
+        )
+        .unwrap_or_default();
+        let out = scan_skill(&e);
+        let f = out
+            .findings
+            .iter()
+            .find(|f| f.rule.as_str() == "OBFUSC_TRACKING_PIXEL")
+            .expect("the image must be reported");
+        assert_eq!(
+            f.primary_line(),
+            2,
+            "the image is on line 2: {:#?}",
+            out.findings
+        );
     }
 
     /// A PEM private key is a *block*: a BEGIN marker, a body, and an END marker.
