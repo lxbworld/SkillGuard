@@ -728,3 +728,76 @@ fn a_mirrored_skill_does_not_inherit_the_enclosing_licence() {
 
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// A lockfile pins content to a commit. `verify` must not certify a pair that
+/// the commit does not contain — issue #12.
+///
+/// The failure mode of a verification tool is not a false alarm, it is a false
+/// all-clear: `verify` printed `integrity verified` for a lockfile written from
+/// a dirty worktree, where the recorded commit is an *ancestor* of the content.
+#[test]
+fn a_lock_from_a_dirty_worktree_fails_verify() {
+    let d = tmpdir("dirty-lock");
+    let ok = |args: &[&str]| {
+        Command::new("git")
+            .current_dir(&d)
+            .args(["-c", "user.email=t@e.com", "-c", "user.name=t"])
+            .args(args)
+            .status()
+            .expect("git")
+            .success()
+    };
+    assert!(Command::new("git")
+        .args(["init", "-q"])
+        .arg(&d)
+        .status()
+        .expect("git init")
+        .success());
+    write(
+        &d,
+        "skill/SKILL.md",
+        "---\nname: d\ndescription: d\nlicense: MIT\n---\n\nbody\n",
+    );
+    write(&d, "skill/scripts/x.sh", "echo original\n");
+    assert!(ok(&["add", "-A"]));
+    assert!(ok(&["commit", "-qm", "init"]));
+
+    let skill = d.join("skill");
+    let p = skill.to_str().unwrap().to_owned();
+    let clean = run(&["lock", &p]);
+    assert_eq!(clean.status.code(), Some(0), "{}", stdout(&clean));
+    // Locking its own lockfile must not make the tree look dirty, or every
+    // second `lock` would refuse itself.
+    assert!(
+        !stdout(&clean).contains("uncommitted"),
+        "a clean lock must not claim uncommitted changes: {}",
+        stdout(&clean)
+    );
+
+    write(&d, "skill/scripts/x.sh", "echo MODIFIED BUT UNCOMMITTED\n");
+    let dirty = run(&["lock", &p]);
+    assert_eq!(dirty.status.code(), Some(0), "{}", stdout(&dirty));
+    assert!(
+        stdout(&dirty).contains("uncommitted"),
+        "lock must say that the commit does not hold the content: {}",
+        stdout(&dirty)
+    );
+
+    let verify = run(&["verify", &p]);
+    assert_eq!(
+        verify.status.code(),
+        Some(2),
+        "verify must fail on the lockfile it just refused to certify: {}",
+        stdout(&verify)
+    );
+    assert!(
+        stdout(&verify).contains("provenance"),
+        "the failure must name provenance: {}",
+        stdout(&verify)
+    );
+    assert!(
+        stdout(&verify).contains("commit the changes"),
+        "the failure must say what to do: {}",
+        stdout(&verify)
+    );
+}

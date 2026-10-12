@@ -364,6 +364,7 @@ skills:
     source: github:user/financial-analysis
     commit: <40-hex>
     content_digest: "sha256:..."
+    uncommitted: false         # 写入锁文件时工作区是脏的，则 `commit` 不含该内容
     legacy_digest: null
     version: 1.2.0
     license: MIT

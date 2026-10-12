@@ -614,6 +614,7 @@ fn run_lock(paths: &[PathBuf], out: Option<&std::path::Path>, cli: &Cli) -> Resu
                 source: collected.provenance.source.clone(),
                 repository: collected.provenance.repository.clone(),
                 commit: collected.provenance.commit.clone(),
+                uncommitted: collected.provenance.uncommitted,
                 content_digest: collected.digest.as_str().to_owned(),
                 files: collected.files.clone(),
                 legacy_digest: None,
@@ -637,17 +638,11 @@ fn run_lock(paths: &[PathBuf], out: Option<&std::path::Path>, cli: &Cli) -> Resu
             collected.digest,
             clean_path(&lock_path)
         ));
-        if collected.provenance.incomplete {
-            o.push_str(&format!(
-                "      note: {}\n",
-                clean(
-                    collected
-                        .provenance
-                        .note
-                        .as_deref()
-                        .unwrap_or("provenance incomplete")
-                )
-            ));
+        // The note is present exactly when something could not be pinned, and
+        // `provenance_note` names which part: a missing remote, a missing
+        // commit, or a dirty worktree whose commit does not hold the content.
+        if let Some(note) = collected.provenance.note.as_deref() {
+            o.push_str(&format!("      note: {}\n", clean(note)));
         }
         if decision.decision.blocks() {
             o.push_str("      BLOCKED by policy: this lock records state, not approval\n");
@@ -747,6 +742,7 @@ fn run_approve(
             source: None,
             repository: None,
             commit: None,
+            uncommitted: collected.provenance.uncommitted,
             content_digest: digest.as_str().to_owned(),
             files: collected.files.clone(),
             legacy_digest: None,
@@ -838,6 +834,9 @@ fn run_import(
                 source: Some(e.source.clone()),
                 repository: None,
                 commit: e.commit.clone(),
+                // A foreign lockfile says nothing about the worktree it was
+                // written from, so there is no claim to carry over.
+                uncommitted: false,
                 content_digest: String::new(),
                 // Not recorded: a foreign lockfile has no per-file inventory.
                 files: vec![],

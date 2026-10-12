@@ -484,6 +484,12 @@ pub struct LockSkill {
     pub repository: Option<String>,
     pub commit: Option<String>,
     pub content_digest: String,
+    /// Uncommitted changes were present under the skill when this lock was
+    /// written, so `commit` is an ancestor of the content rather than its
+    /// origin. Recorded because `verify` cannot check a provenance claim the
+    /// worktree contradicted, and re-deriving it later is impossible.
+    #[serde(default)]
+    pub uncommitted: bool,
     /// Per-file inventory as it stood when the lock was written.
     ///
     /// `content_digest` says *that* something changed; this says *what*. It is
@@ -694,6 +700,22 @@ impl VerifyReport {
                 detail: "lockfile does not pin a commit: the install is not reproducible"
                     .to_owned(),
             }),
+        }
+
+        // A lock written from a dirty worktree pins a commit that does not
+        // contain this content, so the provenance can never be verified - not
+        // here and not later. `lock` records the fact; this is where it stops
+        // being a footnote.
+        if entry.uncommitted {
+            checks.push(VerifyCheck {
+                name: "provenance".to_owned(),
+                ok: false,
+                detail: format!(
+                    "locked with uncommitted changes under the skill, so {} does not contain this \
+                     content; commit the changes and re-run `skillguard lock`",
+                    entry.commit.as_deref().unwrap_or("the recorded commit")
+                ),
+            });
         }
 
         if let Some(want) = &entry.repository {
@@ -1184,6 +1206,7 @@ mod tests {
                 repository: None,
                 commit: None,
                 content_digest: "sha256:aaa".to_owned(),
+                uncommitted: false,
                 files: vec![],
                 legacy_digest: None,
                 version: None,
@@ -1230,6 +1253,7 @@ mod tests {
                 repository: Some("o/r".to_owned()),
                 commit: Some("a".repeat(40)),
                 content_digest: "sha256:abc".to_owned(),
+                uncommitted: false,
                 files: vec![],
                 legacy_digest: None,
                 version: None,
@@ -1333,6 +1357,7 @@ mod tests {
             repository: None,
             commit: None,
             content_digest: "sha256:old".to_owned(),
+            uncommitted: false,
             files,
             legacy_digest: None,
             version: None,
