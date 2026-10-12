@@ -167,7 +167,19 @@ impl NormLine {
         // NOTE: `--` is deliberately absent. It is a comment in SQL and Lua,
         // but far more often a command-line flag (`--extra-index-url`), and the
         // collision silently suppressed real findings.
-        let Some(pos) = self.raw.find(matched) else {
+        //
+        // `matched` is taken from the *lowercased* haystack, so the raw line is
+        // searched in ASCII-lowercase too. Without that, a comment that starts a
+        // sentence fails to match and comment suppression silently does nothing:
+        //
+        //   # load configuration from config.env   -> suppressed
+        //   # Load configuration from config.env   -> reported
+        //
+        // The same comment, one capital letter apart. Nearly every pattern is
+        // `(?i)`, so this was most rules most of the time. `to_ascii_lowercase`
+        // preserves byte length, so `pos` stays a valid index into `self.raw`.
+        let lowered = self.raw.to_ascii_lowercase();
+        let Some(pos) = lowered.find(matched).or_else(|| self.raw.find(matched)) else {
             return false;
         };
         let before = &self.raw[..pos];
@@ -445,6 +457,29 @@ pub fn looks_absolute_or_escaping(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Comment suppression must not depend on capitalisation.
+    ///
+    /// `matched` is taken from the lowercased haystack, so searching the
+    /// original-case line failed whenever the comment began with a capital.
+    /// Measured: the same comment, one letter apart, was suppressed lowercase
+    /// and reported capitalised — and nearly every pattern is `(?i)`, so this
+    /// was most rules most of the time.
+    #[test]
+    fn a_comment_is_found_regardless_of_case() {
+        let nl = |raw: &str| NormLine {
+            line: 1,
+            raw: raw.to_owned(),
+            norm: raw.to_ascii_lowercase(),
+            flags: NormFlags::default(),
+        };
+        let matched = "load config from .env";
+        assert!(nl("# load config from .env").match_in_comment(matched));
+        assert!(nl("# Load config from .env").match_in_comment(matched));
+        assert!(nl("# LOAD CONFIG FROM .ENV").match_in_comment(matched));
+        // A comment marker that is not a comment still is not one.
+        assert!(!nl("X=$(cat load config from .env)").match_in_comment(matched));
+    }
 
     #[test]
     fn mixed_script_detects_a_lookalike_inside_a_word() {
