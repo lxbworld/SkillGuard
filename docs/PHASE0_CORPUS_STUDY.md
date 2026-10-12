@@ -1,92 +1,101 @@
 # Phase 0 — Large-Scale Corpus Security Study
 
-**目的**：在写产品之前，先用一份无法被反驳的数据把项目立住。
-**状态**：协议已预注册；采集管线已实现并通过测试（`skillguard corpus
-index|scan|stats|report|reproduce`，见 `tests/corpus.rs`）。**阻塞在采集许可**
-（issue #5，`research/TERMS-REVIEW.md` / `research/DISCLOSURE.md`），不阻塞在代码。
-**技术前提**：Phase 1 扫描器 + 已实现的语料驱动模式。
+**Purpose**: before writing the product, establish the project on data that cannot be
+argued with.
+**Status**: the protocol is pre-registered; the collection pipeline is implemented and
+tested (`skillguard corpus index|scan|stats|report|reproduce`, see `tests/corpus.rs`).
+**Blocked on collection permission** (issue #5, `research/TERMS-REVIEW.md` /
+`research/DISCLOSURE.md`), not on code.
+**Technical prerequisite**: the Phase 1 scanner plus the implemented corpus driver mode.
 
 ---
 
-## 0. 为什么这一步排在产品之前
+## 0. Why this comes before the product
 
-在这个领域，「首个大规模实证」是唯一能拿到 HN 首页和安全媒体曝光的资产：
+In this field, "the first large-scale empirical measurement" is the only asset that
+gets you the HN front page and security-press coverage:
 
-| 项目 | 知名度来源 | 曝光量级 |
+| Project | Where its recognition came from | Scale of exposure |
 |---|---|---|
-| Snyk | 审计 3,984 个 skill（2026-02） | 独立报告 + Snyk Labs 官网实验页 |
-| Socket.dev | 扫描 skills.sh 60,000+ skill | 博客 + 独立主页 + 6 分钟内发现 Mastra 攻击 |
-| arXiv GitSkills (2608.10906) | 3,797,117 文件 / 282,200 仓库数据集 | 学术引用 |
+| Snyk | Audited 3,984 skills (2026-02) | A standalone report + a Snyk Labs experiment page |
+| Socket.dev | Scanned 60,000+ skills on skills.sh | A blog post + a standalone site + finding the Mastra attack within 6 minutes |
+| arXiv GitSkills (2608.10906) | A dataset of 3,797,117 files / 282,200 repositories | Academic citations |
 
-同时它解决另外三件事：
+It also settles three other things:
 
-1. **规则的真实精度** —— 用 100k 真实语料测 precision/recall，而不是自造 fixture
-2. **数据集归属** —— 语料索引本身成为可被引用的公开资产（GitSkills 已被 alphaXiv 收录）
-3. **分母** —— 「17.4% 的 skill 少声明权限」这类数字需要一个我们自己掌握的分母
+1. **The rules' real precision** — measured against a 100k real corpus rather than
+   self-made fixtures
+2. **Dataset ownership** — the corpus index itself becomes a citable public asset
+   (GitSkills is already indexed by alphaXiv)
+3. **A denominator** — figures like "17.4% of skills under-declare permissions" need a
+   denominator we control ourselves
 
 ---
 
-## 1. 研究问题（可证伪的假设）
+## 1. Research questions (falsifiable hypotheses)
 
-**主问题 R1**：Agent Skill 生态中，存在规模化的、系统性的权限声明缺失与危险行为模式。
+**Main question R1**: the Agent Skill ecosystem exhibits large-scale, systematic
+missing permission declarations and dangerous behaviour patterns.
 
-**子问题**：
+**Sub-questions**:
 
-| ID | 问题 | 对应指标 |
+| ID | Question | Metric |
 |---|---|---|
-| R1.1 | 有多少 skill 包含硬编码凭据？ | `SECRET_*` 命中率 |
-| R1.2 | 有多少 skill 存在 `download → execute` 链？ | `DL_CHAIN_FETCH_EXECUTE` |
-| R1.3 | 有多少 skill 执行 shell / 提权 / 破坏性命令？ | `SHELL_*` |
-| R1.4 | 有多少 skill 访问敏感路径或环境变量？ | `SECRET_PATH_READ` / `SECRET_ENV_DUMP` |
-| R1.5 | 有多少 skill 含确定性可检的提示注入？ | `PI_*` |
-| R1.6 | **多少 skill 声明了 permissions？其中多少 under-declared？** | ⭐ 核心差异化指标 |
-| R1.7 | 哪些混淆手法在野外实际被使用？ | `OBFUSC_*` 分布 |
-| R1.8 | 声明与实际行为的差异率是多少？ | declared vs observed |
-| R1.9 | 依赖声明是否完整/固定版本？ | `DEP_*` |
-| R1.10 | 许可证声明与实际 LICENSE 文件是否一致？ | `LICENSE_*` |
+| R1.1 | How many skills contain hardcoded credentials? | `SECRET_*` hit rate |
+| R1.2 | How many skills contain a `download → execute` chain? | `DL_CHAIN_FETCH_EXECUTE` |
+| R1.3 | How many skills run shell / escalate privileges / run destructive commands? | `SHELL_*` |
+| R1.4 | How many skills access sensitive paths or environment variables? | `SECRET_PATH_READ` / `SECRET_ENV_DUMP` |
+| R1.5 | How many skills contain deterministically detectable prompt injection? | `PI_*` |
+| R1.6 | **How many skills declare permissions? Of those, how many under-declare?** | ⭐ the core differentiating metric |
+| R1.7 | Which obfuscation techniques are actually used in the wild? | the `OBFUSC_*` distribution |
+| R1.8 | What is the rate of divergence between declaration and actual behaviour? | declared vs observed |
+| R1.9 | Are dependency declarations complete and version-pinned? | `DEP_*` |
+| R1.10 | Does the license declaration match the actual LICENSE file? | `LICENSE_*` |
 
-**明确的非目标（防止研究跑偏）**：
-- ❌ 不判断某个 skill 「是否恶意」（我们只报证据）
-- ❌ 不做语义/意图判定
-- ❌ 不评测模型能力
-- ❌ 不研究 MCP server
+**Explicit non-goals (to stop the research drifting)**:
+- ❌ Do not judge whether a skill "is malicious" (we report evidence only)
+- ❌ Do not do semantic/intent determination
+- ❌ Do not evaluate model capability
+- ❌ Do not study MCP servers
 
 ---
 
-## 2. 语料来源与抽样
+## 2. Corpus sources and sampling
 
-### 2.1 数据源分层
+### 2.1 Source layers
 
-| 层 | 来源 | 获取方式 | 抽样方式 |
+| Layer | Source | How it is obtained | How it is sampled |
 |---|---|---|---|
-| L1 公开 registry | skills.sh 排行榜 / skillmd.com API | 官方公开 API，遵守速率限制 | 按 install 计数分层 |
-| L2 争议 registry | ClawHub | 公开索引 | **全量**（已知含恶意，含金量高） |
-| L3 GitHub | `filename:SKILL.md` code search | GitHub REST API，认证 | 随机抽样 + 分层 |
-| L4 学术数据集 | GitSkills (arXiv 2608.10906) | 作者申请 / 公开下载 | 复用其仓库元数据 |
-| L5 生态目录 | skillsmp、skillful.sh、awesome 列表 | 公开 | 去重后随机 |
+| L1 public registry | the skills.sh leaderboard / the skillmd.com API | Official public API, rate limits respected | Stratified by install count |
+| L2 contested registry | ClawHub | Public index | **Everything** (known to contain malicious entries, high value) |
+| L3 GitHub | `filename:SKILL.md` code search | GitHub REST API, authenticated | Random sampling + stratification |
+| L4 academic dataset | GitSkills (arXiv 2608.10906) | Author request / public download | Reuse its repository metadata |
+| L5 ecosystem directories | skillsmp, skillful.sh, awesome lists | Public | Random after deduplication |
 
-**目标总量**：N = 100,000 个唯一 skill（按内容 digest 去重）
+**Target total**: N = 100,000 unique skills (deduplicated by content digest)
 
-### 2.2 分层抽样（Stratified Sampling）
+### 2.2 Stratified sampling
 
-必须分层，否则结论会被「AI Tool」类目主导（占 69.7%）。分层维度：
+Stratification is mandatory, or the conclusions will be dominated by the "AI Tool"
+category (69.7% of the corpus). The dimensions:
 
-| 维度 | 分层 |
+| Dimension | Strata |
 |---|---|
-| 来源 | L1 / L2 / L3 / L4 / L5 |
-| 规模 | <8 KB · 8–32 KB · 32–128 KB · >128 KB |
-| 是否含脚本 | 无 `scripts/` · 有 shell · 有 python · 有 js/ts · 有其他 |
-| 声明权限 | 有 permissions · 无 |
-| 许可证 | 有 LICENSE · 无 · 声明与文件冲突 |
-| 安装量（仅 L1） | Top 1% · 1–10% · 10–50% · 50–100% · 尾部 |
+| Source | L1 / L2 / L3 / L4 / L5 |
+| Size | <8 KB · 8–32 KB · 32–128 KB · >128 KB |
+| Contains scripts | no `scripts/` · shell · python · js/ts · other |
+| Declares permissions | yes · no |
+| License | has LICENSE · none · declaration conflicts with the file |
+| Install count (L1 only) | Top 1% · 1–10% · 10–50% · 50–100% · tail |
 
-**每层抽样比例**必须在报告中公开，且**公布每层的 N**。
-超容量层（如 L3 的 GitHub 全量）用**系统抽样**（按仓库 ID 哈希取模）而非简单随机，
-以保证可复现且无偏。
+**The sampling fraction for each stratum must be published** in the report, together
+with **each stratum's N**. An over-capacity stratum (such as all of GitHub in L3) uses
+**systematic sampling** (by repository ID hash modulo) rather than simple random
+sampling, so that it is reproducible and unbiased.
 
-### 2.3 可复现性（不可妥协）
+### 2.3 Reproducibility (non-negotiable)
 
-每个被分析的 skill 记录三元组：
+Every analysed skill records a triple:
 
 ```json
 {
@@ -99,149 +108,173 @@ index|scan|stats|report|reproduce`，见 `tests/corpus.rs`）。**阻塞在采�
 }
 ```
 
-**要求**：
-- 拒绝 tag / branch / 短 SHA（架构 §7 的原则在语料采集上同样适用）
-- 提交 `corpus-manifest.json` 到仓库的 `research/` 目录，可 diff、可复查
-- 提供 `skillguard corpus reproduce <manifest>` 复现整个分析
-- 记录采集时间窗（UTC），因为上游仓库会变动
+**Requirements**:
+- Tags / branches / short SHAs are rejected (the principle in architecture §7 applies to
+  corpus collection too)
+- `corpus-manifest.json` is committed into the repository's `research/` directory, so it
+  can be diffed and reviewed
+- `skillguard corpus reproduce <manifest>` reproduces the whole analysis
+- The collection window (UTC) is recorded, because upstream repositories change
 
-> **这是本阶段最容易被忽略、但最决定公信力的细节。**
-> 没有 pinned commit 的语料研究在安全领域是无效的。
+> **This is the most easily overlooked detail of this phase, and the one that most
+> determines credibility.** Corpus research without pinned commits is worthless in
+> security.
 
 ---
 
-## 3. 合规与伦理（必须先于技术）
+## 3. Compliance and ethics (before the technical work)
 
-这是本阶段最大的非技术风险。**必须在写第一行扫描代码前完成。**
+This is the biggest non-technical risk of the phase. **It must be finished before the
+first line of scanning code is written.**
 
-### 3.1 硬性规则
+### 3.1 Hard rules
 
-| 规则 | 说明 |
+| Rule | Description |
 |---|---|
-| **R-1 只读，不执行** | 永远不运行、不安装、不 `npm install`/`pip install` 被测 skill。归档也只是存储字节 |
-| **R-2 不再分发恶意内容** | 报告中**只发布**：规则 ID、内容 digest、行号、**脱敏后的**证据片段（域名保留、私钥/凭据截断）。**不发布**可直接运行的 payload |
-| **R-3 速率限制** | 严格遵守 GitHub API 限制（认证 5,000 req/h）。自建节流器，默认 1 req/s，含指数退避与 429 熔断 |
-| **R-4 尊重 robots.txt 与 ToS** | 各 registry 的 ToS 逐条审阅并记录（放 `research/TERMS-REVIEW.md`）。若某源禁止采集则排除，并在报告中说明该源的排除理由 |
-| **R-5 不做个人画像** | 不分析作者身份、姓名、国籍、组织。仓库归属仅用于生态统计，不指向个人 |
-| **R-6 数据最小化** | 语料索引不含任何个人联系方式；commit 作者字段在公开数据集里一律丢弃 |
-| **R-7 协调披露** | 发现恶意样本后**先私下通知**对应 registry（ClawHub / skills.sh），给 7 天响应期，再公开。**这一条是信誉的生死线** |
-| **R-8 蜜罐风险** | 不把扫描器接入任何会自动执行的自动化；GitHub Action 只读、只写 SARIF |
+| **R-1 Read only, never execute** | Never run, install, `npm install` or `pip install` a scanned skill. Archiving only stores bytes |
+| **R-2 Do not redistribute malicious content** | A report publishes **only**: rule IDs, content digests, line numbers, and **redacted** evidence fragments (domains kept; private keys/credentials truncated). It does **not** publish a runnable payload |
+| **R-3 Rate limiting** | Respect GitHub API limits strictly (5,000 req/h authenticated). A self-built throttle, 1 req/s by default, with exponential backoff and a 429 circuit breaker |
+| **R-4 Respect robots.txt and ToS** | Each registry's ToS is reviewed line by line and recorded (in `research/TERMS-REVIEW.md`). A source that forbids collection is excluded, and the report states the reason for its exclusion |
+| **R-5 No personal profiling** | Do not analyse author identity, name, nationality or organisation. Repository ownership is used only for ecosystem statistics, never to point at an individual |
+| **R-6 Data minimisation** | The corpus index contains no personal contact details; the commit author field is discarded from any public dataset |
+| **R-7 Coordinated disclosure** | After finding a malicious sample, **notify the registry privately first** (ClawHub / skills.sh), allow a 7-day response window, then publish. **This one is the lifeline of our credibility** |
+| **R-8 Honeypot risk** | Never wire the scanner into any automation that executes things; the GitHub Action is read-only and writes only SARIF |
 
-### 3.2 协调披露流程（R-7 细则）
+### 3.2 The coordinated disclosure flow (R-7 in detail)
 
 ```
-发现恶意样本
-  ├─ ① 生成内部工单，记录 digest + 规则 ID（不记录 payload 内容）
-  ├─ ② 通知 registry 维护者（skills.sh / ClawHub），附 digest 与规则
-  ├─ ③ 等待 7 天响应期
-  ├─ ④ 若对方未处置 → 报告中以 digest 引用，仍不公开 payload
-  └─ ⑤ 若对方处置 → 在报告中记为「已协调移除」，这本身就是正面故事
+Find a malicious sample
+  ├─ ① Open an internal ticket recording the digest + rule IDs (not the payload)
+  ├─ ② Notify the registry maintainers (skills.sh / ClawHub) with the digest and rules
+  ├─ ③ Wait out the 7-day response window
+  ├─ ④ If they do not act  → cite it in the report by digest, still without publishing the payload
+  └─ ⑤ If they do act      → record it in the report as "coordinated removal", which is a positive story in itself
 ```
 
-**额外收益**：这一步极可能带来与 registry 的合作（提供扫描能力），
-是比曝光更有价值的长期资产。
+**A bonus**: this step is very likely to bring a collaboration with the registry
+(offering them scanning capability), which is a longer-lived asset than publicity.
 
-### 3.3 工具自身的合规
+### 3.3 The tool's own compliance
 
-- 优先使用 GitHub REST API + tarball 端点，**不做全仓库 git clone**（降低带宽与存储）
-- 本地缓存加密、限容，采集结束后按策略清除原始 payload，仅保留 digest
-- 扫描器在受限容器/低权限用户下运行（双保险，即使设计上不执行，也限制万一）
+- Prefer the GitHub REST API plus the tarball endpoint; **do not `git clone` whole
+  repositories** (lower bandwidth and storage)
+- The local cache is encrypted and size-capped; after collection the raw payloads are
+  purged per policy, keeping only digests
+- The scanner runs in a restricted container / as a low-privilege user (a second line of
+  defence: even though it is designed not to execute, the possibility is still bounded)
 
 ---
 
-## 4. 指标定义（精确定义，避免歧义）
+## 4. Metric definitions (precise, to avoid ambiguity)
 
-每个指标必须写清：分子、分母、分母包含什么、不包含什么。
+Every metric must state: the numerator, the denominator, what the denominator includes,
+and what it excludes.
 
-### 4.1 主指标
+### 4.1 The primary metric
 
 ```text
-Prevalence(R) = |{ skill ∈ corpus : skill 有 ≥1 条匹配规则 R 的 finding }| / |corpus|
+Prevalence(R) = |{ skill ∈ corpus : skill has ≥1 finding matching rule R }| / |corpus|
 ```
 
-**分母**：`corpus` = 通过去重与有效性检查后的全部 skill。
-**排除**：解析失败且无法提取 frontmatter 的 skill 需单独报告（不得静默丢弃，见 §6.3）。
+**Denominator**: `corpus` = every skill that passed deduplication and the validity checks.
+**Exclusion**: a skill whose parse failed and whose frontmatter could not be extracted
+must be reported separately (it must never be silently dropped, see §6.3).
 
-### 4.2 必报的分层维度
+### 4.2 Mandatory stratification
 
-每个 `Prevalence(R)` 必须同时按以下维度分层报告，否则无法解释：
-来源层 · 规模桶 · 是否含脚本 · 安装量分位（仅 L1）· 许可证状态
+Every `Prevalence(R)` must also be reported broken down by: source layer · size bucket ·
+contains-scripts · install-count quantile (L1 only) · license status. Without that it
+cannot be interpreted.
 
-### 4.3 精度/召回测量（核心可信度）
+### 4.3 Precision/recall measurement (the core of credibility)
 
-**抽样**：从每个分层随机抽 **500 个 skill**（分层合计 ≈ 2,000）组成标注集 `GOLD`。
+**Sampling**: randomly draw **500 skills** from each stratum (≈ 2,000 across strata) to
+form the annotation set `GOLD`.
 
-**标注流程**：
-1. 两名标注者独立标注（单人项目 → 至少 1 名外部志愿者 + 1 名复核）
-2. 记录**一致性**：Cohen's κ，目标 ≥ 0.75；低于则先修规则定义再重新标
-3. 分歧由第三方裁决，裁决记录进数据集
-4. **标注者不得看到规则的输出细节**（避免锚定偏差）→ 提供一个 `skillguard inspect --no-rules` 模式，只给归一化文本与行号
+**Annotation process**:
+1. Two annotators label independently (for a single-person project → at least one
+   external volunteer plus one reviewer)
+2. Record **agreement**: Cohen's κ, target ≥ 0.75; below that, fix the rule definition
+   first and re-annotate
+3. Disagreements are adjudicated by a third party, and the adjudication is recorded in
+   the dataset
+4. **Annotators must not see the rule's output details** (to avoid anchoring bias) → a
+   `skillguard inspect --no-rules` mode that gives only the normalized text and line
+   numbers
 
-**指标**：
+**Metrics**:
 ```text
-Precision(R) = TP / (TP + FP)      # 规则报了但人判误报
-Recall(R)    = TP / (TP + FN)      # 人判有问题但规则没报
+Precision(R) = TP / (TP + FP)      # the rule flagged it, a human judged it a false positive
+Recall(R)    = TP / (TP + FN)      # a human judged it a problem, the rule did not flag it
 ```
-- 报告 **per-rule** 的 P/R，不用微平均掩盖坏规则
-- 对低 precision 规则给出**具体误报样本**分析
-- **不做任何事后调参**（不允许「看了标注集再改规则再报一次」）。若必须迭代，则标注集版本化
-  （`GOLD-v1`、`GOLD-v2`），每个版本独立报告全部指标。这是学术诚信底线
+- Report **per-rule** P/R; do not hide a bad rule behind a micro-average
+- For low-precision rules, give a **concrete false-positive sample** analysis
+- **No post-hoc tuning whatsoever** (it is not allowed to "look at the annotation set,
+  change a rule, and report again"). If iteration is unavoidable, version the annotation
+  set (`GOLD-v1`, `GOLD-v2`), and report every metric independently per version. That is
+  the floor of research integrity
 
-### 4.4 横向对比基准（强烈建议做，成本低收益高）
+### 4.4 A cross-tool benchmark (strongly recommended: low cost, high value)
 
-在 `GOLD` 的 1,000 个子样本上，同时运行**至少 2 个现有工具**：
+Run **at least 2 existing tools** over the same 1,000-item subsample of `GOLD`:
 
-| 对比对象 | 命令 | 目的 |
+| Comparison target | Command | Purpose |
 |---|---|---|
-| SkillMD | `npx skillmds scan <path>` | 生态最大 registry 的引擎 |
-| skill-preflight | `npx skill-preflight scan <path>` | 评分路线的代表 |
-| （可选）SkillSpector | Python | NVIDIA 出品，静态检查路线 |
+| SkillMD | `npx skillmds scan <path>` | The engine behind the largest registry |
+| skill-preflight | `npx skill-preflight scan <path>` | The representative of the scoring approach |
+| (optional) SkillSpector | Python | From NVIDIA; the static-checking approach |
 
-**产出**：一张 `规则检出率 × 误报率 × 耗时 × 是否离线` 的对比表。
+**Output**: one table of `rule coverage × false-positive rate × runtime × offline or not`.
 
-> 这一张表就是项目的技术护城河证明。
-> 特别注意验证「离线」这一列 —— 这是所有现有商业方案的共同短板。
+> That one table is the proof of the project's technical moat.
+> Pay particular attention to verifying the "offline" column — it is the shared weakness
+> of every existing commercial option.
 
-**注意**：运行竞品工具必须用其最新稳定版本、遵守其 ToS、只跑公开语料，
-并在报告中说明版本号与运行方式（它们的输出会变，结果不可复现，需注明）。
+**Note**: running competitor tools requires their latest stable version, compliance with
+their ToS, and public corpus only; the report must state the version numbers and how they
+were run (their output changes, so the results are not reproducible and that must be said).
 
 ---
 
-## 5. 交付物
+## 5. Deliverables
 
-| # | 产物 | 路径 | 说明 |
+| # | Artifact | Path | Description |
 |---|---|---|---|
-| D1 | 研究协议预注册 | `research/PROTOCOL.md` | 假设、抽样、指标定义、**时间戳**。扫描前提交，防止事后改口径 |
-| D2 | ToS 审阅记录 | `research/TERMS-REVIEW.md` | 每个数据源的 ToS 结论与合规依据 |
-| D3 | 语料清单 | `research/corpus-manifest.json` | pinned commit + digest + 分层标签 |
-| D4 | 标注集 | `research/gold/` | `GOLD-v1` + 标注指南 + 一致性统计 |
-| D5 | 扫描原始结果 | `research/raw-findings.jsonl` | 每条 finding 一行（含 digest/rule/file/line） |
-| D6 | 聚合数据集 | `datasets/skill-corpus-2026q4.jsonl(.zst)` | **可公开发布**，脱敏证据 |
-| D7 | **主报告** | `docs/CORPUS_REPORT.md` | 结论、表格、分层分析、误报分析、局限 |
-| D8 | 横向对比 | `docs/BENCHMARK.md` | 与 SkillMD / skill-preflight 的对比表 |
-| D9 | arXiv 预印本 | — | 生态安全态势测量（第二作者可为外部研究者，提升可信度） |
-| D10 | 技术博客 | — | 面向开发者的可读版本（HN 素材） |
-| D11 | 协调披露记录 | `research/DISCLOSURE.md` | 时间线、通知对象、处置结果 |
+| D1 | Pre-registered research protocol | `research/PROTOCOL.md` | Hypotheses, sampling, metric definitions, **timestamp**. Committed before scanning, to prevent moving the goalposts later |
+| D2 | ToS review record | `research/TERMS-REVIEW.md` | The ToS conclusion and compliance basis for each data source |
+| D3 | Corpus manifest | `research/corpus-manifest.json` | Pinned commit + digest + stratum labels |
+| D4 | Annotation set | `research/gold/` | `GOLD-v1` + the annotation guide + agreement statistics |
+| D5 | Raw scan results | `research/raw-findings.jsonl` | One line per finding (with digest/rule/file/line) |
+| D6 | Aggregated dataset | `datasets/skill-corpus-2026q4.jsonl(.zst)` | **Publicly releasable**, with redacted evidence |
+| D7 | **The main report** | `docs/CORPUS_REPORT.md` | Conclusions, tables, stratified analysis, false-positive analysis, limitations |
+| D8 | Cross-tool benchmark | `docs/BENCHMARK.md` | The comparison table against SkillMD / skill-preflight |
+| D9 | arXiv preprint | — | A measurement of the ecosystem's security posture (an external researcher as second author raises credibility) |
+| D10 | Technical blog post | — | A developer-readable version (HN material) |
+| D11 | Coordinated disclosure record | `research/DISCLOSURE.md` | Timeline, who was notified, the outcome |
 
-### 5.1 主报告必须包含的诚实声明（写死在模板里，不许删）
+### 5.1 Honest statements the main report must contain (hard-coded into the template; do not delete)
 
 ```text
-1. Detection is not judgement. 本研究不判定任何 skill 为恶意，只报告可复现的规则命中。
-2. 规则有漏报。语义级提示注入的漏报率未知且必然非零。
-3. 误报存在。所有 prevalence 数字都受 §4.3 的 precision 约束，
-   真实 prevalence 的区间是 [P×点估计, 点估计]。
-4. 语料有偏。GitHub code search 受平台索引限制，registry 有自身偏好，
-   结论不必然外推到私有/企业内部 skills。
-5. 语料会漂移。所有结论绑定采集时间窗与 commit，不能被永久引用。
+1. Detection is not judgement. This study does not judge any skill to be malicious; it
+   reports reproducible rule matches only.
+2. The rules have false negatives. The false-negative rate for semantic-level prompt
+   injection is unknown and necessarily non-zero.
+3. False positives exist. Every prevalence figure is bounded by the precision in §4.3;
+   the interval for the true prevalence is [P × point estimate, point estimate].
+4. The corpus is biased. GitHub code search is limited by the platform's indexing, the
+   registries have their own preferences, and the conclusions do not necessarily
+   generalise to private/enterprise skills.
+5. The corpus drifts. Every conclusion is bound to a collection window and a commit and
+   cannot be cited permanently.
 ```
 
 ---
 
-## 6. 技术实现（最小新增）
+## 6. Technical implementation (minimal additions)
 
-只需在 Phase 1 扫描器之上加一个「批量驱动」，不新建子系统。
+Only a "batch driver" on top of the Phase 1 scanner is needed; no new subsystem.
 
-### 6.1 新增能力
+### 6.1 New capabilities
 
 ```text
 skillguard corpus fetch  --source <l1..l5> --limit N --out research/raw/
@@ -250,91 +283,105 @@ skillguard corpus stats  --findings <jsonl> --by layer,stratum --format markdown
 skillguard corpus report --findings <jsonl> --gold research/gold/GOLD-v1 --out docs/
 ```
 
-**核心诉求**：
-- **吞吐**：100k skill 中位数扫描耗时需 < 15 ms（含 I/O）→ 约 25 分钟单机完成。用 rayon 并行 + 内容去重缓存
-- **幂等**：同一 manifest 重跑产生**逐字节相同**的 jsonl（时间戳除外）
-- **无网络**：`corpus scan` / `stats` / `report` 全程离线，只读本地 manifest
-- **降级**：单条 skill 解析失败或超时必须记录并继续，不得中断整个批次（这是批处理工具最常见的脆弱点）
+**Core requirements**:
+- **Throughput**: the median scan time for 100k skills must be < 15 ms (including I/O) →
+  roughly 25 minutes on one machine. Use rayon parallelism plus a content-dedup cache
+- **Idempotence**: rerunning the same manifest produces a **byte-identical** jsonl
+  (timestamps excepted)
+- **No network**: `corpus scan` / `stats` / `report` are entirely offline and read only
+  the local manifest
+- **Degradation**: a skill that fails to parse or times out must be recorded and then
+  skipped, never aborting the batch (the most common fragility in batch tools)
 
-### 6.2 度量缓存
+### 6.2 Measurement cache
 
-同一 digest 的扫描结果全局缓存（SQLite 或 `content_digest → findings` 映射），
-重复扫描（重跑、横向对比）零成本。这是让 §4.4 的横向对比可行的前提。
+Scan results are cached globally by digest (SQLite, or a `content_digest → findings`
+map), so rescanning (a rerun, the cross-tool benchmark) costs nothing. This is the
+precondition that makes the §4.4 benchmark practical.
 
-### 6.3 失败必须可见
+### 6.3 Failure must be visible
 
 ```text
 total      = 100,000
 scanned    =  99,847
-failed     =    153     ← 必须单列一小节说明失败原因分布
+failed     =    153     ← a dedicated subsection must explain the distribution of failure reasons
 skipped    =      0
 binary     =     12
 oversize   =     41
 ```
-**禁止**把 failed 静默计入分母或丢弃。这是批量研究最容易被攻击的点。
+It is **forbidden** to silently fold `failed` into the denominator or to drop it. This is
+the most easily attacked point of any batch study.
 
 ---
 
-## 7. 时间与成本估算
+## 7. Time and cost estimate
 
-| 步骤 | 工期 | 成本 |
+| Step | Duration | Cost |
 |---|---|---|
-| 协议 + ToS 审阅 + 协调披露流程 | 3–5 天 | 0 |
-| Phase 1 扫描器（前置依赖） | 2–3 周 | 0 |
-| 语料采集（限速下） | 2–4 天 | 0（GitHub 免费层足够） |
-| 标注集构建（含 κ 统计） | 2 周 | 0–少量（志愿者 / 找 1 名外部标注者） |
-| 横向对比 | 3 天 | 0 |
-| 主报告 + 博客 + 预印本 | 1 周 | 0 |
-| **合计（不含 Phase 1）** | **约 6 周** | **≈ 0** |
+| Protocol + ToS review + coordinated disclosure process | 3–5 days | 0 |
+| The Phase 1 scanner (prerequisite) | 2–3 weeks | 0 |
+| Corpus collection (under rate limits) | 2–4 days | 0 (the GitHub free tier suffices) |
+| Building the annotation set (including κ statistics) | 2 weeks | 0–a little (volunteers / one paid external annotator) |
+| Cross-tool benchmark | 3 days | 0 |
+| Main report + blog + preprint | 1 week | 0 |
+| **Total (excluding Phase 1)** | **≈ 6 weeks** | **≈ 0** |
 
-**存储估算**：100k skill × 中位数 15 KB ≈ 1.5 GB 原始内容，
-去重后约 0.8 GB，压缩后 ~300 MB。个人机器完全可承受。
+**Storage estimate**: 100k skills × a 15 KB median ≈ 1.5 GB of raw content, ≈ 0.8 GB after
+deduplication, ~300 MB compressed. Entirely affordable on a personal machine.
 
-**唯一的真实成本是注意力**：约 6 周 × 每周 10 小时 ≈ 60 小时。
-这是判断是否继续的**唯一硬门槛**（对照 MVP.md §7 的维护者投入上限）。
-
----
-
-## 8. 执行顺序（每个 gate 都可停）
-
-```
-G0  协议 + ToS 审阅通过？              ──► 否 → 重新选数据源，或放弃某些源
-G1  扫描器 Phase 1 全绿 + 吞吐达标？    ──► 否 → 回到 Phase 1，不做研究
-G2  坐标披露流程已建立（含 registry 联系方式）？── 否 → 先解决再采集
-G3  GOLD-v1 κ ≥ 0.75？                 ──► 否 → 修规则定义，重标
-G4  Precision ≥ 0.85 且 Recall ≥ 0.6？ ──► 否 → 迭代 GOLD-v2，双版本报告
-G5  已协调通知 registry？                ── 否 → 不公开发布报告
-G6  报告已发布且数据集已公开？          ──► 进入 Phase 1 产品化
-```
-
-**G4 是关键**：如果精度不达标，**不要**通过放宽口径来凑，而是**如实报告低精度**
-并把结论限定为「上界估计」。一个诚实的「我们精度只有 0.62」比一个注水的 0.95 有价值得多。
+**The only real cost is attention**: about 6 weeks × 10 hours a week ≈ 60 hours. That is
+the **only hard gate** for deciding whether to continue (compare the maintainer-effort cap
+in MVP.md §7).
 
 ---
 
-## 9. 已知局限（预注册，避免事后找借口）
+## 8. Execution order (every gate can stop the project)
 
-1. GitHub code search 只索引满足平台条件的文件 → 语料是下界
-2. 公开 registry 的 skill 已被部分审核过，与「长尾私有 skill」分布不同
-3. ClawHub 已知被投毒，其 prevalence **不能**外推到其他 registry（必须分开报告）
-4. 静态分析对语义级注入无能为力（漏报未知）
-5. 单时间窗快照，不反映时间演化
-6. 标注者是我们自己/熟人，存在立场偏差 → 用 κ 与外部标注者缓解，但不能完全消除
+```
+G0  Protocol + ToS review passed?              ──► no → choose different sources, or drop some
+G1  Phase 1 scanner all green + throughput met? ──► no → back to Phase 1, no research yet
+G2  Coordinated disclosure process set up (with registry contacts)? ── no → resolve before collecting
+G3  GOLD-v1 κ ≥ 0.75?                          ──► no → fix the rule definitions, re-annotate
+G4  Precision ≥ 0.85 and Recall ≥ 0.6?         ──► no → iterate to GOLD-v2, report both versions
+G5  Have the registries been notified?          ── no → do not publish the report
+G6  Report published and dataset public?       ──► move on to productising Phase 1
+```
+
+**G4 is the critical one**: if precision falls short, do **not** loosen the definition to
+make the number, but **report the low precision honestly** and bound the conclusion as an
+upper estimate. An honest "our precision is only 0.62" is worth far more than a padded 0.95.
 
 ---
 
-## 10. 与后续阶段的衔接
+## 9. Known limitations (pre-registered, so no excuses are invented later)
+
+1. GitHub code search only indexes files that meet the platform's conditions → the corpus
+   is a lower bound
+2. Skills on public registries have already been partly reviewed, so their distribution
+   differs from "long-tail private skills"
+3. ClawHub is known to have been poisoned, so its prevalence **cannot** be extrapolated to
+   other registries (it must be reported separately)
+4. Static analysis cannot do anything about semantic-level injection (false negatives
+   unknown)
+5. A single-window snapshot does not reflect change over time
+6. The annotators are us or people we know, so there is a positional bias → κ and external
+   annotators mitigate it but cannot remove it
+
+---
+
+## 10. How it feeds later phases
 
 ```
-Phase 0 产出 ─┬─→ 分层 prevalence + 误报分析 ──→ 反哺规则设计与 severity 校准
-              ├─→ GOLD-v1 标注集 ──────────────→ 变成项目的永久回归基准
-              ├─→ 公开数据集 ─────────────────→ 学术引用的长期 backlink
-              ├─→ 横向对比表 ─────────────────→ README 的技术护城河
-              └─→ 与 registry 建立联系 ─────────→ 长期合作入口
+Phase 0 output ─┬─→ stratified prevalence + false-positive analysis ──→ feeds back into rule design and severity calibration
+                ├─→ the GOLD-v1 annotation set ──────────────────────→ becomes the project's permanent regression baseline
+                ├─→ a public dataset ────────────────────────────────→ a long-term backlink for academic citation
+                ├─→ the cross-tool table ────────────────────────────→ the README's technical moat
+                └─→ contacts with registries ────────────────────────→ an entry point for long-term collaboration
 
-Phase 1 输入：GOLD-v1 已是现成的真实回归测试集（比自造 fixture 强得多）
+Phase 1 input: GOLD-v1 is a ready-made real regression suite (far better than self-made fixtures)
 ```
 
-> **一个被低估的收益**：`GOLD-v1` 会成为项目最有价值的资产之一。
-> Semgrep 的 3000+ 社区规则正是这样滚起来的 ——
-> 我们没有社区规模，但可以先有 2,000 个**真实、人工标注、公开**的标注样本。
+> **An underrated benefit**: `GOLD-v1` will become one of the project's most valuable
+> assets. Semgrep's 3,000+ community rules grew exactly this way — we do not have a
+> community's scale, but we can start with 2,000 **real, human-annotated, public**
+> labelled samples.
