@@ -226,6 +226,36 @@ fn a_project_settings_file_is_not_agent_config() {
 }
 
 #[test]
+fn printing_an_agent_config_path_is_not_writing_it() {
+    // `writes_to` counted `echo ` as a write primitive, so every warning line
+    // that named `CLAUDE.md` or `.claude/` was "the skill writes agent
+    // configuration". Measured over the corpus, that was 57 of the rule's 108
+    // findings, all of them messages. A real redirect (`echo x > file`) is still
+    // a write through the `>` token.
+    let out = scan_fixture("safe", "agent-config-message");
+    assert!(
+        !rules(&out).contains("PERSIST_AGENT_CONFIG"),
+        "printing a path is not writing it: {:#?}",
+        out.findings
+    );
+    assert!(
+        !rules(&out).contains("PERSIST_SHELL_RC"),
+        "printing a shell-rc suggestion is not modifying it: {:#?}",
+        out.findings
+    );
+    let noisy: Vec<String> = out
+        .findings
+        .iter()
+        .filter(|f| f.severity >= Severity::Medium)
+        .map(|f| f.rule.as_str().to_owned())
+        .collect();
+    assert!(
+        noisy.is_empty(),
+        "agent-config-message should be quiet: {noisy:?}"
+    );
+}
+
+#[test]
 fn a_credential_name_is_not_a_credential() {
     // `SECRET_GENERIC_ASSIGN` claims "a credential-shaped value is assigned to a
     // literal". Naming the environment variable, the field or a placeholder is

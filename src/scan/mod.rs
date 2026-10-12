@@ -1195,7 +1195,10 @@ fn writes_to(line: &str, matched: &str) -> bool {
         "mv ",
         "ln -s",
         "install ",
-        "echo ",
+        // `echo ` is deliberately absent. `echo "… CLAUDE.md is protected …"`
+        // prints a message; the path is its subject, not its destination, and
+        // it made every warning line in a hook tool a write to that path. A
+        // real redirect (`echo x > file`) is caught by the `>` above.
         "append",
         "write_text",
         "writefilesync",
