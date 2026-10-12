@@ -281,3 +281,29 @@ fn no_telemetry_crate_is_a_dependency() {
         );
     }
 }
+
+/// A rule must not claim a capability it did not observe.
+///
+/// `SECRET_PATH_READ`'s message says a credential path "is referenced in
+/// executable code", and it claimed the capability `secrets.read`. Measured over
+/// 5,442 skills it had 49 findings: 31 mention a path with no I/O at all
+/// (`[ -f "$HOME/.ssh/authorized_keys" ]`), 11 are writes, 6 are tests, and 1 is
+/// a string in an attack demo. None reads a credential store.
+///
+/// A capability label is not a comment: it is rendered, it feeds SARIF, and it
+/// implies the diff saw something. Claiming one that was never observed is the
+/// same class of error as an overstated message.
+#[test]
+fn no_rule_claims_a_capability_it_did_not_observe() {
+    let read = read(&src_root().join("scan/rules.rs"));
+    let rule = read
+        .split("id: \"SECRET_PATH_READ\"")
+        .nth(1)
+        .expect("SECRET_PATH_READ must be in the catalogue");
+    let block = rule.split("id: \"").next().unwrap_or(rule);
+    assert!(
+        block.contains("capability: None"),
+        "SECRET_PATH_READ observes a reference, not a read; it must not claim \
+         `secrets.read`"
+    );
+}

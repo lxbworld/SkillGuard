@@ -159,7 +159,18 @@ static TABLE: &[RuleSpec] = &[
     },
     RuleSpec {
         id: "SECRET_PATH_READ",
-        severity: SevHigh,
+        // LOW, and no capability, because the measurement says the rule observes
+        // a *reference* and nothing more. Over 5,442 skills it had 49 findings:
+        // 31 are a path mentioned with no I/O at all (`[ -f
+        // "$HOME/.ssh/authorized_keys" ]`), 11 are writes (`touch`, `chmod`,
+        // `info.linkname = "/etc/passwd"`), 6 are test files, and 1 is a string
+        // in an attack demo. Not one is a skill reading a credential store,
+        // which is what `secrets.read` claimed and what HIGH implied.
+        //
+        // The message is already honest ("is referenced in executable code"), so
+        // the detection stays: a skill that mentions `~/.ssh/id_rsa` is worth a
+        // look. What goes is the claim that something was observed.
+        severity: SevLow,
         confidence: High,
         docs_confidence: Some(Low),
         kinds: CODE,
@@ -179,8 +190,8 @@ static TABLE: &[RuleSpec] = &[
             r"(?i)\.pypirc\b",
         ],
         message: "A credential or key store path is referenced in executable code",
-        capability: Some("secrets.read"),
-        remediation: "Remove the access, or require an explicit declaration and approval for it.",
+        capability: None,
+        remediation: "Check whether the reference is a read, and declare it if so.",
     },
     // ── Shell ──────────────────────────────────────────────────────────────
     RuleSpec {
@@ -1075,7 +1086,7 @@ pub fn rule_count() -> usize {
 /// rev 33: the three `MISMATCH_*` ids the declared-vs-observed findings use are
 /// in the catalogue, so `rules`, `docs/RULES.md` and the SARIF driver all carry
 /// them.
-pub const SCAN_LOGIC_REVISION: u32 = 38;
+pub const SCAN_LOGIC_REVISION: u32 = 39;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

@@ -95,7 +95,7 @@ file is where that decision is legible.
 | `SECRET_GENERIC_ASSIGN` | HIGH | secrets.read | A credential-shaped value is assigned to a literal | Confirm it is a placeholder. If it is real, revoke it and inject the value at run time. | `findings.ignore: ["SECRET_GENERIC_ASSIGN"]` |
 | `SECRET_GITHUB_TOKEN` | CRITICAL | secrets.read | A GitHub token is hardcoded | Revoke the token and read GITHUB_TOKEN from the environment instead. | `findings.ignore: ["SECRET_GITHUB_TOKEN"]` |
 | `SECRET_JWT` | HIGH | secrets.read | A JSON Web Token is hardcoded | Issue tokens at run time; never ship one inside a distributed artifact. | `findings.ignore: ["SECRET_JWT"]` |
-| `SECRET_PATH_READ` | HIGH | secrets.read | A credential or key store path is referenced in executable code | Remove the access, or require an explicit declaration and approval for it. | `findings.ignore: ["SECRET_PATH_READ"]` |
+| `SECRET_PATH_READ` | LOW | - | A credential or key store path is referenced in executable code | Check whether the reference is a read, and declare it if so. | `findings.ignore: ["SECRET_PATH_READ"]` |
 | `SECRET_PRIVATE_KEY` | CRITICAL | secrets.read | A PEM private key block is embedded in the skill | Remove the key and rotate it. A key inside a distributed artifact is already compromised. | `findings.ignore: ["SECRET_PRIVATE_KEY"]` |
 | `SECRET_PROVIDER_TOKEN` | HIGH | secrets.read | A provider API token is hardcoded | Revoke the token and read it from the environment at run time. | `findings.ignore: ["SECRET_PROVIDER_TOKEN"]` |
 | `SHELL_DESTRUCTIVE` | HIGH | filesystem.write | A destructive filesystem, device or history-rewriting operation | Remove it. If it is required, scope it to a temporary directory. | `findings.ignore: ["SHELL_DESTRUCTIVE"]` |
