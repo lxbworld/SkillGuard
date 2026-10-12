@@ -910,7 +910,18 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         // running it. Widening SHELL_EXEC to catch `python3 foo.py` also caught
         // `Usage: python add_slide.py <unpacked_dir> <source>` in every
         // docstring. Comments are handled separately; these are usage text.
-        "SHELL_EXEC" => looks_like_usage(&line),
+        // An `import`/`require` of `child_process` declares the *ability* to
+        // spawn; the rule claims the skill invokes an interpreter, and an import
+        // is not an invocation. 160 of the rule's corpus findings were
+        // `import { spawn } from "node:child_process"`.
+        "SHELL_EXEC" => {
+            let t = line.trim_start();
+            looks_like_usage(&line)
+                || (m.contains("child_process")
+                    && (t.starts_with("import ")
+                        || t.starts_with("from ")
+                        || line.contains("require(")))
+        }
         // A quoted phrase, a heading, a list item or a table cell is
         // documentation *about* the pattern, not an instruction to the agent.
         // GOLD-v5 put every sampled `PI_*` finding in that bucket: the corpus is

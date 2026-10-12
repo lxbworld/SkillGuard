@@ -256,6 +256,24 @@ fn printing_an_agent_config_path_is_not_writing_it() {
 }
 
 #[test]
+fn importing_child_process_is_not_invoking_an_interpreter() {
+    // `SHELL_EXEC` claims "the skill invokes another interpreter". An
+    // `import`/`require` of the child-process API declares the ability to
+    // spawn, not a spawn; 149 of the rule's corpus findings were this import.
+    let out = scan_fixture("safe", "child-process-import");
+    assert!(
+        !rules(&out).contains("SHELL_EXEC"),
+        "an import is not an invocation: {:#?}",
+        out.findings
+    );
+    assert!(
+        out.capabilities.shell_execute.is_empty(),
+        "an uninvoked import is not an observed execution: {:#?}",
+        out.capabilities
+    );
+}
+
+#[test]
 fn a_credential_name_is_not_a_credential() {
     // `SECRET_GENERIC_ASSIGN` claims "a credential-shaped value is assigned to a
     // literal". Naming the environment variable, the field or a placeholder is

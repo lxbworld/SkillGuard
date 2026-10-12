@@ -1110,8 +1110,10 @@ pub fn rule_count() -> usize {
 /// a message (`echo "Install: pip install …"`, `throw '… Install manually: …'`),
 /// which is advice rather than an install. rev 48: a path printed in a message
 /// is not a file write, so `echo "… CLAUDE.md …"` is no longer
-/// `PERSIST_AGENT_CONFIG` or `PERSIST_SHELL_RC`.
-pub const SCAN_LOGIC_REVISION: u32 = 48;
+/// `PERSIST_AGENT_CONFIG` or `PERSIST_SHELL_RC`. rev 49: `SHELL_EXEC` does not
+/// fire on an `import`/`require` of `child_process`, which declares the ability
+/// to spawn rather than spawning.
+pub const SCAN_LOGIC_REVISION: u32 = 49;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};
