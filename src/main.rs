@@ -834,6 +834,9 @@ fn run_import(
                 source: Some(e.source.clone()),
                 repository: None,
                 commit: e.commit.clone(),
+                // A foreign lockfile says nothing about the worktree it was
+                // written from, so there is no claim to carry over.
+                uncommitted: false,
                 content_digest: String::new(),
                 // Not recorded: a foreign lockfile has no per-file inventory.
                 files: vec![],
