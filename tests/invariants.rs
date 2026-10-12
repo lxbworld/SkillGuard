@@ -155,7 +155,14 @@ fn relative_markdown_links_resolve() {
     // A pointer to a moved file is a small lie, and this repository has already
     // been bitten by documentation drifting from the code (the rule reference).
     // Absolute URLs, anchors and code samples are not checked.
-    fn markdown_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    //
+    // Only files this repository *authors* are checked. Walking the tree instead
+    // reads `research/raw/`, the gitignored third-party corpus, whose SKILL.md
+    // files contain relative links that were never ours to fix — which made
+    // this test red on every machine that had collected the corpus and green in
+    // CI, where that directory does not exist. A test that depends on which
+    // machine runs it is worse than no test.
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>, skip_data: bool) {
         let Ok(entries) = std::fs::read_dir(dir) else {
             return;
         };
@@ -163,8 +170,10 @@ fn relative_markdown_links_resolve() {
             let p = e.path();
             let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if p.is_dir() {
-                if name != "target" && name != ".git" {
-                    markdown_files(&p, out);
+                let is_data = matches!(name, "raw" | "lists")
+                    && p.parent().and_then(|q| q.file_name()) == Some("research".as_ref());
+                if name != "target" && name != ".git" && !(skip_data && is_data) {
+                    walk(&p, out, skip_data);
                 }
             } else if p.extension().map(|x| x == "md").unwrap_or(false) {
                 out.push(p);
@@ -173,8 +182,27 @@ fn relative_markdown_links_resolve() {
     }
 
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let mut files = Vec::new();
-    markdown_files(root, &mut files);
+
+    // Preferred: ask git, so the answer is "the files we publish" and there is
+    // no exclusion list to keep in sync as the repository grows.
+    let mut files: Vec<PathBuf> = Vec::new();
+    if let Ok(out) = std::process::Command::new("git")
+        .args(["ls-files", "*.md"])
+        .current_dir(root)
+        .output()
+    {
+        if out.status.success() {
+            files = String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .map(|line| root.join(line))
+                .filter(|p| p.exists())
+                .collect();
+        }
+    }
+    // No git (a source tarball): walk, but skip the data directories by name.
+    if files.is_empty() {
+        walk(root, &mut files, true);
+    }
     files.sort();
 
     let mut broken = Vec::new();
