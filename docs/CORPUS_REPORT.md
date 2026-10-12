@@ -376,3 +376,4 @@ If precision falls short, publish the measured value as an upper bound on true p
 - Static analysis cannot see semantic prompt injection; the miss rate is unknown.
 - A clean scan is not a clean skill. Read the evidence.
 - Registry sources whose operators have not cleared collection are absent from this report, and that absence is stated rather than worked around (protocol §3, R-4).
+- **Two rules are unmeasurable at this collection scale, and their absence from the table is not evidence about the ecosystem.** `RESOURCE_LIMIT_EXCEEDED` trips at 10,000 files, 64 MB or depth 12, while the collector refuses anything over 80 files or 1.5 MB — so the corpus cannot contain a skill that reaches it. `FS_SYMLINK_OUTSIDE` needs a symlink, and the collector fetches file contents from a commit, so the corpus contains none. Both have fixture coverage; neither can be given a prevalence figure here.
