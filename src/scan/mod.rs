@@ -643,6 +643,31 @@ fn is_private_endpoint(matched: &str) -> bool {
     a == 0 || a == 10 || a == 127 || (a == 172 && (16..=31).contains(&b)) || (a == 192 && b == 168)
 }
 
+/// Is the address a documentation placeholder rather than one that is
+/// contacted?
+///
+/// `1.2.3.4` is the canonical example address, and RFC 5737 reserves
+/// `192.0.2.0/24`, `198.51.100.0/24` and `203.0.113.0/24` for documentation.
+/// `DL_UNTRUSTED_DOMAIN` reported a placeholder panel URL
+/// (`export BT_URL="https://1.2.3.4:8888"`) as a contacted raw IP endpoint.
+fn is_documentation_ip(matched: &str) -> bool {
+    let Some(addr) = matched
+        .split(|c: char| !c.is_ascii_digit() && c != '.')
+        .find(|t| t.matches('.').count() == 3)
+    else {
+        return false;
+    };
+    let octets: Vec<u8> = addr.split('.').filter_map(|o| o.parse().ok()).collect();
+    if octets.len() != 4 {
+        return false;
+    }
+    match (octets[0], octets[1], octets[2]) {
+        (1, 2, 3) => octets[3] == 4,
+        (192, 0, 2) | (198, 51, 100) | (203, 0, 113) => true,
+        _ => false,
+    }
+}
+
 fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -> bool {
     let line = raw_line.to_lowercase();
     let m = matched.to_lowercase();
@@ -762,7 +787,7 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         // the scheme (`http://10.0.0.5`) or a command (`curl … 10.0.0.5`);
         // comparing the whole match against `10.` never fired, so every local
         // health check was reported as a low-reputation endpoint (rev 27).
-        "DL_UNTRUSTED_DOMAIN" => is_private_endpoint(&m),
+        "DL_UNTRUSTED_DOMAIN" => is_private_endpoint(&m) || is_documentation_ip(&m),
         // A badge is a static image served by a badge service, not a tracking
         // pixel. They appear in most READMEs.
         "OBFUSC_TRACKING_PIXEL" => {

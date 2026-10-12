@@ -564,7 +564,11 @@ static TABLE: &[RuleSpec] = &[
             r#"(?i)(?:https?|ftps?|wss?|tcp|udp)://[^\s'"`<>]*\b\d{1,3}(?:\.\d{1,3}){3}\b"#,
             r#"(?i)\b(?:host|hostname|endpoint|address|addr|server|proxy|dns|nameserver)\b\s*[:=]\s*["']?\d{1,3}(?:\.\d{1,3}){3}\b"#,
             r"(?i)\b(?:curl|wget|nc|ncat|netcat|telnet|ssh|scp|ping|nslookup|dig)\b[^\n]{0,60}\b\d{1,3}(?:\.\d{1,3}){3}\b",
-            r"(?i)\b[a-z0-9]{20,}\.(?:com|net|org)\b",
+            // A long label under `.com`/`.net`/`.org` (`financialmodelingprep`)
+            // was read as an algorithmically-generated domain. It is neither a
+            // low-reputation TLD nor a raw IP, so it does not match the rule's
+            // own claim, and all six of its corpus findings were real company
+            // names (rev 46).
         ],
         message: "A low-reputation TLD or a raw IP endpoint is contacted",
         capability: Some("network.outbound"),
@@ -1098,8 +1102,12 @@ pub fn rule_count() -> usize {
 /// message and comment name both surviving branches, not just the credential one.
 /// rev 33: the three `MISMATCH_*` ids the declared-vs-observed findings use are
 /// in the catalogue, so `rules`, `docs/RULES.md` and the SARIF driver all carry
-/// them.
-pub const SCAN_LOGIC_REVISION: u32 = 45;
+/// them. rev 46: `DL_UNTRUSTED_DOMAIN` drops its long-label pattern, which read
+/// a real company name (`financialmodelingprep.com`) as a generated domain and
+/// mismatched the rule's own claim, and treats an RFC 5737 / `1.2.3.4`
+/// documentation address as a placeholder rather than an endpoint that is
+/// contacted.
+pub const SCAN_LOGIC_REVISION: u32 = 46;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};
