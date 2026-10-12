@@ -723,6 +723,11 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
             const AMBIGUOUS: &[&str] = &[
                 ".sh", ".app", ".info", ".dev", ".ai", ".io", ".co", ".me", ".so", ".cc", ".to",
                 ".tv", ".gg", ".live", ".site", ".online", ".cloud",
+                // `.Net` is a namespace far more often than a host on these
+                // skills: `New-Object System.Net.HttpListener` and
+                // `[System.Net.HttpWebRequest]::Create(...)` were both reported
+                // as hostname literals. A real `.net` host carries URL context.
+                ".net",
             ];
             let match_at = raw_line.find(matched);
             let url_context = line.contains("://") || line.contains("www.") || line.contains('@');
@@ -1908,6 +1913,39 @@ mod tests {
             vec![4],
             "only the credential-shaped value on line 4 counts: {:#?}",
             out.findings
+        );
+    }
+
+    /// `.Net` is a namespace far more often than a host on these skills.
+    ///
+    /// `New-Object System.Net.HttpListener` and
+    /// `[System.Net.HttpWebRequest]::Create(...)` were both reported as hostname
+    /// literals over the pilot corpus. A real `.net` host carries URL context.
+    #[test]
+    fn a_dotnet_namespace_is_not_a_host() {
+        let d = tmp("dotnet");
+        fs::write(d.join("SKILL.md"), "---\nname: x\ndescription: f\n---\n").unwrap_or_default();
+        fs::create_dir_all(d.join("scripts")).unwrap_or_default();
+        fs::write(
+            d.join("scripts/a.ps1"),
+            "$l = New-Object System.Net.HttpListener\n$r = [System.Net.HttpWebRequest]::Create($E)\n",
+        )
+        .unwrap_or_default();
+        let h = hits(&scan_skill(&d));
+        assert!(
+            !h.contains("NET_DOMAIN_LITERAL"),
+            "a namespace is not a host: {h:?}"
+        );
+
+        fs::write(
+            d.join("scripts/b.sh"),
+            "curl https://collector.telemetry-host.net/x\n",
+        )
+        .unwrap_or_default();
+        let h = hits(&scan_skill(&d));
+        assert!(
+            h.contains("NET_DOMAIN_LITERAL"),
+            "a real host still fires: {h:?}"
         );
     }
 

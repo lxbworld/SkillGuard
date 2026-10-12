@@ -224,7 +224,7 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 |---|---|---|---|
 | `LICENSE_MISSING` | 1148 | 5442 | 21.1% |
 | `SHELL_EXEC` | 422 | 5442 | 7.8% |
-| `NET_DOMAIN_LITERAL` | 383 | 5442 | 7.0% |
+| `NET_DOMAIN_LITERAL` | 382 | 5442 | 7.0% |
 | `PI_DESCRIPTION_MISMATCH` | 222 | 5442 | 4.1% |
 | `NET_FETCH_CALL` | 165 | 5442 | 3.0% |
 | `FS_PATH_ESCAPE` | 141 | 5442 | 2.6% |
@@ -303,7 +303,7 @@ Every headline figure must be reported per stratum (protocol §4.2); without str
 |---|---|---|---|
 | 32k_128k | 720 | 0 | `SHELL_EXEC` 20.8%, `NET_DOMAIN_LITERAL` 19.0%, `LICENSE_MISSING` 14.6%, `PI_DESCRIPTION_MISMATCH` 10.6%, `FS_PATH_ESCAPE` 8.9% |
 | 8k_32k | 1537 | 0 | `LICENSE_MISSING` 24.7%, `SHELL_EXEC` 5.7%, `NET_DOMAIN_LITERAL` 5.1%, `PI_DESCRIPTION_MISMATCH` 3.6%, `FS_PATH_ESCAPE` 2.7% |
-| gt_128k | 306 | 0 | `SHELL_EXEC` 54.2%, `NET_DOMAIN_LITERAL` 46.7%, `PI_DESCRIPTION_MISMATCH` 26.8%, `FS_RECURSIVE_WALK` 24.8%, `NET_FETCH_CALL` 20.9% |
+| gt_128k | 306 | 0 | `SHELL_EXEC` 54.2%, `NET_DOMAIN_LITERAL` 46.4%, `PI_DESCRIPTION_MISMATCH` 26.8%, `FS_RECURSIVE_WALK` 24.8%, `NET_FETCH_CALL` 20.9% |
 | lt_8k | 2879 | 0 | `LICENSE_MISSING` 21.8%, `PARSE_FAILED` 1.0%, `NET_DOMAIN_LITERAL` 0.9%, `SHELL_EXEC` 0.6%, `MISMATCH_OVER_DECLARED` 0.5% |
 ### by `scripts`
 
@@ -312,7 +312,7 @@ Every headline figure must be reported per stratum (protocol §4.2); without str
 | js | 305 | 0 | `NET_DOMAIN_LITERAL` 46.9%, `FS_PATH_ESCAPE` 33.4%, `SHELL_EXEC` 32.5%, `PI_DESCRIPTION_MISMATCH` 26.6%, `NET_FETCH_CALL` 23.6% |
 | none | 4498 | 0 | `LICENSE_MISSING` 22.5%, `PARSE_FAILED` 1.2%, `OBFUSC_TRACKING_PIXEL` 0.4%, `LICENSE_RESTRICTIVE` 0.4%, `PI_CONCEALMENT` 0.4% |
 | other | 5 | 0 | `NET_DOMAIN_LITERAL` 40.0%, `PI_DESCRIPTION_MISMATCH` 40.0%, `FS_HOME_ACCESS` 20.0%, `MISMATCH_UNDER_DECLARED` 20.0%, `NET_DYNAMIC_URL` 20.0% |
-| python | 424 | 0 | `SHELL_EXEC` 51.7%, `NET_DOMAIN_LITERAL` 38.9%, `FS_RECURSIVE_WALK` 19.8%, `LICENSE_MISSING` 18.2%, `PI_DESCRIPTION_MISMATCH` 17.7% |
+| python | 424 | 0 | `SHELL_EXEC` 51.7%, `NET_DOMAIN_LITERAL` 38.7%, `FS_RECURSIVE_WALK` 19.8%, `LICENSE_MISSING` 18.2%, `PI_DESCRIPTION_MISMATCH` 17.7% |
 | shell | 210 | 0 | `SHELL_EXEC` 49.5%, `NET_DOMAIN_LITERAL` 34.3%, `PI_DESCRIPTION_MISMATCH` 27.6%, `NET_HTTP_CLIENT` 23.8%, `LICENSE_MISSING` 23.3% |
 ### by `declared`
 
@@ -324,7 +324,7 @@ Every headline figure must be reported per stratum (protocol §4.2); without str
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| absent | 4797 | 0 | `LICENSE_MISSING` 23.9%, `NET_DOMAIN_LITERAL` 5.8%, `SHELL_EXEC` 5.5%, `PI_DESCRIPTION_MISMATCH` 3.6%, `FS_PATH_ESCAPE` 2.5% |
+| absent | 4797 | 0 | `LICENSE_MISSING` 23.9%, `NET_DOMAIN_LITERAL` 5.7%, `SHELL_EXEC` 5.5%, `PI_DESCRIPTION_MISMATCH` 3.6%, `FS_PATH_ESCAPE` 2.5% |
 | present | 645 | 0 | `SHELL_EXEC` 24.3%, `NET_DOMAIN_LITERAL` 16.6%, `FS_RECURSIVE_WALK` 10.4%, `FS_HOME_ACCESS` 8.7%, `NET_FETCH_CALL` 7.6% |
 
 ## Precision and recall (GOLD)
