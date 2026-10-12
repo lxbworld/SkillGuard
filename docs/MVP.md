@@ -1,65 +1,72 @@
-# SkillGuard — MVP 范围与路线
+# SkillGuard — MVP scope and roadmap
 
-技术栈：Rust（单二进制，离线，零 LLM）。本文件定义交付边界与验收标准。
+Stack: Rust (one binary, offline, zero LLM). This document defines the delivery
+boundaries and the acceptance criteria.
 
-> **实现状态（2026-10-07）。** 本文件的 Phase 编号与仓库后期的编号已经不同步：
-> 本文件的 Phase 1–3 已全部实现；本文件的 Phase 4（`add`/`install`/`update`）按设计
-> 延后（issue #9）；本文件的 Phase 5（CI / SARIF / Action）已实现，仓库里称为 Phase 4。
-> 权威状态以 [README](../README.md#status) 和 issue board 为准。本文件保留为范围与
-> 验收标准的依据。
+> **Implementation status (2026-10-07).** The phase numbers in this document have
+> drifted out of sync with the repository's later numbering: Phases 1–3 here are all
+> implemented; Phase 4 here (`add`/`install`/`update`) is deferred by design (issue
+> #9); Phase 5 here (CI / SARIF / Action) is implemented, and the repository calls it
+> Phase 4. The authoritative status is [README](../README.md#status) and the issue
+> board. This document is kept as the basis for scope and acceptance criteria.
 
 ---
 
-## 1. 命名决策（待定，先用 `skillguard`）
+## 1. The naming decision (open; `skillguard` for now)
 
-调研发现 **arXiv 2606.03024 "SkillGuard: A Permission Framework for Agent Skills"**
-以及 **2605.10990 "Skill Drift Is Contract Violation"** 中的同名系统。
+Research turned up systems with the same name: **arXiv 2606.03024 "SkillGuard: A
+Permission Framework for Agent Skills"** and **2605.10990 "Skill Drift Is Contract
+Violation"**.
 
-| 方案 | 优点 | 缺点 |
+| Option | Advantage | Disadvantage |
 |---|---|---|
-| **A. 保留 `skillguard`**（当前） | GitHub 地址已建、仓库名已定 | 与论文同名，需在 README 主动声明关系 |
-| B. 改名 `skilltrust` / `sgt` | 无冲突 | 需重建仓库，且 `SkillGuard` 一词更贴切 |
+| **A. Keep `skillguard`** (current) | The GitHub URL exists and the repository name is settled | Shares a name with a paper, so the README must state the relationship |
+| B. Rename to `skilltrust` / `sgt` | No conflict | Requires recreating the repository, and `SkillGuard` is the more fitting word |
 
-**建议：保留 A**，README 首段明确「本项目 ≠ arXiv 2606.03024 论文的官方实现，
-我们实现其 permission manifest 思想的 pre-install、纯静态版本」。
-这是信誉加分而非减分。**命名在 Phase 2 开始前最终确认。**
+**Recommendation: keep A**, and state in the README's first paragraph that "this
+project is ≠ the official implementation of the arXiv 2606.03024 paper; we implement
+the pre-install, purely static version of its permission-manifest idea". That is a
+credibility gain, not a loss. **The name is finalised before Phase 2 begins.**
 
-CLI 二进制名：`skillguard`。
-
----
-
-## 2. 范围决策：与调研结论对齐
-
-原需求 §20 的 Phase 划分基本合理，但调研后做两处调整：
-
-**调整 1：Phase 3（provenance/lockfile）提前与 Phase 2 合并的诱因**
-`skil-lock` 已经占了 capability lockfile。我们的 lockfile 必须**一开始就设计成含
-`declared_permissions` + `mismatches`**，否则后期无法重构。因此 lockfile 的**schema**
-在 Phase 2 定义，**provenance 采集**（git 元数据）可留在 Phase 3。
-
-**调整 2：Phase 1 加入 declared 字段的读取**
-frontmatter 里的 `permissions`（或 `skillguard.permissions`）从 Phase 1 就解析并保留，
-只是 Phase 1 不做 diff。这样 fixtures 可以从第一天起就带声明。
+CLI binary name: `skillguard`.
 
 ---
 
-## 3. Phase 1 — Scanner（第一个可交付）
+## 2. Scope decisions: aligning with the research findings
 
-### 交付物
+The phase split in requirements §20 is basically sound, but research led to two
+adjustments:
+
+**Adjustment 1: why Phase 3 (provenance/lockfile) is merged forward into Phase 2**
+`skil-lock` already occupies the capability-lockfile space. Our lockfile must be
+**designed from the start to contain `declared_permissions` + `mismatches`**,
+otherwise it cannot be refactored later. So the lockfile **schema** is defined in
+Phase 2, and **provenance collection** (git metadata) can stay in Phase 3.
+
+**Adjustment 2: Phase 1 reads the declared field**
+The `permissions` in frontmatter (or `skillguard.permissions`) is parsed and
+preserved from Phase 1 onward; Phase 1 just does not diff it. That way fixtures can
+carry declarations from day one.
+
+---
+
+## 3. Phase 1 — Scanner (the first deliverable)
+
+### Deliverables
 `skillguard scan <path>...` + `inspect` + `rules`
-- SKILL.md frontmatter 解析（含 `permissions` 声明字段）
-- 目录安全遍历
-- 归一化管线（NFKC / 零宽 / base64 影子文本 / 同形字标记）
-- 规则集：secrets / shell / network / filesystem / download(链) / injection(启发式) / obfuscation
-- 输出：text / json / sarif
-- 退出码：`--fail-on <SEVERITY>` 控制
-- 风险等级：INFO / LOW / MEDIUM / HIGH / CRITICAL
-- 每个 finding 必须有 `file` + `line` + `evidence`（不变量 S3）
+- SKILL.md frontmatter parsing (including the `permissions` declaration field)
+- Safe directory traversal
+- The normalization pipeline (NFKC / zero-width / base64 shadow text / homoglyph marking)
+- Rule sets: secrets / shell / network / filesystem / download (chains) / injection (heuristics) / obfuscation
+- Output: text / json / sarif
+- Exit codes: controlled by `--fail-on <SEVERITY>`
+- Severities: INFO / LOW / MEDIUM / HIGH / CRITICAL
+- Every finding must carry `file` + `line` + `evidence` (invariant S3)
 
-### 规则 ID 清单（Phase 1 必须全部实现）
+### The rule ID list (all of these must be implemented in Phase 1)
 ```
-SECRET_PRIVATE_KEY, SECRET_AWS_AK, SECRET_GITHUB_PAT, SECRET_GENERIC_ASSIGN,
-SECRET_JWT, SECRET_PATH_READ, SECRET_ENV_DUMP, SECRET_EXFIL_CHAIN,
+SECRET_PRIVATE_KEY, SECRET_AWS_ACCESS_KEY, SECRET_GITHUB_TOKEN, SECRET_GENERIC_ASSIGN,
+SECRET_JWT, SECRET_PATH_READ, SECRET_ENV_DUMP,
 SHELL_EXEC, SHELL_PRIVILEGE_ESCALATION, SHELL_DESTRUCTIVE, SHELL_EVAL,
 NET_HTTP_CLIENT, NET_FETCH_CALL, NET_DOMAIN_LITERAL, NET_DYNAMIC_URL,
 FS_SENSITIVE_PATH, FS_ABSOLUTE_PATH, FS_HOME_ACCESS, FS_RECURSIVE_WALK,
@@ -74,130 +81,151 @@ DEP_TYPOSQUAT, DEP_CUSTOM_REGISTRY, DEP_UNPINNED_SCRIPT,
 LICENSE_MISSING, LICENSE_MISMATCH
 ```
 
-### 验收标准
-1. `tests/fixtures/malicious/` 下**每一个** fixture 至少命中一条预期规则；
-   测试中显式列出 `expected_rules`，断言**命中集合包含**它（不要求完全相等）。
-2. `tests/fixtures/safe/` 下**零 finding**（severity ≥ LOW）。
-3. `tests/fixtures/obfuscated/` 下命中与 `malicious/` 同款内容一致的规则集。
-4. `tests/fixtures/edge_cases/`（空文件、10 MB 单行、symlink 环、二进制、NUL 字节、
-   巨量小文件）**不 panic**，退出码 ∈ {0, 1}。
-5. 扫描全程无网络访问（测试环境禁用网络可跑通）。
-6. `scan --format sarif` 通过 `sarif-validator` schema 校验。
-7. 单个 200 KB SKILL.md 扫描耗时 < 100 ms（release 构建，4 核）。
+### Acceptance criteria
+1. **Every** fixture under `tests/fixtures/malicious/` trips at least one expected
+   rule; the test lists `expected_rules` explicitly and asserts that the hit set
+   **contains** it (equality is not required).
+2. **Zero findings** (severity ≥ LOW) under `tests/fixtures/safe/`.
+3. Fixtures under `tests/fixtures/obfuscated/` trip the same rules as the equivalent
+   content under `malicious/`.
+4. `tests/fixtures/edge_cases/` (empty file, 10 MB single line, symlink loop, binary,
+   NUL bytes, a huge number of tiny files) **do not panic**, and the exit code is in
+   {0, 1}.
+5. No network access during a scan (the suite passes with networking disabled).
+6. `scan --format sarif` passes `sarif-validator` schema validation.
+7. A single 200 KB SKILL.md scans in < 100 ms (release build, 4 cores).
 
 ---
 
-## 4. Phase 2 — Capability / Permissions / Policy（差异化核心）
+## 4. Phase 2 — Capability / Permissions / Policy (the differentiation core)
 
-### 交付物
+### Deliverables
 `skillguard inspect` / `diff` / `policy check` / `approve`
-- `CapabilitySet`（observed）推导
-- `PermissionDecl`（declared）解析 + 归一化
-- **`declared_vs_observed()` 差分**：三类结果
-  - `over_declared`：声明了但未观察到（不阻断，提示冗余）
-  - `under_declared`：观察到但未声明（**阻断**，HIGH）
-  - `conflicting`：声明互相矛盾（阻断）
-- Policy 引擎（`SKILLGUARD.policy.yaml`）+ 四态决策
-- 规则级 `ignore` 与全局 `exclude`
+- Deriving the `CapabilitySet` (observed)
+- Parsing and normalizing `PermissionDecl` (declared)
+- The **`declared_vs_observed()` diff**: three outcomes
+  - `over_declared`: declared but never observed (does not block; flags redundancy)
+  - `under_declared`: observed but not declared (**blocks**, HIGH)
+  - `conflicting`: declarations contradict each other (blocks)
+- The policy engine (`SKILLGUARD.policy.yaml`) with four-state decisions
+- Per-rule `ignore` and global `exclude`
 
-### 差分的确定性与误报
-关键设计：**只对「不可从文档解释」的观察值算 under_declared**。
-- shell 命令：`git` / `ls` 出现在示例里通常不是能力声明问题 → 只在脚本文件中观测并计入
-- URL：文档中的链接属于「说明性引用」，只有脚本/代码中的 URL 计入 observed network
-- 文件路径：同理，只有代码中的路径计入
+### Determinism and false positives in the diff
+The key design point: **only count an observation as `under_declared` when it cannot
+be explained as documentation.**
+- Shell commands: `git` / `ls` appearing in an example is usually not a capability
+  claim → they are only observed and counted in script files
+- URLs: a link in the documentation is an explanatory reference; only URLs inside
+  scripts/code count as observed network
+- File paths: likewise, only paths in code count
 
-这条规则让 under_declared 的 precision 达到可用水平。**Phase 2 第一周就要建
-precision 测试集**（至少 30 个真实 skill 手工标注），达不到 0.8 则回退到「只报不阻断」。
+This rule is what brings `under_declared` precision to a usable level. **A precision
+test set must exist in the first week of Phase 2** (at least 30 real skills,
+hand-labelled); below 0.8, it falls back to "report but do not block".
 
-### 验收标准
-1. `diff` 对 30 个真实 skill 的 under_declared precision ≥ 0.8，recall ≥ 0.5。
-2. `policy check` 在 `network.allow: false` 时对任意含出网能力的 skill 返回 `Deny`。
-3. `deny` 时文件系统快照零变化（不变量 S2，有断言测试）。
-4. 策略文件含非法字段/类型时输出明确错误而非静默忽略。
+### Acceptance criteria
+1. `diff` reaches `under_declared` precision ≥ 0.8 and recall ≥ 0.5 over 30 real skills.
+2. `policy check` returns `Deny` for any skill with outbound capability when
+   `network.allow: false`.
+3. On `deny`, the filesystem snapshot is unchanged (invariant S2, with an assertion test).
+4. An illegal field or type in the policy file produces a clear error rather than
+   being silently ignored.
 
 ---
 
 ## 5. Phase 3 — Hash / Provenance / Verify
 
-### 交付物
+### Deliverables
 `skillguard hash` / `verify` / `lock` / `import`
-- `sgdir-v1` 目录摘要（架构 §6）
-- git provenance 采集（拒绝短 SHA / tag / branch）
-- SPDX license 识别与表达式校验
-- `SKILLGUARD.lock` v1 schema
-- `import skills-lock.json`（互操作，见调研 §2.5）
+- The `sgdir-v1` directory digest (architecture §6)
+- git provenance collection (short SHAs / tags / branches rejected)
+- SPDX license identification and expression validation
+- The `SKILLGUARD.lock` v1 schema
+- `import skills-lock.json` (interoperability, see research §2.5)
 
-### 验收标准
-1. 同一目录两次计算 digest 一致；改 1 字节必变（跨 3 个平台 CI 验证）。
-2. `verify` 能检出：commit 不匹配、digest 不匹配、lock 被手改。
-3. `import skills-lock.json` 保留 `computedHash` 为 `legacy_digest`。导入条目**没有** `sgdir-v1` 摘要，所以 `verify` 明确报告「无内容摘要，需重跑 `lock`」，而不是拿外来哈希与本工具摘要比较（`legacy_digest` 的算法未知，比较只会产生假的不匹配）。
-4. tag / branch 形式的版本输入被拒绝并给出提示。
+### Acceptance criteria
+1. The same directory digested twice is identical; a 1-byte change must change it
+   (verified in CI on 3 platforms).
+2. `verify` detects: a commit mismatch, a digest mismatch, and a hand-edited lockfile.
+3. `import skills-lock.json` preserves `computedHash` as `legacy_digest`. An imported
+   entry has **no** `sgdir-v1` digest, so `verify` explicitly reports "no content
+   digest, re-run `lock`" rather than comparing a foreign hash against this tool's
+   digest (the `legacy_digest` algorithm is unknown, so comparing the two could only
+   produce a false mismatch).
+4. A tag or branch as a version input is rejected with an explanation.
 
 ---
 
 ## 6. Phase 4 — add / install / update
 
-### 交付物
-- source spec：`github:owner/repo[/path]`、`git+https://`、`path:`（本地）
-- `add` 编排：解析 → 扫描 → diff → policy → (阻断 | 审批) → 写锁 → 安装
-- agent 目录注册表（架构 §2 `agents.rs`，唯一真源）
-- `install` 严格按锁文件（内容不一致即失败，不静默重装）
-- `update` 重新走全流程；digest 变化 → **旧审批自动失效**
+### Deliverables
+- Source specs: `github:owner/repo[/path]`, `git+https://`, `path:` (local)
+- The `add` orchestration: resolve → scan → diff → policy → (block | approve) → write
+  lock → install
+- The agent directory registry (architecture §2 `agents.rs`, the single source of truth)
+- `install` strictly from the lockfile (a content mismatch fails; it never silently
+  reinstalls)
+- `update` runs the whole flow again; a digest change → **the old approval lapses
+  automatically**
 
-### 验收标准
-1. `add` 一个 CRITICAL skill 被阻断，且 agent 目录零写入。
-2. `approve` 后再 `install` 成功，`SKILLGUARD.lock` 含审批人/时间/依据 digest。
-3. 锁文件 digest 与磁盘不符时 `install` 失败退出码 2。
-4. `update` 导致 digest 变化时，未重新审批则拒绝安装。
+### Acceptance criteria
+1. `add` on a CRITICAL skill is blocked and nothing is written into the agent directory.
+2. After `approve`, `install` succeeds and `SKILLGUARD.lock` carries the approver, the
+   timestamp and the basis digest.
+3. When the lockfile digest disagrees with disk, `install` fails with exit code 2.
+4. When `update` changes the digest, installation is refused unless re-approved.
 
 ---
 
 ## 7. Phase 5 — CI / SARIF / Action
 
-- `skillguard/action@v1`：读 SARIF 上传 Code Scanning
-- `--fail-on`、`--format markdown` 输出 PR 评论
-- 规则目录文档化（`skillguard rules --markdown`）
-- 需要时可与 `skil-lock` 的 approvals 文件共存（我们输出建议片段，不强制）
+- `skillguard/action@v1`: reads SARIF and uploads to Code Scanning
+- `--fail-on` and `--format markdown` produce a PR comment
+- The rule catalogue is documented (`skillguard rules --markdown`)
+- Where needed it can coexist with `skil-lock`'s approvals file (we emit a suggested
+  snippet, we do not force it)
 
 ---
 
-## 8. 延后 / 不做
+## 8. Deferred / out of scope
 
-| 项 | 理由 |
+| Item | Reason |
 |---|---|
-| Registry / search / publish | 需求 §6 明确禁止；也是我们不与人竞争的地方 |
-| LLM 语义分析 | 需求 §3 禁止作为核心。可作未来可选层 |
-| Runtime sandbox / 强制执行 | 属 arXiv SkillGuard / AgentBound 领域 |
-| tree-sitter 跨语句数据流 | Phase 1 用 window join；precision 不足时再引入 |
-| 多语言依赖漏洞库对接 | Phase 1 只做仿冒/registry 检测，真实漏洞库走 OSV（Phase 5+） |
-| 遥测 / 云端 | 需求 §4 local-first |
+| Registry / search / publish | Requirements §6 forbids it; it is also where we are not competing |
+| LLM semantic analysis | Requirements §3 forbids it as a core. Possible as a future optional layer |
+| Runtime sandbox / enforcement | The territory of the arXiv SkillGuard / AgentBound |
+| tree-sitter cross-statement dataflow | Phase 1 uses a window join; introduced only if precision is insufficient |
+| Multi-language vulnerability database integration | Phase 1 only detects impersonation/registry issues; a real vulnerability DB goes through OSV (Phase 5+) |
+| Telemetry / cloud | Requirements §4, local-first |
 
 ---
 
-## 9. 风险登记
+## 9. Risk register
 
-| 风险 | 概率 | 影响 | 缓解 |
+| Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| under_declared 误报率过高 | 中 | 阻断用户正常安装 | 只对代码文件计数；先「只报不阻断」积累数据再开阻断 |
-| skil-lock 抢先做 declared-vs-observed | 中 | 差异化削弱 | 先发 `SKILLGUARD.lock` spec（CC BY），像 skil-lock 一样占规范位 |
-| 与 arXiv SkillGuard 撞名致误解 | 已发生 | 中 | README 首段声明互补关系 + 引用 |
-| 规则集被绕过（对抗混淆） | 高 | 中 | 归一化管线 + 对抗 fixture 持续补充；坦诚「不能完备」 |
-| 单人/单模型开发速度 | 中 | 中 | 每条规则独立可加；fixtures 驱动开发 |
-| Rust 正则/解析的边界 bug | 中 | 高 | clippy `-D warnings`、`cargo deny`、不变量断言测试 |
+| `under_declared` false-positive rate too high | Medium | Blocks users' normal installs | Count only in code files; "report but do not block" first to accumulate data before enabling blocking |
+| `skil-lock` gets to declared-vs-observed first | Medium | Weakens the differentiation | Publish the `SKILLGUARD.lock` spec first (CC BY), taking the specification slot as `skil-lock` did |
+| Confusion from the shared name with the arXiv SkillGuard | Already happened | Medium | State the complementary relationship and cite it in the README's first paragraph |
+| The rule set is bypassed (adversarial obfuscation) | High | Medium | The normalization pipeline plus continually added adversarial fixtures; openly state "cannot be complete" |
+| Development speed of one person / one model | Medium | Medium | Each rule is independently addable; fixtures drive development |
+| Boundary bugs in Rust regex/parsing | Medium | High | clippy `-D warnings`, `cargo deny`, invariant assertion tests |
 
 ---
 
-## 10. 里程碑
+## 10. Milestones
 
-| 阶段 | 内容 | 出口条件 |
+| Stage | Content | Exit condition |
 |---|---|---|
-| M1 | Phase 1 全部 | §3 的 7 条验收标准全过 |
-| M2 | Phase 2 全部 | §4 的 4 条验收标准全过 |
-| M3 | Phase 3 全部 | §5 的 4 条验收标准全过 |
-| M4 | Phase 4 全部 | §6 的 4 条验收标准全过 |
-| M5 | Phase 5 全部 | Action 可在示例仓库跑出 Code Scanning 结果 |
+| M1 | All of Phase 1 | All 7 acceptance criteria in §3 pass |
+| M2 | All of Phase 2 | All 4 acceptance criteria in §4 pass |
+| M3 | All of Phase 3 | All 4 acceptance criteria in §5 pass |
+| M4 | All of Phase 4 | All 4 acceptance criteria in §6 pass |
+| M5 | All of Phase 5 | The Action produces Code Scanning results in an example repository |
 
-**MVP 成功判定**（对应需求 §23）：`skillguard add <suspicious-skill>` 能在安装前
-稳定报出全部 7 类风险（凭据访问 / shell 执行 / 文件系统 / 网络 / 可疑下载 / 提示注入 / 危险依赖），
-`policy check` 能阻断违规 skill，`verify` 能确认 source+commit+hash 三元绑定，
-`install` 能基于锁文件完成可复现安装。
+**MVP success test** (per requirements §23): `skillguard add <suspicious-skill>`
+reliably reports all 7 risk classes before installation (credential access / shell
+execution / filesystem / network / suspicious download / prompt injection / dangerous
+dependencies); `policy check` blocks a violating skill; `verify` confirms the
+source+commit+hash triple binding; and `install` completes a reproducible install from
+the lockfile.
