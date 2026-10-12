@@ -1075,7 +1075,7 @@ pub fn rule_count() -> usize {
 /// rev 33: the three `MISMATCH_*` ids the declared-vs-observed findings use are
 /// in the catalogue, so `rules`, `docs/RULES.md` and the SARIF driver all carry
 /// them.
-pub const SCAN_LOGIC_REVISION: u32 = 34;
+pub const SCAN_LOGIC_REVISION: u32 = 35;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

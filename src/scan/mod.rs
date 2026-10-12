@@ -108,6 +108,11 @@ pub fn scan_walked(name: &str, walked: Walked) -> ScanOutcome {
     let mut description = None;
     let mut license_declared = None;
     let mut license_file_found = false;
+    // A frontmatter block that did not parse tells us nothing about what was
+    // declared, so no rule may report on the declaration. Measured: 63 real
+    // skills carried both `PARSE_FAILED` and `LICENSE_MISSING`, and "no license
+    // is declared" was a claim we could not support.
+    let mut frontmatter_unparsed = false;
     let mut declared_permissions_raw = None;
     let mut frontmatter_map: BTreeMap<String, String> = BTreeMap::new();
     let mut frontmatter_yaml: Option<serde_yaml::Value> = None;
@@ -142,6 +147,7 @@ pub fn scan_walked(name: &str, walked: Walked) -> ScanOutcome {
                     Err(e) => {
                         // Not fatal. Record it, because a skill whose
                         // declaration cannot be parsed cannot be validated.
+                        frontmatter_unparsed = true;
                         findings.push(Finding::new(
                             RuleId::from("PARSE_FAILED"),
                             Severity::Info,
@@ -219,6 +225,7 @@ pub fn scan_walked(name: &str, walked: Walked) -> ScanOutcome {
         license_declared.as_deref(),
         license_file_found,
         walked.repo_license.as_deref(),
+        frontmatter_unparsed,
         &walked,
         &mut findings,
     );
@@ -1326,6 +1333,7 @@ fn check_license(
     declared: Option<&str>,
     file_found: bool,
     repo_license: Option<&str>,
+    frontmatter_unparsed: bool,
     walked: &Walked,
     out: &mut Vec<Finding>,
 ) {
@@ -1334,7 +1342,12 @@ fn check_license(
         // A skill inside a repository with a root license is covered by it, so
         // this is not a missing license. Measured: 19 of 30 sampled real skills
         // flagged here had a repo-root LICENSE.
-        (None, false) if repo_license.is_none() => out.push(Finding::new(
+        //
+        // A frontmatter block we could not parse is not a missing declaration
+        // either: the claim "no license is declared" needs to have read the
+        // declaration, and we could not. `PARSE_FAILED` already reports the real
+        // problem; adding a second finding states something we do not know.
+        (None, false) if repo_license.is_none() && !frontmatter_unparsed => out.push(Finding::new(
             RuleId::from("LICENSE_MISSING"),
             Severity::Info,
             Confidence::High,
@@ -2133,6 +2146,26 @@ mod tests {
         .unwrap_or_default();
         fs::write(d2.join("LICENSE"), "Apache License Version 2.0\n").unwrap_or_default();
         assert!(hits(&scan_skill(&d2)).contains("LICENSE_MISMATCH"));
+    }
+
+    /// A declaration we could not read is not a declaration that is absent.
+    ///
+    /// Measured over the pilot corpus: 63 real skills carried both
+    /// `PARSE_FAILED` and `LICENSE_MISSING`. The second finding asserts "no
+    /// license is declared" while the first one says the declaration could not
+    /// be read, so one of them has to go — and it is not the one reporting the
+    /// actual parse failure.
+    #[test]
+    fn an_unparsable_frontmatter_is_not_a_missing_license() {
+        let d = tmp("lic-unparsed");
+        fs::write(
+            d.join("SKILL.md"),
+            "---\nname: x\ndescription: [unterminated\n---\n",
+        )
+        .unwrap_or_default();
+        let rules = hits(&scan_skill(&d));
+        assert!(rules.contains("PARSE_FAILED"), "{rules:?}");
+        assert!(!rules.contains("LICENSE_MISSING"), "{rules:?}");
     }
 
     #[test]
