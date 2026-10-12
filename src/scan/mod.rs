@@ -812,7 +812,32 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         "SECRET_PATH_READ" => looks_like_test(&line) || doc_in_docs,
         // `printenv` with no argument dumps every variable; `printenv HOME`
         // reads one by key (rev 30).
-        "SECRET_ENV_DUMP" => m == "printenv" && !crate::capability::printenv_dumps(raw_line),
+        // `printenv` alone prints everything; `printenv HOME` reads one key, and
+        // the message is about enumeration (rev 30).
+        //
+        // The `env = os.environ` pattern cannot see from one line which of the
+        // two things it is looking at, and measured over 5,442 skills, 44 of this
+        // rule's 52 findings were what the message already excludes:
+        //
+        //   env = os.environ.copy()     29 findings. How a subprocess is spawned;
+        //                               the child inherits the same environment by
+        //                               default, so nothing is exposed that was
+        //                               not already.
+        //   env = process.env.NAME      15 findings, all keyed reads. The `\b`
+        //                               after `process.env` matches the dot, so
+        //                               `process.env.NAME` slipped through a
+        //                               pattern whose own test asserts it must
+        //                               not.
+        "SECRET_ENV_DUMP" => {
+            let after = raw_line
+                .find(matched)
+                .map(|i| raw_line[i + matched.len()..].trim_start())
+                .unwrap_or("");
+            (m == "printenv" && !crate::capability::printenv_dumps(raw_line))
+                || line.contains(".copy()")
+                || after.starts_with('.')
+                || after.starts_with('[')
+        }
         // `.env.example` and friends are templates the repository commits *on
         // purpose*, because they hold no secrets. The pattern matches up to
         // `.env`, so the suffix is read from the line (rev 28).
@@ -2160,6 +2185,26 @@ mod tests {
         assert!(is_private_endpoint("0.0.0.0"));
         assert!(!is_private_endpoint("http://8.8.8.8"));
         assert!(!is_private_endpoint("http://172.15.0.1"));
+    }
+
+    /// `env = os.environ.copy()` spawns a process; `env = process.env.NAME`
+    /// reads one key.
+    ///
+    /// Measured over the pilot corpus: 44 of this rule's 52 findings were one of
+    /// those two, and neither exposes anything the message is about. The bare
+    /// handoff, which the rule is for, still fires.
+    #[test]
+    fn an_environment_handoff_is_not_a_dump() {
+        let s = |line: &str, m: &str| suppress_match("SECRET_ENV_DUMP", line, m, true);
+        assert!(s("env = os.environ.copy()", "env = os.environ"));
+        assert!(s(
+            "const env = process.env.MOONSHINE_FEEDBACK",
+            "env = process.env"
+        ));
+        assert!(s("env = os.environ['HOME']", "env = os.environ"));
+        assert!(!s("env = process.env", "env = process.env"));
+        assert!(!s("env = os.environ", "env = os.environ"));
+        assert!(!s("printenv", "printenv"));
     }
 
     /// GOLD-v4: a test assertion about a dangerous pattern is not the pattern.

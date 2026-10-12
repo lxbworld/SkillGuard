@@ -145,8 +145,10 @@ static TABLE: &[RuleSpec] = &[
             r"(?i)\bObject\.(?:keys|entries|assign|values)\s*\(\s*process\.env\b",
             r"(?i)\bJSON\.stringify\s*\(\s*process\.env\b",
             r"(?i)\bfor\s+[^\n:]{0,40}\bin\s+process\.env\b",
-            // Handing the whole environment to a child process leaks it just
-            // as effectively as printing it.
+            // Handing the whole environment to a child process is worth a look,
+            // but this line-local pattern cannot see whether the child is local
+            // or remote, and it has to be told about the two cases that are
+            // neither. Both are measured; see `suppress_match`.
             r"(?i)\benv\s*=\s*(?:os\.environ|process\.env)\b",
             r"(?i)\b(?:print|puts|console\.log)\s*\(\s*(?:os\.environ|process\.env)\s*\)",
             r"\benv\s*\|\s*(?:tee|sort|cat|grep|egrep|less|more)\b",
@@ -1086,7 +1088,7 @@ pub fn rule_count() -> usize {
 /// rev 33: the three `MISMATCH_*` ids the declared-vs-observed findings use are
 /// in the catalogue, so `rules`, `docs/RULES.md` and the SARIF driver all carry
 /// them.
-pub const SCAN_LOGIC_REVISION: u32 = 39;
+pub const SCAN_LOGIC_REVISION: u32 = 40;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

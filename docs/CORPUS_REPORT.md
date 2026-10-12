@@ -235,7 +235,6 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | `PARSE_FAILED` | 71 | 5442 | 1.3% |
 | `NET_HTTP_CLIENT` | 54 | 5442 | 1.0% |
 | `LICENSE_RESTRICTIVE` | 52 | 5442 | 1.0% |
-| `SECRET_ENV_DUMP` | 49 | 5442 | 0.9% |
 | `OBFUSC_TRACKING_PIXEL` | 33 | 5442 | 0.6% |
 | `PI_CONCEALMENT` | 29 | 5442 | 0.5% |
 | `NET_DYNAMIC_URL` | 24 | 5442 | 0.4% |
@@ -246,6 +245,7 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | `SHELL_EVAL` | 15 | 5442 | 0.3% |
 | `SHELL_PRIVILEGE_ESCALATION` | 14 | 5442 | 0.3% |
 | `PI_INJECTION_OVERRIDE` | 10 | 5442 | 0.2% |
+| `SECRET_ENV_DUMP` | 10 | 5442 | 0.2% |
 | `DL_UNTRUSTED_DOMAIN` | 9 | 5442 | 0.2% |
 | `PI_EXFIL_INSTRUCTION` | 7 | 5442 | 0.1% |
 | `DEP_CUSTOM_REGISTRY` | 6 | 5442 | 0.1% |
@@ -361,7 +361,6 @@ Gate G4: precision >= 0.85 and recall >= 0.60, per rule (no micro-average).
 | `PI_EXFIL_INSTRUCTION` | 0 | 2 | 0 | 0.0% | n/a | below |
 | `PI_INJECTION_OVERRIDE` | 0 | 2 | 0 | 0.0% | n/a | below |
 | `PI_SYSTEM_IMPERSATION` | 1 | 4 | 0 | 20.0% | 100.0% | below |
-| `SECRET_ENV_DUMP` | 4 | 1 | 0 | 80.0% | 100.0% | below |
 | `SECRET_GENERIC_ASSIGN` | 1 | 0 | 0 | 100.0% | 100.0% | pass |
 | `SECRET_PATH_READ` | 5 | 3 | 0 | 62.5% | 100.0% | below |
 | `SECRET_PROVIDER_TOKEN` | 2 | 4 | 0 | 33.3% | 100.0% | below |
