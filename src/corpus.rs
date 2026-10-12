@@ -375,6 +375,15 @@ pub struct CorpusStats {
     /// H6: scanned skills where the declaration status was recorded.
     pub declared_known: usize,
     pub overall: Vec<RulePrevalence>,
+    /// Prevalence of the `MISMATCH_*` rules among the skills that declare any
+    /// permission.
+    ///
+    /// A diff can only exist where a declaration exists, so dividing these by
+    /// every scanned skill understates them by the declaration rate. Measured on
+    /// the pilot: `MISMATCH_UNDER_DECLARED` is 1.5% of all skills and 21.2% of
+    /// the skills that declare — the same finding, and only one of those two
+    /// numbers describes the product.
+    pub diff_among_declarers: Vec<RulePrevalence>,
     pub groups: Vec<GroupStats>,
 }
 
@@ -408,6 +417,18 @@ pub fn stats(records: &[ScanRecord], dimensions: &[&str]) -> CorpusStats {
     let overall = prevalence_for(&scanned);
     let declared_known = scanned.iter().filter(|r| r.declared.is_some()).count();
     let declared_skills = scanned.iter().filter(|r| r.declared == Some(true)).count();
+
+    // The diff rules are conditional on a declaration, so their honest
+    // denominator is the declaring skills.
+    let declarers: Vec<&ScanRecord> = scanned
+        .iter()
+        .copied()
+        .filter(|r| r.declared == Some(true))
+        .collect();
+    let diff_among_declarers: Vec<RulePrevalence> = prevalence_for(&declarers)
+        .into_iter()
+        .filter(|r| r.rule.starts_with("MISMATCH_"))
+        .collect();
 
     // `layer` is its own field; the rest live in the stratum map.
     type Selector = Box<dyn Fn(&ScanRecord) -> Option<String>>;
@@ -464,6 +485,7 @@ pub fn stats(records: &[ScanRecord], dimensions: &[&str]) -> CorpusStats {
         declared_skills,
         declared_known,
         overall,
+        diff_among_declarers,
         groups,
     }
 }
@@ -817,6 +839,49 @@ pub fn report_markdown(
                 "rejected at this sample"
             }
         ));
+    }
+
+    o.push_str("## Declared vs observed, among skills that declare\n\n");
+    o.push_str(
+        "A `MISMATCH_*` finding is only possible where something was declared, so its \
+         prevalence over every scanned skill is divided by the declaration rate. With a \
+         declaration rate of a few percent that understates it by more than an order of \
+         magnitude. The denominator below is the skills that declare any permission, \
+         which is the population the product can actually say anything about.\n\n",
+    );
+    if stats.declared_skills == 0 || stats.diff_among_declarers.is_empty() {
+        o.push_str("No declaring skill produced a mismatch, so this is unmeasured here.\n\n");
+    } else {
+        o.push_str("| rule | hits | n (declarers) | prevalence |\n|---|---|---|---|\n");
+        for r in &stats.diff_among_declarers {
+            o.push_str(&format!(
+                "| `{}` | {} | {} | {:.1}% |\n",
+                r.rule,
+                r.hits,
+                r.n,
+                r.prevalence() * 100.0
+            ));
+        }
+        o.push('\n');
+        // A rule that never fires is not automatically a bug, but a reader
+        // cannot tell the difference, so say which it is.
+        for expected in [
+            "MISMATCH_CONFLICTING",
+            "MISMATCH_OVER_DECLARED",
+            "MISMATCH_UNDER_DECLARED",
+        ] {
+            if !stats
+                .diff_among_declarers
+                .iter()
+                .any(|r| r.rule == expected)
+            {
+                o.push_str(&format!(
+                    "`{expected}` fired on no declaring skill in this corpus. That is a \
+                     statement about the corpus, not evidence the rule is dead: it has unit \
+                     tests, and its population is smaller than the declaration rate suggests.\n\n"
+                ));
+            }
+        }
     }
 
     o.push_str("## Stratified prevalence\n\n");
@@ -1205,6 +1270,56 @@ mod tests {
         assert!(md.contains("| declaration rate | 50.0% |"), "{md}");
         // 50% >= the 20% null, so the report must say the thesis is in trouble.
         assert!(md.contains("not rejected"), "{md}");
+    }
+
+    /// A diff rule's denominator is the skills that declare, not every skill.
+    ///
+    /// With a declaration rate of a few percent the two differ by an order of
+    /// magnitude, and reporting the smaller number makes the product look like
+    /// it has nothing to say when it is the one number it exists to produce.
+    #[test]
+    fn diff_prevalence_is_reported_against_the_declarers() {
+        let mut declarer = record("a", "L3", &["MISMATCH_UNDER_DECLARED"]);
+        declarer.declared = Some(true);
+        let mut quiet = record("b", "L3", &[]);
+        quiet.declared = Some(true);
+        // Four undeclared skills: the overall rate is 1/6, the declarer rate 1/2.
+        let silent: Vec<ScanRecord> = (0..4)
+            .map(|i| {
+                let mut r = record(&format!("s{i}"), "L3", &[]);
+                r.declared = Some(false);
+                r
+            })
+            .collect();
+
+        let mut all = vec![declarer, quiet];
+        all.extend(silent);
+        let s = stats(&all, &["layer"]);
+
+        let overall = s
+            .overall
+            .iter()
+            .find(|r| r.rule == "MISMATCH_UNDER_DECLARED")
+            .expect("overall row");
+        assert_eq!((overall.hits, overall.n), (1, 6));
+
+        let among = s
+            .diff_among_declarers
+            .iter()
+            .find(|r| r.rule == "MISMATCH_UNDER_DECLARED")
+            .expect("declarer row");
+        assert_eq!((among.hits, among.n), (1, 2));
+        assert!((among.prevalence() - 0.5).abs() < 1e-9);
+
+        let md = report_markdown(&s, "0.1.0", &[]);
+        assert!(
+            md.contains("## Declared vs observed, among skills that declare"),
+            "{md}"
+        );
+        assert!(
+            md.contains("| `MISMATCH_UNDER_DECLARED` | 1 | 2 | 50.0% |"),
+            "{md}"
+        );
     }
 
     #[test]

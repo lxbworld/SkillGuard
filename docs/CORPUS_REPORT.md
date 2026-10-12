@@ -279,6 +279,17 @@ H6: *almost no skill declares its permissions.* This is the number the whole pro
 | declaration rate | 7.1% |
 | H6 null (>= 20%) | rejected at this sample |
 
+## Declared vs observed, among skills that declare
+
+A `MISMATCH_*` finding is only possible where something was declared, so its prevalence over every scanned skill is divided by the declaration rate. With a declaration rate of a few percent that understates it by more than an order of magnitude. The denominator below is the skills that declare any permission, which is the population the product can actually say anything about.
+
+| rule | hits | n (declarers) | prevalence |
+|---|---|---|---|
+| `MISMATCH_UNDER_DECLARED` | 81 | 386 | 21.0% |
+| `MISMATCH_OVER_DECLARED` | 22 | 386 | 5.7% |
+
+`MISMATCH_CONFLICTING` fired on no declaring skill in this corpus. That is a statement about the corpus, not evidence the rule is dead: it has unit tests, and its population is smaller than the declaration rate suggests.
+
 ## Stratified prevalence
 
 Every headline figure must be reported per stratum (protocol §4.2); without stratification the result is dominated by one category.
