@@ -817,10 +817,14 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         // purpose*, because they hold no secrets. The pattern matches up to
         // `.env`, so the suffix is read from the line (rev 28).
         "FS_SENSITIVE_PATH" => is_env_template_suffix(&line, &m),
-        // The canonical AWS documentation key is not a credential — but only
-        // where it is documentation. A `config.sh` that assigns it is a real
-        // hardcoded credential, and the fixture that says so was failing.
-        "SECRET_AWS_ACCESS_KEY" => m.contains("akiaiosfodnn7example") && doc_in_docs,
+        // The canonical AWS documentation key is not a credential *anywhere*.
+        // GOLD-v5 found it in a doc table; the pilot corpus then found the same
+        // string in a security tool's own allowlist, in its comments, and in a
+        // regex that matches it. It is AWS's own placeholder, so reporting it
+        // claims a credential exists when none does. The fixture that used it
+        // now uses a realistic-looking value instead: a test that asserts
+        // "this placeholder is a hardcoded key" is asserting something false.
+        "SECRET_AWS_ACCESS_KEY" => m.contains("akiaiosfodnn7example"),
         // A credential-shaped *value* is the claim, so the literal has to look
         // like a value and not like the *name* of one. GOLD-v5 measured this
         // rule at 12.5% precision; the names and placeholders below are the
@@ -1013,10 +1017,18 @@ fn looks_like_secret_value(value: &str) -> bool {
     if NAMES.iter().any(|w| flat.ends_with(w)) {
         return false;
     }
-    // A placeholder the operator is expected to replace. `example` is
-    // deliberately not a marker: `tests/fixtures/malicious/hardcoded-keys`
-    // assigns the canonical AWS example key in a `config.sh`, and
-    // `research/GOLD.md` records that only *documentation* may skip it.
+    // A placeholder the operator is expected to replace.
+    //
+    // `example` is *not* a marker here, and neither is the canonical AWS key: a
+    // literal spelling `AKIAIOSFODNN7EXAMPLE` is caught by the
+    // `SECRET_AWS_ACCESS_KEY` exemption before this runs. Measured over the
+    // pilot corpus, all 7 of that rule's findings were AWS's own placeholder, in
+    // a security tool's allowlist, in comments about it, and in a regex that
+    // matches it — never a key. Reversing the earlier decision recorded in
+    // `research/GOLD.md` (rev 19), which kept it firing so that a `config.sh`
+    // assignment counted; the fixture now uses a realistic key instead, because
+    // asserting "this documented placeholder is a hardcoded credential" asserts
+    // something false.
     const PLACEHOLDERS: &[&str] = &[
         "placeholder",
         "changeme",
@@ -1035,8 +1047,33 @@ fn looks_like_secret_value(value: &str) -> bool {
         "goes_here",
     ];
     let lower = value.to_ascii_lowercase();
-    !PLACEHOLDERS.iter().any(|p| lower.contains(p))
+    if PLACEHOLDERS.iter().any(|p| lower.contains(p)) {
+        return false;
+    }
+    // A credential *value* is long and carries digits. Google API keys are 39
+    // characters, GitHub tokens 40, AWS secret keys 40, Slack `xoxb-` at least
+    // 24 — every format this tool knows. Measured over the pilot corpus, of 44
+    // findings 33 were shorter than 20 characters (`nextPageToken: "next-123"`,
+    // `pageToken: "prev-page"`, `same-origin`), 4 were paths
+    // (`../../../assets/design-tokens.css`, where the *filename* carries
+    // "tokens") and 3 were regular expressions or environment names. The name on
+    // the left is matched by the pattern; this is the check that the right side
+    // is a value and not another name.
+    if value.len() < MIN_CREDENTIAL_LEN
+        || !value.chars().any(|c| c.is_ascii_digit())
+        || !value.chars().any(|c| c.is_ascii_alphabetic())
+    {
+        return false;
+    }
+    true
 }
+
+/// Shortest string that can be a credential value.
+///
+/// The shortest real format in the wild is a Slack `xoxb-` token, and the
+/// shortest in this tool's own fixtures is 30 characters. Everything measured
+/// as a false positive was under 20.
+const MIN_CREDENTIAL_LEN: usize = 20;
 
 /// Does the match look like an encoded payload rather than a path or an
 /// identifier?
@@ -1800,6 +1837,39 @@ mod tests {
         assert!(
             h.contains("SECRET_PRIVATE_KEY"),
             "a real block is a key: {h:?}"
+        );
+    }
+
+    /// A name containing "token" is not a token.
+    ///
+    /// Measured over the pilot corpus: 40 of 44 `SECRET_GENERIC_ASSIGN` findings
+    /// were an ordinary identifier, a placeholder, a regular expression, or a
+    /// path whose *filename* contains the keyword. A HIGH rule at 9% precision
+    /// is noise, and noise is what teaches people to skip the output.
+    #[test]
+    fn a_credential_shaped_value_is_required() {
+        let d = tmp("generic-assign");
+        fs::write(d.join("SKILL.md"), "---\nname: x\ndescription: d\n---\n").unwrap_or_default();
+        fs::write(
+            d.join("a.py"),
+            "nextPageToken = \"next-123\"\n\
+             pageToken = \"prev-page\"\n\
+             tokens_rel_path = \"../../../assets/design-tokens.css\"\n\
+             BEARER_TOKEN = \"AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs\"\n",
+        )
+        .unwrap_or_default();
+        let out = scan_skill(&d);
+        let hits_n: Vec<usize> = out
+            .findings
+            .iter()
+            .filter(|f| f.rule.as_str() == "SECRET_GENERIC_ASSIGN")
+            .map(|f| f.primary_line())
+            .collect();
+        assert_eq!(
+            hits_n,
+            vec![4],
+            "only the credential-shaped value on line 4 counts: {:#?}",
+            out.findings
         );
     }
 

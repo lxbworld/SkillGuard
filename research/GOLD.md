@@ -633,3 +633,48 @@ Two predicates, chosen per rule, plus the file kind:
 
 The lesson is not "run the tests". It is that **a truncated command is a silent
 one**: `| head -3` turned a red suite into a green report.
+
+---
+
+## The corpus overruled a GOLD-era decision (rev 19 → 38)
+
+`SECRET_AWS_ACCESS_KEY` skipping `AKIAIOSFODNN7EXAMPLE` was decided in rev 19
+from a GOLD-v5 sample, and recorded at the top of this file as *"right for the doc
+table it was added for and wrong for a `config.sh` that assigns it"*. The pilot
+corpus then measured the question properly, and the sample had misled us.
+
+All **7** of the rule's findings across 5,442 skills are that same string, and
+none is a key:
+
+| where | what it is |
+|---|---|
+| `SECRET_DOC_ALLOWLIST = re.compile(r"AKIAIOSFODNN7EXAMPLE")` | a security tool's own allowlist |
+| `AWS canonical doc fake (AKIAIOSFODNN7EXAMPLE) allowlisted.` | a comment about it |
+| `truncated doc placeholders (sk-..., AKIAIOSFODNN7EXAMPLE) pass.` | a comment about it |
+
+It is AWS's published placeholder. Reporting it says "an AWS access key id is
+hardcoded" about a string AWS prints in its own documentation. So the exemption
+is now unconditional, and the fixture that asserted otherwise now carries a
+realistic key — because *"this documented placeholder is a credential"* is a
+false thing for a test to assert.
+
+The general lesson, which is the same one as `FS_RECURSIVE_WALK`: **a GOLD sample
+can confirm a rule and still be too small to justify an exemption's scope.** A
+sample showed a doc table; the corpus showed the string is never a key anywhere.
+
+### And the value check `SECRET_GENERIC_ASSIGN` never had
+
+The rule claims "a credential-shaped value is assigned to a literal". It had a
+check that the literal is not the *name* of a credential (`SECRET_NAME =
+"MY_SERVICE_SECRET"`), and none that it is not simply an ordinary identifier.
+Measured: **44 findings, of which 33 were under 20 characters**
+(`nextPageToken: "next-123"`, `pageToken: "prev-page"`, `same-origin`), **4 were
+paths** (`../../../assets/design-tokens.css`, where the *filename* carries
+"tokens"), and 3 were regular expressions or environment names.
+
+A value is now also required to be at least 20 characters and to carry both a
+letter and a digit. Every real format this tool knows passes — Google API keys
+39, GitHub 40, AWS secret keys 40, Slack `xoxb-` 24+ — and every measured false
+positive fails.
+
+    SECRET_GENERIC_ASSIGN   44 -> 4, with every other SECRET_* count unchanged
