@@ -59,6 +59,16 @@ enum Command {
         /// Print the rule catalogue instead of scanning.
         #[arg(long)]
         list_rules: bool,
+
+        /// Do not treat a LICENSE at the enclosing git repository's root as
+        /// covering this skill.
+        ///
+        /// Inheriting is right for a skill vendored in your own repository, and
+        /// wrong for a mirror of somebody else's skills that happens to sit
+        /// inside one — then every skill silently reports the *host* repo's
+        /// licence. `corpus scan` always behaves as if this flag were set.
+        #[arg(long)]
+        no_inherit_license: bool,
     },
 
     /// Report observed capabilities and dependencies. Makes no judgement.
@@ -333,7 +343,16 @@ fn main() -> ExitCode {
             format,
             fail_on,
             list_rules,
-        } => run_scan(paths, *format, fail_on, *list_rules, &cli, color),
+            no_inherit_license,
+        } => run_scan(
+            paths,
+            *format,
+            fail_on,
+            *list_rules,
+            !*no_inherit_license,
+            &cli,
+            color,
+        ),
         Command::Inspect {
             paths,
             format,
@@ -851,7 +870,7 @@ fn run_import(
 }
 
 fn run_diff(paths: &[PathBuf], strict: bool, cli: &Cli) -> Result<i32, String> {
-    let outcomes = scan_all(paths)?;
+    let outcomes = scan_all(paths, true)?;
     let mut o = String::from("\n  SkillGuard diff - declared permissions vs observed behaviour\n");
     let mut blocking_total = 0usize;
 
@@ -1015,13 +1034,13 @@ fn resolve_targets(paths: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
     Ok(out)
 }
 
-fn scan_all(paths: &[PathBuf]) -> Result<Vec<ScanOutcome>, String> {
+fn scan_all(paths: &[PathBuf], inherit_repo_license: bool) -> Result<Vec<ScanOutcome>, String> {
     let targets = resolve_targets(paths)?;
     let mut out = Vec::with_capacity(targets.len());
     for t in targets {
         // A single unreadable skill must not abort the whole run; it becomes a
         // report with a note. Phase 0 depends on this.
-        out.push(scan::scan_skill(&t));
+        out.push(scan::scan_skill_with(&t, inherit_repo_license));
     }
     Ok(out)
 }
@@ -1066,6 +1085,7 @@ fn run_scan(
     format: Format,
     fail_on: &str,
     list_rules: bool,
+    inherit_repo_license: bool,
     cli: &Cli,
     color: bool,
 ) -> Result<i32, String> {
@@ -1079,7 +1099,7 @@ fn run_scan(
         )
     })?;
 
-    let outcomes = scan_all(paths)?;
+    let outcomes = scan_all(paths, inherit_repo_license)?;
     // Rule-level suppression is applied here, once, so every output format
     // agrees about what is in the report.
     let mut reports = Vec::with_capacity(outcomes.len());
@@ -1108,7 +1128,7 @@ fn run_scan(
 }
 
 fn run_inspect(paths: &[PathBuf], format: Format, cli: &Cli, _color: bool) -> Result<i32, String> {
-    let outcomes = scan_all(paths)?;
+    let outcomes = scan_all(paths, true)?;
     let report = Report::new(outcomes.iter().map(SkillReport::from_outcome).collect());
 
     // `inspect` used to accept every `--format` and print the text view for all

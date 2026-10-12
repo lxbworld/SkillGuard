@@ -688,3 +688,43 @@ fn corpus_agreement_computes_kappa_and_gates_it() {
     assert_eq!(out.status.code(), Some(2), "stdout={}", stdout(&out));
     assert!(stdout(&out).contains("FAIL"), "{}", stdout(&out));
 }
+
+/// A skill inside a repository inherits that repository's licence — unless the
+/// caller opts out.
+///
+/// This is the corpus-mirror hazard. A mirror of somebody else's skills usually
+/// sits inside *our* repository, so without the flag every mirrored skill
+/// silently reports SkillGuard's own Apache-2.0 as covering it, and the tool
+/// says nothing about a licence that is not there. `corpus scan` always behaves
+/// as if the flag were set; this is how a human says the same thing.
+#[test]
+fn a_mirrored_skill_does_not_inherit_the_enclosing_licence() {
+    // Under the checkout on purpose: `git rev-parse --show-toplevel` must find
+    // SkillGuard and its root LICENSE for the test to mean anything.
+    let d = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("target")
+        .join(format!("sg-cli-inherit-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    write(
+        &d,
+        "SKILL.md",
+        "---\nname: mirrored\ndescription: A mirrored skill.\n---\n\n# Mirrored\n",
+    );
+    let path = d.to_str().unwrap().to_owned();
+
+    let inherited = run(&["scan", &path, "--format", "json"]);
+    assert!(
+        !stdout(&inherited).contains("LICENSE_MISSING"),
+        "the enclosing repository's licence should be inherited by default: {}",
+        stdout(&inherited)
+    );
+
+    let isolated = run(&["scan", &path, "--no-inherit-license", "--format", "json"]);
+    assert!(
+        stdout(&isolated).contains("LICENSE_MISSING"),
+        "--no-inherit-license must report the licence that is not there: {}",
+        stdout(&isolated)
+    );
+
+    let _ = std::fs::remove_dir_all(&d);
+}
