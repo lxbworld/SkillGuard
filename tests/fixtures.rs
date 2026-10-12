@@ -169,6 +169,43 @@ fn a_chmod_of_a_local_tmp_file_is_not_a_remote_install() {
 }
 
 #[test]
+fn an_install_command_in_a_message_is_not_an_install() {
+    // `DL_REMOTE_INSTALL` fired on `echo "… Install: pip install git+… && chmod
+    // +x …"` and on `throw '… Install manually: pip install git+…'`. Both print
+    // advice for a human; the skill installs nothing. GOLD-v5 rated both false
+    // positives and the bare command in a SKILL.md a true positive.
+    let out = scan_fixture("safe", "quoted-install-advice");
+    assert!(
+        !rules(&out).contains("DL_REMOTE_INSTALL"),
+        "a quoted install suggestion is not an install: {:#?}",
+        out.findings
+    );
+    assert!(
+        out.capabilities.package_install.is_empty(),
+        "printed advice is not an observed install: {:#?}",
+        out.capabilities
+    );
+    let noisy: Vec<String> = out
+        .findings
+        .iter()
+        .filter(|f| f.severity >= Severity::Medium)
+        .map(|f| f.rule.as_str().to_owned())
+        .collect();
+    assert!(
+        noisy.is_empty(),
+        "quoted-install-advice should be quiet: {noisy:?}"
+    );
+}
+
+#[test]
+fn an_unquoted_install_command_is_still_caught() {
+    // The string-literal exclusion must not blind the rule to an instruction
+    // the agent is meant to run.
+    let out = scan_fixture("suspicious", "remote-install");
+    assert_trips(&out, &["DL_REMOTE_INSTALL"]);
+}
+
+#[test]
 fn a_project_settings_file_is_not_agent_config() {
     // `PERSIST_AGENT_CONFIG` claims "the skill writes agent configuration". A
     // skill's own project-local `settings.json` is not agent configuration, and

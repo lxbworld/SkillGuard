@@ -839,6 +839,13 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         | "NET_FETCH_CALL" | "PERSIST_CRON" => {
             looks_like_test(&line) || looks_like_usage(&line) || command_in_docs
         }
+        // A remote-install command quoted inside a message is advice, not an
+        // install: `echo "⚠️ yt-dlp not found. Install: pip install … && chmod
+        // +x …"` and `throw 'Missing required CLI tool: … Install manually:
+        // pip install git+https://…'` both fired. GOLD-v5 rated both false
+        // positives and the bare command in a SKILL.md a true positive, which
+        // is exactly the string-versus-instruction line `command_in_docs` draws.
+        "DL_REMOTE_INSTALL" => command_in_docs,
         // A read of a sensitive path is a path claim, not a command one.
         "SECRET_PATH_READ" => looks_like_test(&line) || doc_in_docs,
         // `printenv` with no argument dumps every variable; `printenv HOME`

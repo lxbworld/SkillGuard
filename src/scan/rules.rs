@@ -1106,8 +1106,10 @@ pub fn rule_count() -> usize {
 /// a real company name (`financialmodelingprep.com`) as a generated domain and
 /// mismatched the rule's own claim, and treats an RFC 5737 / `1.2.3.4`
 /// documentation address as a placeholder rather than an endpoint that is
-/// contacted.
-pub const SCAN_LOGIC_REVISION: u32 = 46;
+/// contacted. rev 47: `DL_REMOTE_INSTALL` ignores an install command quoted in
+/// a message (`echo "Install: pip install …"`, `throw '… Install manually: …'`),
+/// which is advice rather than an install.
+pub const SCAN_LOGIC_REVISION: u32 = 47;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};
