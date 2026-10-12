@@ -850,6 +850,19 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         // now uses a realistic-looking value instead: a test that asserts
         // "this placeholder is a hardcoded key" is asserting something false.
         "SECRET_AWS_ACCESS_KEY" => m.contains("akiaiosfodnn7example"),
+        // A provider token that is a documented placeholder is not a token.
+        // Measured over the pilot corpus, most of this rule's documentation
+        // findings are:
+        //
+        //   xoxb-XXXXXXXXX-XXXXXXXXX-XXXXXXXXXXXXXXXXXXXXXXXX
+        //   SLACK_BOT_TOKEN=xoxb-your-token-here
+        //   glpat-XXXXXXXXXXXXXXXXXXXX
+        //   xoxb-paste-your-token-here
+        //
+        // The check is the one `SECRET_GENERIC_ASSIGN` already uses rather than a
+        // third one: a real token is long and carries letters and digits, and
+        // not one of these carries a digit at all.
+        "SECRET_PROVIDER_TOKEN" => !looks_like_secret_value(&m),
         // A credential-shaped *value* is the claim, so the literal has to look
         // like a value and not like the *name* of one. GOLD-v5 measured this
         // rule at 12.5% precision; the names and placeholders below are the
@@ -2205,6 +2218,26 @@ mod tests {
         assert!(!s("env = process.env", "env = process.env"));
         assert!(!s("env = os.environ", "env = os.environ"));
         assert!(!s("printenv", "printenv"));
+    }
+
+    /// A documented placeholder is not a provider token.
+    ///
+    /// Measured over the pilot corpus, most of this rule's documentation findings
+    /// were `xoxb-XXXX…`, `xoxb-your-token-here` and `glpat-XXXX…`. A real token
+    /// carries digits; none of these does.
+    #[test]
+    fn a_provider_token_placeholder_is_not_a_token() {
+        let s = |m: &str| suppress_match("SECRET_PROVIDER_TOKEN", m, m, true);
+        assert!(s("xoxb-XXXXXXXXX-XXXXXXXXX-XXXXXXXXXXXXXXXXXXXXXXXX"));
+        assert!(s("xoxb-your-token-here"));
+        assert!(s("glpat-XXXXXXXXXXXXXXXXXXXX"));
+        // A real one still fires. Deliberately *not* `xoxb-`-shaped: a literal
+        // that looks like a live Slack token is refused by GitHub's own push
+        // protection, which is the correct behaviour for the string and an
+        // awkward one for a test. The check is about length and character
+        // classes, so a generic value tests exactly the same thing.
+        assert!(!s("deadbeef0123456789abcdef0123456789ab"));
+        assert!(!s("AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"));
     }
 
     /// GOLD-v4: a test assertion about a dangerous pattern is not the pattern.
