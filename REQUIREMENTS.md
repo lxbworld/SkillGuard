@@ -1,33 +1,33 @@
 # Agent Skill Package Security / Supply Chain
 
-## 1. 项目目标
+## 1. Project goal
 
-设计并实现一个面向 AI Agent Skills 的开源 Package Security / Supply Chain 工具。
+Design and implement an open-source package security / supply-chain tool for AI Agent Skills.
 
-核心定位：
+The core positioning:
 
-> **Agent Skills 的 npm + npm audit + package-lock + supply-chain security。**
+> **The npm + npm audit + package-lock + supply-chain security of Agent Skills.**
 
-不要把项目定位成：
+Do not position the project as:
 
-* 又一个 Skill Registry
-* 又一个 Skill Directory
-* 又一个简单 Skill Linter
-* 又一个 Snyk Agent Scan clone
+* Yet another Skill Registry
+* Yet another Skill Directory
+* Yet another simple Skill Linter
+* Yet another Snyk Agent Scan clone
 
-目标是建立 Agent Skill 的：
+The goal is to build Agent Skills'
 
 **Package → Verify → Scan → Policy → Trust → Lock → Install**
 
-完整链路。
+complete chain.
 
 ---
 
-# 2. 为什么做这个方向
+# 2. Why this direction
 
-Agent Skills 正在快速形成类似软件包生态的分发模式。
+Agent Skills are rapidly forming a distribution model like that of a software package ecosystem.
 
-一个 Skill 本质上已经越来越接近：
+A Skill is essentially becoming:
 
 ```text
 SKILL.md
@@ -38,9 +38,9 @@ SKILL.md
 + permissions
 ```
 
-它不是单纯的 Markdown。
+It is not merely Markdown.
 
-Skill 可能影响：
+A Skill can affect:
 
 * filesystem
 * shell
@@ -52,9 +52,9 @@ Skill 可能影响：
 * external downloads
 * agent instructions
 
-因此它天然存在 Software Supply Chain 风险。
+So it inherently carries software supply-chain risk.
 
-当前已经出现：
+What already exists:
 
 * Snyk Agent Scan
 * SkillMD
@@ -62,11 +62,11 @@ Skill 可能影响：
 * skil
 * skillpm
 * skills.sh
-* 各种 Skill Registry
+* Various Skill registries
 
-但这些项目的能力仍然比较分散。
+But these projects' capabilities are still fairly scattered.
 
-我们的目标不是重新做一个 Registry，而是把：
+Our goal is not to build another registry, but to combine:
 
 ```text
 Package Management
@@ -82,21 +82,21 @@ Policy
 Lockfile
 ```
 
-组合成一个统一的 Agent Skill Trust Layer。
+into one unified Agent Skill trust layer.
 
 ---
 
-# 3. 最重要的成本约束
+# 3. The most important cost constraint
 
-这是本项目非常重要的设计原则。
+This is a very important design principle for the project.
 
-## 开发阶段
+## Development phase
 
-默认只使用：
+By default use only:
 
 > DeepSeek
 
-不要设计需要：
+Do not design anything that needs:
 
 * GPT
 * Claude
@@ -104,21 +104,21 @@ Lockfile
 * Qwen
 * DeepSeek
 
-多模型同时参与开发或测试的工作流。
+a workflow in which several models take part in development or testing at the same time.
 
-Coding Agent 应该能够使用单一模型完成主要开发。
+The Coding Agent should be able to complete the main development with a single model.
 
 ---
 
-## 产品运行阶段
+## Product runtime phase
 
-核心功能：
+Core functionality:
 
-> **禁止依赖 LLM。**
+> **Depending on an LLM is forbidden.**
 
-所有核心安全判断优先使用 deterministic/static analysis。
+Every core security judgement prefers deterministic/static analysis.
 
-例如：
+For example:
 
 * Tree-sitter
 * AST
@@ -134,9 +134,9 @@ Coding Agent 应该能够使用单一模型完成主要开发。
 * filesystem path analysis
 * shell command analysis
 
-LLM 只允许作为未来的 Optional Semantic Analyzer。
+An LLM is allowed only as a future Optional Semantic Analyzer.
 
-即：
+That is:
 
 ```text
                 Agent Trust
@@ -153,27 +153,27 @@ LLM 只允许作为未来的 Optional Semantic Analyzer。
  Permissions
 ```
 
-MVP 不需要 AI。
+The MVP does not need AI.
 
 ---
 
-# 4. 产品核心概念
+# 4. Core product concepts
 
-建议暂定项目名称：
+A provisional project name:
 
 ```text
 agentpkg
 ```
 
-或者：
+or:
 
 ```text
 agent-trust
 ```
 
-最终名称暂时不要急着决定。
+Do not rush the final name.
 
-核心命令类似：
+The core command is something like:
 
 ```bash
 agentpkg scan ./my-skill
@@ -195,15 +195,15 @@ agentpkg policy check
 
 ---
 
-# 5. 核心用户流程
+# 5. The core user flow
 
-目标体验：
+The target experience:
 
 ```bash
 agentpkg add github:user/financial-analysis
 ```
 
-系统执行：
+The system performs:
 
 ```text
 Resolving skill...
@@ -245,13 +245,13 @@ Policy
 Installation blocked.
 ```
 
-用户可以：
+The user can:
 
 ```bash
 agentpkg approve
 ```
 
-然后：
+Then:
 
 ```text
 Skill installed.
@@ -274,33 +274,33 @@ Lockfile updated.
 
 ---
 
-# 6. MVP 不做什么
+# 6. What the MVP does not do
 
-非常重要。
+This is very important.
 
-第一阶段禁止扩大范围。
+The first phase must not expand its scope.
 
-不要做：
+Do not do:
 
 * Web Registry
 * SaaS Dashboard
-* 多模型 Benchmark
+* Multi-model benchmarks
 * Agent Eval
 * Agent Runtime
 * Autonomous Security Agent
-* 企业级 MDM
-* 大规模云端扫描平台
-* 自己训练模型
+* Enterprise MDM
+* A large-scale cloud scanning platform
+* Training your own model
 * LLM-based security judgement
-* MCP 全生态扫描
+* Scanning the whole MCP ecosystem
 
-尤其不要一开始做：
+In particular, do not start with:
 
 ```text
 skills.sh clone
 ```
 
-也不要一开始做：
+Nor start with:
 
 ```text
 Snyk clone
@@ -308,19 +308,19 @@ Snyk clone
 
 ---
 
-# 7. MVP 第一阶段
+# 7. The MVP's first phase
 
-第一阶段只做：
+The first phase does only:
 
 ## A. Skill Parser
 
-输入：
+Input:
 
 ```text
 SKILL.md
 ```
 
-以及：
+and:
 
 ```text
 scripts/
@@ -328,7 +328,7 @@ references/
 assets/
 ```
 
-解析：
+Parsing:
 
 * name
 * description
@@ -344,9 +344,9 @@ assets/
 
 ## B. Capability Detection
 
-检测 Skill 具有什么能力。
+Detect what capabilities a Skill has.
 
-例如：
+For example:
 
 ```yaml
 capabilities:
@@ -369,15 +369,15 @@ capabilities:
     pip: false
 ```
 
-重点：
+The key point:
 
-**Capability detection 必须 deterministic。**
+**Capability detection must be deterministic.**
 
 ---
 
 # 8. Security Scanner
 
-MVP 至少检测：
+The MVP detects at least:
 
 ### Secrets
 
@@ -392,7 +392,7 @@ MVP 至少检测：
 
 ### Shell
 
-例如：
+For example:
 
 ```text
 curl
@@ -408,9 +408,9 @@ python -c
 node -e
 ```
 
-不要简单地看到命令就判定 malicious。
+Do not simply see a command and call it malicious.
 
-输出应该是：
+The output should be:
 
 ```text
 Risk:
@@ -423,15 +423,15 @@ Command:
 curl ...
 ```
 
-即：
+That is:
 
-> 给证据，而不是简单给 verdict。
+> Give evidence, not just a verdict.
 
 ---
 
 ### Network
 
-检测：
+Detect:
 
 * HTTP/HTTPS
 * curl
@@ -446,7 +446,7 @@ curl ...
 
 ### Filesystem
 
-检测：
+Detect:
 
 ```text
 ~/.ssh
@@ -459,7 +459,7 @@ tokens
 private keys
 ```
 
-以及：
+and:
 
 * absolute paths
 * home directory access
@@ -469,7 +469,7 @@ private keys
 
 ### Downloads
 
-检测：
+Detect:
 
 ```text
 curl URL | sh
@@ -479,21 +479,21 @@ download archive
 install binary
 ```
 
-尤其关注：
+Pay particular attention to:
 
 ```text
 download → execute
 ```
 
-这样的 chain。
+chains like this.
 
 ---
 
 ### Prompt Injection
 
-MVP 只做 deterministic heuristic。
+The MVP does only deterministic heuristics.
 
-例如检测：
+For example, detect:
 
 ```text
 ignore previous instructions
@@ -507,26 +507,26 @@ API key
 environment variables
 ```
 
-以及：
+and:
 
 * base64
 * Unicode obfuscation
 * hidden text
 * suspicious instruction patterns
 
-不要试图让 LLM 判断“这是不是 prompt injection”。
+Do not try to make an LLM decide "is this prompt injection".
 
 ---
 
 # 9. Risk Model
 
-不要简单：
+Do not simply:
 
 ```text
 safe / unsafe
 ```
 
-建议输出：
+The recommended output:
 
 ```text
 Risk Level:
@@ -537,7 +537,7 @@ HIGH
 CRITICAL
 ```
 
-每个 finding：
+Every finding:
 
 ```json
 {
@@ -555,9 +555,9 @@ CRITICAL
 
 # 10. Capability Manifest
 
-这是项目非常重要的潜在差异化方向。
+This is a very important potential differentiator for the project.
 
-允许 Skill 声明：
+Let a Skill declare:
 
 ```yaml
 permissions:
@@ -578,7 +578,7 @@ permissions:
     access: false
 ```
 
-然后 Scanner 得到：
+Then the scanner obtains:
 
 ```text
 DECLARED
@@ -586,7 +586,7 @@ vs
 OBSERVED
 ```
 
-例如：
+For example:
 
 ```text
 Declared:
@@ -607,19 +607,19 @@ Unexpected network destination:
 evil.example.com
 ```
 
-这比单纯：
+Compare this with merely reporting:
 
 ```text
-"这个 Skill 有 network access"
+"this Skill has network access"
 ```
 
-更有价值。
+which is all a bare flag can give you.
 
 ---
 
 # 11. Policy Engine
 
-允许用户定义：
+Let the user define:
 
 ```yaml
 policy:
@@ -638,13 +638,13 @@ policy:
       - "./data/**"
 ```
 
-执行：
+Perform:
 
 ```bash
 agentpkg policy check ./skill
 ```
 
-输出：
+Output:
 
 ```text
 Policy violation:
@@ -660,7 +660,7 @@ Installation blocked.
 
 # 12. Provenance
 
-每个 Skill 都应该记录：
+Every Skill should record:
 
 ```text
 source
@@ -673,7 +673,7 @@ sha256
 timestamp
 ```
 
-例如：
+For example:
 
 ```yaml
 provenance:
@@ -684,11 +684,11 @@ provenance:
   license: MIT
 ```
 
-核心原则：
+The core principle:
 
-> 不要只信 repository URL。
+> Do not trust the repository URL alone.
 
-必须绑定：
+It must be bound to:
 
 ```text
 source
@@ -702,13 +702,13 @@ content hash
 
 # 13. Lockfile
 
-设计：
+Design:
 
 ```text
 agentpkg.lock
 ```
 
-例如：
+For example:
 
 ```yaml
 skills:
@@ -727,31 +727,31 @@ skills:
       - python:pandas
 ```
 
-以后：
+Later:
 
 ```bash
 agentpkg install
 ```
 
-必须按照 lockfile 安装。
+Installation must follow the lockfile.
 
-目标：
+The goal:
 
-> 同一个项目在不同机器上安装同一个 Skill，得到相同内容。
+> Installing the same Skill for the same project on different machines yields identical content.
 
 ---
 
 # 14. Trust Score
 
-可以做：
+It can do:
 
 ```text
 Agent Trust Score
 ```
 
-但不要把它作为唯一 verdict。
+But do not make it the only verdict.
 
-例如：
+For example:
 
 ```text
 Security       82
@@ -764,13 +764,13 @@ License        100
 Overall         82
 ```
 
-同时必须展示：
+At the same time it must show:
 
 ```text
 WHY
 ```
 
-而不是只显示：
+rather than showing only:
 
 ```text
 82/100
@@ -780,56 +780,56 @@ WHY
 
 # 15. CI/CD
 
-后续支持：
+Later it supports:
 
 ```yaml
 GitHub Action
 ```
 
-例如：
+For example:
 
 ```text
 agentpkg scan
 agentpkg policy check
 ```
 
-失败：
+Failure:
 
 ```text
 exit 1
 ```
 
-输出：
+Output:
 
 * JSON
 * Markdown
 * SARIF
 
-这样可以进入 GitHub Security / Code Scanning。
+That is how it reaches GitHub Security / Code Scanning.
 
 ---
 
-# 16. 与竞品的关系
+# 16. Relationship to competitors
 
-目前主要竞品/参考对象：
+The main competitors / reference points today:
 
 ### Snyk Agent Scan
 
-强项：
+Strengths:
 
 * Agent/MCP/Skill security
 * enterprise
 * threat research
-* 自动发现
-* 风险分析
+* Automatic discovery
+* Risk analysis
 
-不要正面复制。
+Do not copy them head-on.
 
-我们的区别：
+Our difference:
 
 > Developer-first package/supply-chain workflow
 
-即：
+That is:
 
 ```text
 install
@@ -839,7 +839,7 @@ install
 → lock
 ```
 
-而不是：
+rather than:
 
 ```text
 discover machine
@@ -851,22 +851,22 @@ discover machine
 
 ### SkillMD
 
-已经覆盖：
+Already covers:
 
 * Skill registry
 * lint
 * capability detection
 * security scan integration
 
-其 capability scan 强调 deterministic、不依赖模型调用。
+Its capability scan emphasises deterministic, no model calls.
 
-所以不要只做：
+So do not stop at:
 
 ```text
 skill lint
 ```
 
-必须进一步做到：
+It must go further, to:
 
 ```text
 package
@@ -884,7 +884,7 @@ installation
 
 ### SkillPreflight
 
-已经提供：
+Already provides:
 
 * pre-install scan
 * security
@@ -895,11 +895,11 @@ installation
 * GitHub Action
 * policy
 
-而且明确强调不执行被扫描 Skill。
+And it explicitly states that it does not execute the scanned Skill.
 
-因此不要简单复制 scorecard。
+So do not simply copy the scorecard.
 
-我们的重点应该是：
+Our focus should be:
 
 > package lifecycle + integrity + lockfile + policy enforcement
 
@@ -907,22 +907,22 @@ installation
 
 ### skills.sh
 
-强项：
+Strengths:
 
 * discovery
 * installation
 * ecosystem
 * leaderboard
 
-不要做它的 clone。
+Do not build a clone of it.
 
-我们可以把它当成未来 registry source，而不是竞争核心。
+We can treat it as a future registry source, not as the core we compete with.
 
 ---
 
-# 17. 真正想建立的产品模型
+# 17. The product model we actually want to build
 
-最终希望形成：
+In the end we want to form:
 
 ```text
                  Agent Skill Ecosystem
@@ -951,36 +951,36 @@ installation
 
 ---
 
-# 18. 技术选型建议
+# 18. Technology recommendations
 
-优先：
+Prefer:
 
 ```text
 Python
 ```
 
-因为：
+because:
 
-* 用户熟悉
-* Security tooling 丰富
-* Tree-sitter 支持好
-* CLI 开发方便
-* 后续容易接 Semgrep/YARA
-* DeepSeek Coding Agent 容易维护
+* Users are familiar with it
+* The security tooling is rich
+* Tree-sitter support is good
+* CLI development is convenient
+* It is easy to connect to Semgrep/YARA later
+* A DeepSeek Coding Agent can maintain it easily
 
-CLI：
+CLI:
 
 ```text
 Typer
 ```
 
-数据模型：
+Data model:
 
 ```text
 Pydantic
 ```
 
-解析：
+Parsing:
 
 ```text
 PyYAML
@@ -988,31 +988,31 @@ Markdown parser
 Tree-sitter
 ```
 
-Hash：
+Hash:
 
 ```text
 SHA256
 ```
 
-License：
+License:
 
 ```text
 SPDX
 ```
 
-测试：
+Testing:
 
 ```text
 pytest
 ```
 
-输出：
+Output:
 
 ```text
 Rich
 ```
 
-以后可以增加：
+Later it can add:
 
 ```text
 SARIF
@@ -1022,9 +1022,9 @@ Markdown
 
 ---
 
-# 19. Repository 结构
+# 19. Repository structure
 
-建议从一开始保持清晰：
+Keep it clear from the start:
 
 ```text
 agentpkg/
@@ -1069,9 +1069,9 @@ agentpkg/
 
 ---
 
-# 20. 第一阶段开发顺序
+# 20. First-phase development order
 
-不要一次实现全部。
+Do not implement everything at once.
 
 ### Phase 1
 
@@ -1083,7 +1083,7 @@ finding model
 basic scanner
 ```
 
-支持：
+Supports:
 
 ```text
 secrets
@@ -1148,7 +1148,7 @@ CI policy
 
 ### Phase 6
 
-再考虑：
+Then consider:
 
 ```text
 registry
@@ -1159,34 +1159,34 @@ trust badges
 
 ---
 
-# 21. Coding Agent 的开发原则
+# 21. Development principles for the Coding Agent
 
-这是本项目非常重要的一部分。
+This is a very important part of the project.
 
-Coding Agent 必须遵守：
+The Coding Agent must follow these:
 
-1. 不引入 LLM API 作为核心依赖。
-2. 不为了测试而调用多个模型。
-3. 不添加不必要的 SaaS/API。
-4. 默认 offline/local-first。
-5. Scanner 不执行被扫描 Skill。
-6. 不信任 Skill 中的任何代码。
-7. 测试 fixture 必须包含恶意/危险样例。
-8. 所有 security finding 必须有 evidence。
-9. 尽可能 deterministic。
-10. 每增加一个 security rule，都增加对应 regression test。
-11. 优先小模块、清晰接口。
-12. 不为了“未来可能需要”提前设计复杂分布式架构。
+1. Do not introduce an LLM API as a core dependency.
+2. Do not call several models in order to test.
+3. Do not add unnecessary SaaS/APIs.
+4. Offline/local-first by default.
+5. The scanner does not execute a scanned Skill.
+6. Trust no code inside a Skill.
+7. Test fixtures must include malicious/dangerous samples.
+8. Every security finding must have evidence.
+9. Be deterministic wherever possible.
+10. Every security rule added comes with its regression test.
+11. Prefer small modules and clear interfaces.
+12. Do not pre-design a complex distributed architecture for a "future need".
 
 ---
 
-# 22. 最重要的安全原则
+# 22. The most important security principles
 
-Scanner 自己必须遵循：
+The scanner itself must follow:
 
 > **Treat the scanned Skill as hostile input.**
 
-因此：
+Therefore:
 
 ```text
 SKILL.md
@@ -1197,13 +1197,13 @@ URLs
 commands
 ```
 
-全部属于：
+All of this belongs to:
 
 ```text
 UNTRUSTED INPUT
 ```
 
-Scanner 不应该：
+The scanner should not:
 
 ```text
 execute scripts
@@ -1214,21 +1214,21 @@ load environment secrets
 connect to arbitrary network
 ```
 
-除非未来显式提供隔离 sandbox。
+unless an isolated sandbox is explicitly provided in future.
 
 ---
 
-# 23. MVP 成功标准
+# 23. MVP success criteria
 
-第一版不是看功能多少。
+The first version is not about how many features it has.
 
-而是：
+But about:
 
 ```text
 agentpkg scan suspicious-skill
 ```
 
-能够稳定发现：
+reliably finding:
 
 * credential access
 * shell execution
@@ -1238,21 +1238,21 @@ agentpkg scan suspicious-skill
 * prompt injection
 * dangerous dependencies
 
-并且：
+and:
 
 ```text
 agentpkg policy check
 ```
 
-可以阻止违反组织 policy 的 Skill。
+It can block a Skill that violates the organisation's policy.
 
-然后：
+Then:
 
 ```text
 agentpkg verify
 ```
 
-能够确认：
+It can confirm:
 
 ```text
 source
@@ -1262,13 +1262,13 @@ commit
 hash
 ```
 
-最后：
+Finally:
 
 ```text
 agentpkg install
 ```
 
-能够基于：
+It can install from:
 
 ```text
 verified package
@@ -1278,39 +1278,39 @@ policy
 lockfile
 ```
 
-进行安装。
+and perform an installation.
 
 ---
 
-# 24. 最终产品定位
+# 24. Final product positioning
 
-一句话：
+In one sentence:
 
 > **A local-first package manager and supply-chain security layer for AI Agent Skills.**
 
-更简单的宣传语：
+A simpler tagline:
 
 > **npm-style package management and supply-chain security for Agent Skills.**
 
-核心不是：
+The core is not:
 
 ```text
 AI
 ```
 
-而是：
+but:
 
 ```text
 Trust
 ```
 
-核心不是：
+The core is not:
 
 ```text
 Which model is smarter?
 ```
 
-而是：
+but:
 
 ```text
 What exactly am I installing?
@@ -1323,17 +1323,17 @@ Can I reproduce the same installation?
 
 ---
 
-# 25. 现在 Coding Agent 的第一项任务
+# 25. The Coding Agent's first task now
 
-不要直接开始疯狂写代码。
+Do not start writing code frantically.
 
-先完成：
+First complete:
 
 ## Research + Architecture
 
-要求 Coding Agent：
+Require the Coding Agent to:
 
-1. 深入阅读：
+1. Read deeply:
 
    * Snyk Agent Scan
    * SkillMD
@@ -1342,11 +1342,11 @@ Can I reproduce the same installation?
    * skillpm
    * skills.sh
 
-2. 建立 competitor matrix。
+2. Build a competitor matrix.
 
-3. 明确哪些能力已经有人做。
+3. Establish clearly which capabilities someone already provides.
 
-4. 找出：
+4. Find the genuinely unsolved problems in:
 
    * package management
    * provenance
@@ -1355,9 +1355,7 @@ Can I reproduce the same installation?
    * policy
    * capability verification
 
-   中真正没有被解决的问题。
-
-5. 输出：
+5. Output:
 
 ```text
 docs/COMPETITIVE_ANALYSIS.md
@@ -1366,25 +1364,25 @@ docs/THREAT_MODEL.md
 docs/MVP.md
 ```
 
-6. **不要开始大规模实现，直到这四个文档完成。**
+6. **Do not start large-scale implementation until these four documents are complete.**
 
-7. 然后再进入 Phase 1。
+7. Only then move on to Phase 1.
 
 ---
 
-# 26. 一个非常重要的判断
+# 26. A very important judgement
 
-如果研究之后发现：
+If, after the research, it turns out that
 
 ```text
 agentpkg
 ```
 
-这个方向已经被某个项目完整实现，
+this direction has already been implemented completely by some project,
 
-不要硬做。
+do not force it.
 
-应该继续向下寻找：
+Keep looking further down for
 
 ```text
 Agent Skill
@@ -1392,14 +1390,14 @@ Supply Chain
 +
 ```
 
-中仍然缺失的基础设施。
+the infrastructure that is still missing.
 
-我们的目标不是：
+Our goal is not:
 
-> “做一个看起来很酷的 Agent 项目。”
+> "to build an Agent project that looks cool."
 
-而是：
+It is:
 
-> **找到 Agent Skills 生态里类似 npm / package-lock / npm audit / Sigstore 那样的基础设施空缺。**
+> **To find the infrastructure gap in the Agent Skills ecosystem, of the same kind as npm / package-lock / npm audit / Sigstore.**
 
-这才是这个项目最值得投入的方向。
+That is the direction most worth investing in for this project.
