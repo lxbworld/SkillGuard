@@ -257,7 +257,9 @@ fn read_git_provenance(root: &Path, declared_license: Option<&str>) -> Provenanc
         .map(|s| s.trim().to_owned())
         .filter(|s| !s.is_empty());
 
-    let incomplete = commit.is_none() || repository.is_none();
+    let missing_commit = commit.is_none();
+    let missing_repository = repository.is_none();
+    let incomplete = missing_commit || missing_repository;
     let uncommitted = worktree_is_dirty(&repo_root, root);
     Provenance {
         source: repository
@@ -270,18 +272,28 @@ fn read_git_provenance(root: &Path, declared_license: Option<&str>) -> Provenanc
         license_source: declared_license.map(|_| "frontmatter".to_owned()),
         incomplete,
         uncommitted,
-        note: provenance_note(incomplete, uncommitted),
+        note: provenance_note(missing_repository, missing_commit, uncommitted),
     }
 }
 
 /// Why a lockfile written now could not pin the content to a commit.
 ///
-/// Naming the missing half matters: the previous wording said "source or commit
-/// could not be established" even when the commit was read, checked and matched.
-fn provenance_note(incomplete: bool, uncommitted: bool) -> Option<String> {
+/// Naming the missing half matters. "source or commit could not be established"
+/// was printed even when the commit had been read, checked and matched, because
+/// `incomplete` is true when *either* half is missing and a local checkout with
+/// no remote is the common case. A note that says the wrong part is missing sends
+/// the reader to fix the wrong thing.
+fn provenance_note(
+    missing_repository: bool,
+    missing_commit: bool,
+    uncommitted: bool,
+) -> Option<String> {
     let mut parts: Vec<&str> = Vec::new();
-    if incomplete {
-        parts.push("source or commit could not be established");
+    if missing_commit {
+        parts.push("the commit could not be established");
+    }
+    if missing_repository {
+        parts.push("the source repository could not be established (no remote, or not a checkout)");
     }
     if uncommitted {
         parts.push(
