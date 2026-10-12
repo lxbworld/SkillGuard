@@ -322,6 +322,9 @@ pub fn scan_walked(name: &str, walked: Walked) -> ScanOutcome {
     // -- Chain pass ---------------------------------------------------------
     apply_chain_rules(&walked, &mut findings);
 
+    // -- Key-block pass -----------------------------------------------------
+    drop_bodiless_private_keys(&walked, &mut findings);
+
     // -- Declared vs observed ----------------------------------------------
     // The parsed YAML is authoritative; the flattened map is the fallback for
     // frontmatter that failed to parse but still yielded key/value pairs.
@@ -1251,6 +1254,76 @@ fn apply_shadow_rules(rel: &str, kind: ArtifactKind, norm: &Normalized, out: &mu
     }
 }
 
+/// Base64 characters a PEM body must carry before it is a key and not an example.
+///
+/// The smallest real private key is an Ed25519 one: about 85 bytes of DER, so
+/// roughly 115 base64 characters. Every elided example measured in the corpus
+/// carried at most 50, and ended in `...`.
+const MIN_PEM_BODY: usize = 100;
+
+/// `SECRET_PRIVATE_KEY` claims a key **block**. The pattern can only see the
+/// BEGIN marker, so it fired on a markdown table that documents the marker, on
+/// tests that assert the scanner catches it, and on examples whose body is
+/// elided with `...` — all 9 of its findings in the pilot corpus, none of which
+/// was a key.
+///
+/// A CRITICAL rule that is wrong on every real finding teaches people to ignore
+/// CRITICAL findings, so the claim is now enforced rather than assumed: a block
+/// needs a body, and a block needs an end.
+fn drop_bodiless_private_keys(walked: &Walked, findings: &mut Vec<Finding>) {
+    if !findings
+        .iter()
+        .any(|f| f.rule.as_str() == "SECRET_PRIVATE_KEY")
+    {
+        return;
+    }
+    let mut bodiless: Vec<String> = Vec::new();
+    for f in &walked.files {
+        let Ok(s) = std::str::from_utf8(&f.bytes) else {
+            continue;
+        };
+        if !has_pem_body(s, MIN_PEM_BODY) {
+            bodiless.push(f.rel.clone());
+        }
+    }
+    findings.retain(|f| !(f.rule.as_str() == "SECRET_PRIVATE_KEY" && bodiless.contains(&f.file)));
+}
+
+/// A complete PEM private-key block whose body is long enough to be a key.
+///
+/// The body must be closed by an `-----END ... PRIVATE KEY-----` line: text that
+/// opens a block and never ends it is prose about keys, or a test fixture, not a
+/// key. Counting stops at the end marker so a following source line contributes
+/// nothing.
+fn has_pem_body(s: &str, min: usize) -> bool {
+    let mut open = false;
+    let mut body = 0usize;
+    for line in s.lines() {
+        let t = line.trim();
+        let is_marker = t.starts_with("-----") && t.contains("PRIVATE KEY-----");
+        if is_marker && t.starts_with("-----BEGIN") {
+            open = true;
+            body = 0;
+            continue;
+        }
+        if !open {
+            continue;
+        }
+        if is_marker && t.starts_with("-----END") {
+            if body >= min {
+                return true;
+            }
+            open = false;
+            continue;
+        }
+        body += t
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '/' | '='))
+            .count();
+    }
+    false
+}
+
 /// Detect `fetch -> transform -> execute` chains.
 ///
 /// A single pattern cannot see this. `curl ... | sh` is one rule, but
@@ -1674,6 +1747,60 @@ mod tests {
         assert!(h.contains("SECRET_AWS_ACCESS_KEY"), "{h:?}");
         assert!(h.contains("SECRET_GITHUB_TOKEN"), "{h:?}");
         assert!(h.contains("NET_HTTP_CLIENT"), "{h:?}");
+    }
+
+    /// A PEM private key is a *block*: a BEGIN marker, a body, and an END marker.
+    ///
+    /// Measured over the pilot corpus: all 9 findings were a markdown table that
+    /// documents the marker, a test that asserts the scanner catches it, or an
+    /// example whose body is elided with `...`. A CRITICAL rule that is wrong on
+    /// every real finding trains people to ignore CRITICAL findings.
+    #[test]
+    fn only_a_complete_private_key_block_is_a_finding() {
+        let d = tmp("pem-marker");
+        fs::write(d.join("SKILL.md"), "---\nname: x\ndescription: d\n---\n").unwrap_or_default();
+        fs::write(
+            d.join("notes.md"),
+            "| Private keys | `-----BEGIN PRIVATE KEY-----` | PEM files |\n",
+        )
+        .unwrap_or_default();
+        let h = hits(&scan_skill(&d));
+        assert!(
+            !h.contains("SECRET_PRIVATE_KEY"),
+            "a bare marker is not a key: {h:?}"
+        );
+
+        // An elided example: the shape is right, the body is a stub.
+        let e = tmp("pem-elided");
+        fs::write(e.join("SKILL.md"), "---\nname: x\ndescription: d\n---\n").unwrap_or_default();
+        fs::write(
+            e.join("notes.md"),
+            "WITH ISSUER KEY '-----BEGIN PRIVATE KEY-----\n\
+             MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQ...\n\
+             -----END PRIVATE KEY-----'\n",
+        )
+        .unwrap_or_default();
+        let h = hits(&scan_skill(&e));
+        assert!(
+            !h.contains("SECRET_PRIVATE_KEY"),
+            "an elided body is not a key: {h:?}"
+        );
+
+        // A block whose body is long enough to be one.
+        let k = tmp("pem-real");
+        fs::write(k.join("SKILL.md"), "---\nname: x\ndescription: d\n---\n").unwrap_or_default();
+        let body =
+            "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5eg".repeat(4);
+        fs::write(
+            k.join("notes.md"),
+            format!("-----BEGIN PRIVATE KEY-----\n{body}\n-----END PRIVATE KEY-----\n"),
+        )
+        .unwrap_or_default();
+        let h = hits(&scan_skill(&k));
+        assert!(
+            h.contains("SECRET_PRIVATE_KEY"),
+            "a real block is a key: {h:?}"
+        );
     }
 
     /// GOLD-v5: the canonical AWS documentation key is not a credential.
