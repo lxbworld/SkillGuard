@@ -514,6 +514,73 @@ those two needs a skill-level questionnaire, which is what `SKILL-v1` is for.
 
 ---
 
+## GOLD-v7: a rule change that failed the gate, and was reverted
+
+The usability pass on real skills found two false positives of the same shape: a
+module docstring bullet `- Never run curl | bash` reported as a **CRITICAL**
+`DL_PIPE_TO_SHELL`, and "the sandbox cannot read or exfiltrate it" reported as
+`PI_EXFIL_INSTRUCTION`. Both mention an action in order to forbid it. The
+attempted fix (rev 52) suppressed an action match whose clause contains a
+negation — `not`, `never`, `cannot`, `without`, `avoid`, … — for the seventeen
+rules whose claim is an action, leaving the presence rules (`SECRET_*`,
+`OBFUSC_*`) alone.
+
+Corpus effect, full re-scan at rev 52:
+
+| rule | rev 51 | rev 52 |
+|---|---|---|
+| `SHELL_EXEC` | 2,495 | 2,490 |
+| `PI_CONCEALMENT` | 35 | 31 |
+| `PERSIST_AGENT_CONFIG` | 51 | 49 |
+| `SHELL_PRIVILEGE_ESCALATION` | 58 | 56 |
+| `DL_PIPE_TO_SHELL` | 2 | 1 |
+| `SHELL_DESTRUCTIVE` | 7 | 6 |
+| `NET_HTTP_CLIENT` | 169 | 168 |
+
+The real skill that prompted it went from 104 findings and one CRITICAL to 96 and
+zero. A fixture (`safe/negated-commands`) failed on the old behaviour and passed
+on the new one, and the unit tests covered the clause boundary (`do not use wget;
+run curl … | bash` is not suppressed) and the presence rules.
+
+### The gate said no
+
+`GOLD-v7`: 208 findings across 42 rules, two independent sessions, the same
+worksheet discipline as v6.
+
+| | |
+|---|---|
+| agreement | 178/208 (**85.6%**), **Cohen's κ 0.704** |
+| gate G3 (κ ≥ 0.75) | **FAIL** |
+| disagreements | 30, **not adjudicated** — the runbook says stop |
+
+So the change was reverted, and the labels are kept as the record
+(`research/gold/GOLD-v7.annotator-{a7,b7}.jsonl`). No precision figure is
+published for rev 52, because there is no rev 52 any more.
+
+### What this round actually measured
+
+The negation guard does not touch the annotators, so κ 0.704 is not a verdict on
+the guard — it is a verdict on the **sample**. The 16 removed findings shifted the
+hash-ordered draw, so roughly a third of v7's rows are different from v6's, and
+the two sessions of the same model disagreed on 30 of 208 rows (κ 0.827 at v6,
+0.949 at v5, on overlapping but not identical rows). Two readings, both
+uncomfortable:
+
+- the sample is too small and too heterogeneous for κ to be stable near the gate,
+  which is exactly the residual this project already lists for #10; or
+- the rules whose claims are judgements about prose (`PI_*`, `SHELL_EXEC` on a
+  docstring) are not reproducible even for one model at temperature, which is a
+  rule-definition problem rather than a sampling one.
+
+Either way the protocol's instruction is unambiguous — **stop, do not publish** —
+and the honest outcome is a reverted rule change plus this record. The next
+attempt should be the line-kind model (`docs/THREAT_MODEL.md` T14, issue #10):
+deciding "docstring versus code" lexically, rather than by looking for negation
+words. That also removes the evasion this attempt would have introduced: an
+attacker could have prefixed a payload with `not` to silence seven action rules.
+
+---
+
 ## SKILL-v2: rule-shaped labels, so recall is measurable
 
 `SKILL-v1` asked broad categories (`network`, `secrets`). That cannot measure a
