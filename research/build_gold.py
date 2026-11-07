@@ -31,6 +31,15 @@ FINDINGS = Path("research/raw-findings.jsonl")
 BIN = "target/release/skillguard"
 OUT = Path("research/gold/GOLD-v1.worksheet.jsonl")
 
+# Rules whose finding is about the skill as a whole, with no evidence line: a
+# line-level judgment cannot be made about them, and asking for one produces a
+# verdict about whatever happens to sit on line 1 (the frontmatter delimiter).
+# GOLD-v1's table excluded them; GOLD-v5 sampled them anyway and published a 0%
+# that measured the sampling, not the rule. Their evidence is the parsed skill
+# (or the failure to parse it), so they need a skill-level questionnaire like
+# `SKILL-v1`, not this worksheet.
+SKILL_LEVEL_RULES = ("PARSE_FAILED", "PI_DESCRIPTION_MISMATCH")
+
 
 def rule_claims() -> dict[str, str]:
     """id -> the rule's own one-line claim, from the tool itself."""
@@ -87,7 +96,7 @@ def main() -> int:
         for f in hits:
             # A line-level judgment needs a real line. Skill-level rules
             # (`LICENSE_MISSING`, `MISMATCH_*`) are verified separately.
-            if f["line"] <= 0:
+            if f["line"] <= 0 or rule in SKILL_LEVEL_RULES:
                 continue
             target = TREE / path_of.get(f["source_id"], "") / f["file"]
             try:

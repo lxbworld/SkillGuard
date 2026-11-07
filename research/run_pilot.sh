@@ -5,7 +5,8 @@
 # This is a PILOT, not the pre-registered N=100,000 stratified study:
 #   * the sample is an opportunistic GitHub code-search slice, not the
 #     stratified draw in research/PROTOCOL.md §5;
-#   * there is no GOLD label set, so no precision or recall is reported.
+#   * the annotators are two model sessions, not the two humans that
+#     PROTOCOL.md G3 asks for, so the precision column is a model-labelled pass.
 # It exists to prove the pipeline on real data and to produce a first, honest
 # signal on H6 (do skills declare permissions at all?).
 #
@@ -88,7 +89,7 @@ target/release/skillguard corpus scan \
   --out "$FINDINGS" --cache research/.corpus-cache.json
 
 echo "== 6/6 report + reproduce =="
-GOLD="research/gold/GOLD-v5.jsonl"
+GOLD="research/gold/GOLD-v6.jsonl"
 if [ -f "$GOLD" ]; then
   target/release/skillguard corpus report --findings "$FINDINGS" --gold "$GOLD" --out /tmp/sg-pilot-body.md
 else
@@ -101,9 +102,10 @@ fi
 
 > **This is a pilot, not the pre-registered study.** The sample is an
 > opportunistic GitHub code-search slice, not the stratified N=100,000 draw in
-> `research/PROTOCOL.md` §5, and there is no GOLD label set yet, so the report
-> contains **no precision or recall figure**. Read the numbers as a first signal
-> and a proof that the pipeline runs on real data, not as the study's result.
+> `research/PROTOCOL.md` §5, and the precision column comes from model
+> annotators rather than the two humans `research/PROTOCOL.md` G3 asks for. Read
+> the numbers as a first signal and a proof that the pipeline runs on real data,
+> not as the study's result.
 >
 > The `LICENSE_MISSING` figure is corrected for repository-root licenses: a
 > skill vendored in a repository inherits that repository's license, and the
@@ -125,30 +127,47 @@ fi
 > flagged every non-English `PI_DESCRIPTION_MISMATCH`, and unstemmed verbs
 > (`execution` did not match `execute`). Each fix is a regression test.
 >
-> ## GOLD-v5
+> ## GOLD-v6
 >
-> The precision column below is measured against `research/gold/GOLD-v5.jsonl`:
-> 250 line-level findings from the **current** rule set, judged `tp`/`fp` by two
-> independent sessions of `opencode-go/deepseek-v4.1-flash` (no human, and not
-> the rule author). Cohen's kappa is **0.949**; 6 disagreements adjudicated.
+> The precision column below is measured against `research/gold/GOLD-v6.jsonl`:
+> 209 line-level findings across 36 rules at `SCAN_LOGIC_REVISION = 50`, eight
+> per rule in hash order, one judgment per skill and rule. Two independent
+> sessions of `command-code/deepseek-v4.1-flash` labelled them blind to each
+> other — **no human annotated this set**, and neither annotator wrote the rules.
+> Cohen's kappa is **0.827** over the 209 scored rows (gate 0.75); the 17
+> disagreements were adjudicated by a third session shown both verdicts, and
+> every rule figure below is per rule, never micro-averaged.
 >
-> Where the earlier passes did their job: `NET_FETCH_CALL` 100%,
-> `NET_HTTP_CLIENT` 87.5%, `FS_PATH_ESCAPE` 87.5%, `NET_DYNAMIC_URL` 100%
-> (`NET_FETCH_CALL` was 37.5% in GOLD-v1).
+> Neither annotator being human is the limitation, not a detail. Two sessions of
+> one model share blind spots, so they agree on a wrong label as readily as on a
+> right one, and the kappa above is a test–retest figure rather than inter-human
+> agreement. `research/GOLD.md` says what that costs and what would fix it.
 >
-> Where they did not: the **prompt-injection rules are 0%** —
-> `PI_CONCEALMENT`, `PI_EXFIL_INSTRUCTION` and `PI_INJECTION_OVERRIDE` are 0/8
-> each. Every sampled finding was a false positive, because the corpus is full of
-> security *training* material that discusses injection. Three suppression passes
-> (quoted phrases, documentation structure, meta-discussion) cut their prevalence
-> by half but did not lift precision, so **they are now `Info`**: a false
-> `Critical` is worse than no finding. They still force a human to read the line;
-> they no longer block a gate. `PERSIST_HOOK` (12.5%), `PERSIST_SHELL_RC` (0%)
-> and `DEP_CUSTOM_REGISTRY` (12.5%) are next. Treat every prevalence figure below
-> as an upper bound.
+> **13 of 36 rules reach the 0.85 precision gate**, and ten of them are at 100%:
+> `FS_PATH_ESCAPE`, `NET_HTTP_CLIENT`, `FS_SENSITIVE_PATH`, `FS_MODE_UNRESOLVED`,
+> `NET_DYNAMIC_URL`, `LICENSE_RESTRICTIVE`, `FS_HOME_ACCESS`,
+> `SECRET_PROVIDER_TOKEN`, `DL_CHAIN_FETCH_EXECUTE` and `DEP_UNPINNED_SCRIPT`.
+> `FS_RECURSIVE_WALK`, `NET_FETCH_CALL` and `SECRET_ENV_DUMP` are at 7/8.
+> (GOLD-v5 measured `FS_PATH_ESCAPE` and `NET_HTTP_CLIENT` at 87.5%.)
 >
-> (GOLD-v1..v3 are kept in `research/gold/`. Versions are not directly
-> comparable: both the raters and the rule set change.)
+> Where they did not: `SHELL_PRIVILEGE_ESCALATION` 0/8, `PERSIST_HOOK` 0/6,
+> `PERSIST_SHELL_RC` 0/4, `PI_INJECTION_OVERRIDE` 0/8 and `DL_PIPE_TO_SHELL` 0/2
+> were false positives on every sampled finding. The `PI_*` family is where
+> GOLD-v5 left it — the corpus is full of security *training* material that
+> discusses injection, and a phrase rule cannot tell "issues this" from
+> "documents this", which is why they are `Info`: a false `Critical` is worse
+> than no finding. They still force a human to read the line; they no longer
+> block a gate. Treat every prevalence figure below as an upper bound.
+>
+> Two **skill-level** rules are excluded rather than measured: `PARSE_FAILED` and
+> `PI_DESCRIPTION_MISMATCH` report on the skill as a whole and carry no evidence
+> line, so a line-level judgment about them is a judgment about the frontmatter
+> delimiter. GOLD-v5 sampled them anyway and published a 0% that measured the
+> sampling, not the rule; `research/build_gold.py` now refuses to sample them.
+> They need a skill-level questionnaire like `SKILL-v1` below.
+>
+> (GOLD-v1..v5 stay in `research/gold/`. Versions are not directly comparable:
+> both the raters and the rule set change.)
 >
 > A separate **skill-level** pass (`SKILL-v1`, 30 skills, questionnaire, no rule
 > output) measured `PI_DESCRIPTION_MISMATCH` directly: precision **17.6% / 35.3%**,
@@ -159,9 +178,9 @@ fi
 > code reads credentials and the description mentions neither credentials nor
 > security). Prevalence fell 10.7% -> 6.4%. See `research/GOLD.md`.
 >
-> The remaining `PI_*` heuristics are **unmeasured upper bounds**. A
-> single-annotator read-through is not `GOLD` (research/GOLD.md) and the report
-> publishes no precision until two independent annotators agree (kappa >= 0.75).
+> The `PI_*` heuristics that remain are measured above, and every one of them is
+> below the gate. They are published because the evidence line is still worth a
+> human read, and their prevalence figures are upper bounds like every other row.
 
 HEADER
   echo "## Collection"

@@ -6,9 +6,11 @@ to rule output**, and **Cohen's κ ≥ 0.75**. This is the runbook for one round
 (`GOLD-v1`). It is the last missing piece before the report can carry a real
 precision column.
 
-The pilot report currently says "no precision". That is deliberate: a
-single-annotator read-through found and fixed a dozen false-positive rules, but
-it is not G4 and it is not published as a metric.
+The pilot report publishes a precision column from a **model-labelled** GOLD set
+(GOLD-v6, two independent sessions, κ 0.827). That is not G3 — the protocol asks
+for two humans — and every mention of the column says so. A single-annotator
+read-through is not a metric at all; it found and fixed a dozen false-positive
+rules and is recorded as such.
 
 ## 1. Draw the sample
 
@@ -416,6 +418,96 @@ but on a random corpus sample they remain low-precision tripwires: the corpus is
 mostly security training material that quotes the phrases. If the next GOLD
 round cannot lift them above the gate, they should become documentation rather
 than findings.
+
+---
+
+## GOLD-v6: the first table since rev 8
+
+Every rule fix between rev 9 and rev 50 was unmeasured: the published precision
+column described the rule set at rev 8, and `research/raw-findings.jsonl` could
+not refresh it on its own (issue #10). GOLD-v6 re-labels the current set.
+
+| | |
+|---|---|
+| items | 209 line-level findings across 36 rules, eight per rule in hash order, one judgment per skill and rule |
+| rule set | `SCAN_LOGIC_REVISION = 50` |
+| annotators | two independent sessions of `command-code/deepseek-v4.1-flash`, blind to each other |
+| agreement | 192/209 (91.9%), **Cohen's κ 0.827** (gate 0.75) |
+| disagreements | 17, adjudicated by a third session shown both verdicts |
+
+`opencode-go/deepseek-v4.1-flash` — the annotator of GOLD-v1..v5 — is no longer
+available on this machine (403, "an active subscription is required"), so the
+same model was reached through a different provider. It is the same weights and
+the same prompt; the provider is the only difference, and it is recorded here
+rather than papered over.
+
+Reproduce:
+
+```bash
+# 1. sample + labels (each annotator is one process, one worksheet, no other file)
+python3 research/build_gold.py --per-rule 8 --out research/gold/GOLD-v6.worksheet.jsonl
+python3 research/annotate_gold.py --worksheet research/gold/GOLD-v6.worksheet.jsonl \
+    --out research/gold/GOLD-v6.annotator-a6.jsonl
+python3 research/annotate_gold.py --worksheet research/gold/GOLD-v6.worksheet.jsonl \
+    --out research/gold/GOLD-v6.annotator-b6.jsonl
+# 2. agreement, then adjudicate the disagreements into GOLD-v6.jsonl
+skillguard corpus agreement research/gold/GOLD-v6.annotator-a6.jsonl \
+                            research/gold/GOLD-v6.annotator-b6.jsonl
+# 3. score
+skillguard corpus report --findings research/raw-findings.jsonl \
+    --gold research/gold/GOLD-v6.jsonl --out /tmp/body.md
+```
+
+### The v5 and v6 columns are not directly comparable
+
+The sample is a hash-ordered draw from the findings of each rule set, so a rule
+that fires a different number of times gets a **different** eight rows. No
+per-rule movement below can be attributed to a rule fix on its own; only the
+aggregate and the direction are interpretable. What is attributable is stated in
+the commit that changed the rule, with its own fixture.
+
+| rule | v5 | v6 |
+|---|---|---|
+| `DEP_CUSTOM_REGISTRY` | 1/1 | 5/1 |
+| `DL_REMOTE_INSTALL` | 1/2 | 3/1 |
+| `DL_UNTRUSTED_DOMAIN` | 1/2 | 4/2 |
+| `FS_ABSOLUTE_PATH` | 3/1 | 3/5 |
+| `FS_HOME_ACCESS` | 4/3 | 8/0 |
+| `FS_PATH_ESCAPE` | 7/1 | 8/0 |
+| `FS_SENSITIVE_PATH` | 1/1 | 4/0 |
+| `LICENSE_RESTRICTIVE` | 5/3 | 8/0 |
+| `NET_DOMAIN_LITERAL` | 5/2 | 6/2 |
+| `NET_FETCH_CALL` | 8/0 | 7/1 |
+| `NET_HTTP_CLIENT` | 7/1 | 8/0 |
+| `OBFUSC_ZERO_WIDTH` | 1/0 | 0/1 |
+| `PERSIST_AGENT_CONFIG` | 2/6 | 3/5 |
+| `PI_CONCEALMENT` | 0/4 | 1/7 |
+| `PI_EXFIL_INSTRUCTION` | 0/2 | 1/6 |
+| `PI_SYSTEM_IMPERSONATION` | 1/4 | 2/4 |
+| `SECRET_GENERIC_ASSIGN` | 1/0 | 3/1 |
+| `SECRET_PROVIDER_TOKEN` | 2/1 | 3/0 |
+| `SHELL_EVAL` | 3/3 | 5/3 |
+| `SHELL_EXEC` | 4/3 | 4/4 |
+
+**13 of 36 rules reach the 0.85 gate**, up from 9 of 28 at v5 with the same
+bar. The shortfall has not moved in kind: `SHELL_PRIVILEGE_ESCALATION` 0/8,
+`PERSIST_HOOK` 0/6, `PERSIST_SHELL_RC` 0/4, `PI_INJECTION_OVERRIDE` 0/8 and
+`DL_PIPE_TO_SHELL` 0/2 are false positives on every sampled row, and
+`FS_HOME_ACCESS` reading 8/0 means its claim is still the tautology GOLD-v4
+named — "the home directory is referenced" is satisfied by any `~/`, so its
+100% is not evidence that the rule is useful.
+
+### A sampling defect this round found, and fixed
+
+GOLD-v1 excluded `PARSE_FAILED` and `PI_DESCRIPTION_MISMATCH` because they
+report on the whole skill and have no evidence line. GOLD-v5 sampled them
+anyway: their findings carry `line: 1`, the frontmatter delimiter, so both
+annotators were asked "is *this* the claim?" about `---` and answered `fp`. The
+published 0/8 for each measured the sampler, not the rule.
+
+`research/build_gold.py` now refuses to sample them (`SKILL_LEVEL_RULES`) and
+this round scores 209 rows over 36 rules rather than 225 over 38. Measuring
+those two needs a skill-level questionnaire, which is what `SKILL-v1` is for.
 
 ---
 
