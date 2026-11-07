@@ -45,6 +45,11 @@ pub struct SkillReport {
     pub capabilities: crate::models::Capability,
     pub dependencies: Vec<crate::models::Dependency>,
     pub counts: Counts,
+    /// Findings the report was told not to show (`scan --min-severity`). They are
+    /// still counted in `counts`; the text report says how many are hidden so a
+    /// filtered report cannot read as a clean one.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub hidden: usize,
     pub findings: Vec<Finding>,
     pub skipped: Vec<SkippedFile>,
     /// What prompt-injection detection does and does not cover (issue #8).
@@ -197,11 +202,16 @@ impl SkillReport {
             capabilities: out.capabilities.clone(),
             dependencies: out.dependencies.clone(),
             counts: Counts::of(&out.findings),
+            hidden: 0,
             injection: InjectionCoverage::of(&out.findings),
             findings: out.findings.clone(),
             skipped: out.skipped.clone(),
         }
     }
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 /// Repository-relative, slash-separated prefix for a skill's own files.
@@ -374,6 +384,7 @@ mod tests {
             capabilities: Default::default(),
             dependencies: vec![],
             counts: Counts::of(std::slice::from_ref(&f)),
+            hidden: 0,
             injection: InjectionCoverage::of(std::slice::from_ref(&f)),
             findings: vec![f],
             skipped: vec![],

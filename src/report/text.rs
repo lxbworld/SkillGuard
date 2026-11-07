@@ -25,6 +25,34 @@ pub fn to_text_with(report: &Report, color: bool) -> String {
     out
 }
 
+/// One line that turns a wall of findings into something a reader can triage.
+///
+/// A real skill produced 104 findings and 682 lines of terminal output, most of
+/// them repeats of the same rule. The detail has to stay — evidence is the
+/// product — but the first line a reader sees should say *what kind* of mess it
+/// is, not just how big.
+fn rule_summary(s: &crate::report::SkillReport) -> String {
+    let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for f in &s.findings {
+        *counts.entry(f.rule.as_str()).or_default() += 1;
+    }
+    let mut ranked: Vec<(&str, usize)> = counts.into_iter().collect();
+    ranked.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+    const SHOWN: usize = 5;
+    let listed: Vec<String> = ranked
+        .iter()
+        .take(SHOWN)
+        .map(|(rule, n)| format!("{rule} {n}"))
+        .collect();
+    let rest = ranked.len().saturating_sub(SHOWN);
+    let more = if rest > 0 {
+        format!(" (+{rest} more rules)")
+    } else {
+        String::new()
+    };
+    format!("    top rules: {}{}\n", listed.join(", "), more)
+}
+
 fn paint(s: &str, sev: Severity, color: bool, enabled: bool) -> String {
     if !color || !enabled {
         return s.to_owned();
@@ -65,7 +93,7 @@ fn skill_section(s: &crate::report::SkillReport, color: bool) -> String {
         ));
     }
     o.push_str(&format!(
-        "    {} finding(s): {} critical, {} high, {} medium, {} low, {} info\n\n",
+        "    {} finding(s): {} critical, {} high, {} medium, {} low, {} info\n",
         s.counts.total(),
         s.counts.critical,
         s.counts.high,
@@ -73,6 +101,17 @@ fn skill_section(s: &crate::report::SkillReport, color: bool) -> String {
         s.counts.low,
         s.counts.info
     ));
+    if s.hidden > 0 {
+        // A filtered report must not read as a clean one.
+        o.push_str(&format!(
+            "    {} finding(s) below --min-severity, not shown\n",
+            s.hidden
+        ));
+    }
+    if s.findings.len() > 5 {
+        o.push_str(&rule_summary(s));
+    }
+    o.push('\n');
 
     // The capability surface is not a finding: a clean skill can still reach
     // the network, and hiding that would make a clean report misleading.
@@ -244,6 +283,7 @@ mod tests {
             capabilities: Default::default(),
             dependencies: vec![],
             counts: Counts::of(&findings),
+            hidden: 0,
             injection: crate::report::InjectionCoverage::of(&findings),
             findings,
             skipped: vec![crate::models::SkippedFile {

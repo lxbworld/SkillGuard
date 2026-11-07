@@ -56,6 +56,14 @@ enum Command {
         #[arg(long, default_value = "critical")]
         fail_on: String,
 
+        /// Hide findings below this severity.
+        ///
+        /// The gate sees the same set, so a build fails on what it was shown;
+        /// the report says how many findings were hidden, so a filtered report
+        /// cannot pass for a clean one.
+        #[arg(long, value_name = "SEVERITY")]
+        min_severity: Option<String>,
+
         /// Print the rule catalogue instead of scanning.
         #[arg(long)]
         list_rules: bool,
@@ -123,6 +131,11 @@ enum Command {
         /// then to a permissive built-in policy.
         #[arg(long, short = 'c')]
         policy: Option<PathBuf>,
+
+        /// text (default) or json, for a CI step that wants the decision rather
+        /// than only the exit code.
+        #[arg(long, short, default_value = "text", value_enum)]
+        format: Format,
     },
 
     /// Recompute source, commit and content digest, and compare to the lockfile.
@@ -342,12 +355,14 @@ fn main() -> ExitCode {
             paths,
             format,
             fail_on,
+            min_severity,
             list_rules,
             no_inherit_license,
         } => run_scan(
             paths,
             *format,
             fail_on,
+            min_severity.as_deref(),
             *list_rules,
             !*no_inherit_license,
             &cli,
@@ -366,7 +381,11 @@ fn main() -> ExitCode {
         }
         Command::Diff { paths, strict } => run_diff(paths, *strict, &cli),
         Command::Adopt { paths, dry_run } => run_adopt(paths, *dry_run, &cli),
-        Command::PolicyCheck { paths, policy } => run_policy_check(paths, policy.as_deref(), &cli),
+        Command::PolicyCheck {
+            paths,
+            policy,
+            format,
+        } => run_policy_check(paths, policy.as_deref(), *format, &cli),
         Command::Verify { paths, lockfile } => run_verify(paths, lockfile.as_deref(), &cli),
         Command::Lock { paths, out } => run_lock(paths, out.as_deref(), &cli),
         Command::Approve {
@@ -454,11 +473,13 @@ fn policy_for_dir(dir: &std::path::Path) -> Result<skillguard::policy::Policy, S
 fn run_policy_check(
     paths: &[PathBuf],
     policy_path: Option<&std::path::Path>,
+    format: Format,
     cli: &Cli,
 ) -> Result<i32, String> {
     let targets = resolve_targets(paths)?;
     let mut all_blocked = false;
     let mut o = String::from("\n  SkillGuard policy\n");
+    let mut json_rows: Vec<serde_json::Value> = Vec::new();
 
     for t in &targets {
         let dir = skill_dir_of(t)?;
@@ -493,13 +514,32 @@ fn run_policy_check(
                 "built-in default (no SKILLGUARD.policy.yaml found)".to_owned()
             }
         ));
+        if format == Format::Json {
+            json_rows.push(serde_json::json!({
+                "skill": out.skill_name,
+                "policy": if policy_file.is_file() {
+                    clean_path(&policy_file)
+                } else {
+                    "built-in default".to_owned()
+                },
+                "decision": decision.decision.as_str(),
+                "violations": decision.violations,
+                "worst_finding": decision.worst_finding.map(|s| s.as_str()),
+            }));
+        }
         if decision.decision.blocks() {
             all_blocked = true;
         }
     }
 
-    o.push('\n');
-    emit(cli, &o)?;
+    if format == Format::Json {
+        let body = serde_json::to_string_pretty(&serde_json::Value::Array(json_rows))
+            .map_err(|e| format!("serialise policy decision: {e}"))?;
+        emit(cli, &(body + "\n"))?;
+    } else {
+        o.push('\n');
+        emit(cli, &o)?;
+    }
     Ok(if all_blocked {
         exit::FINDINGS
     } else {
@@ -1079,10 +1119,13 @@ fn emit(cli: &Cli, body: &str) -> Result<(), String> {
     }
 }
 
+// One argument per CLI flag: a struct here would only re-name them.
+#[allow(clippy::too_many_arguments)]
 fn run_scan(
     paths: &[PathBuf],
     format: Format,
     fail_on: &str,
+    min_severity: Option<&str>,
     list_rules: bool,
     inherit_repo_license: bool,
     cli: &Cli,
@@ -1097,6 +1140,14 @@ fn run_scan(
             "invalid --fail-on value {fail_on:?}; expected one of info, low, medium, high, critical"
         )
     })?;
+    let floor = match min_severity {
+        Some(v) => Some(Severity::parse(v).ok_or_else(|| {
+            format!(
+                "invalid --min-severity value {v:?}; expected one of info, low, medium, high, critical"
+            )
+        })?),
+        None => None,
+    };
 
     let outcomes = scan_all(paths, inherit_repo_license)?;
     // Rule-level suppression is applied here, once, so every output format
@@ -1109,7 +1160,15 @@ fn run_scan(
         };
         let mut filtered = out.clone();
         filtered.findings = policy.apply_ignores(filtered.findings);
-        reports.push(SkillReport::from_outcome(&filtered));
+        let mut hidden = 0usize;
+        if let Some(floor) = floor {
+            let before = filtered.findings.len();
+            filtered.findings.retain(|f| f.severity >= floor);
+            hidden = before - filtered.findings.len();
+        }
+        let mut report = SkillReport::from_outcome(&filtered);
+        report.hidden = hidden;
+        reports.push(report);
     }
     let report = Report::new(reports);
 

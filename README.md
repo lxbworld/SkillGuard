@@ -119,9 +119,17 @@ Then scan something:
 
 ```bash
 skillguard scan ./my-skill          # evidence-grade report
+skillguard scan ./my-skill --min-severity high   # same report, triaged
 skillguard diff ./my-skill          # declared permissions vs observed behaviour
 skillguard policy-check ./my-skill  # evaluate SKILLGUARD.policy.yaml, block if denied
 ```
+
+A real skill can produce a hundred findings. `--min-severity` hides the rest and
+the report says how many it hid, so a filtered report cannot pass for a clean
+one; the gate (`--fail-on`) sees the same set, so a build fails on what it was
+shown. Every report with more than five findings also opens with one summary line
+(`top rules: SHELL_EXEC 32, PERSIST_AGENT_CONFIG 23, …`), because the first thing
+a reader needs is what kind of mess it is, not how big.
 
 Exit codes are part of the contract, so it drops into any CI:
 `0` clean · `1` findings · `2` integrity failure · `3` usage error.
@@ -132,13 +140,14 @@ Exit codes are part of the contract, so it drops into any CI:
 text. No evidence, no finding.
 
 ```console
-$ skillguard scan ./download-execute
+$ skillguard scan tests/fixtures/malicious/download-execute
 
-  SkillGuard 0.1.0  |  rules 0.1.0  |  1 skill(s)
+  SkillGuard 0.1.1  |  rules 0.1.1  |  1 skill(s)
 
   download-execute
     Sets up the workspace quickly.
     12 finding(s): 2 critical, 2 high, 3 medium, 3 low, 2 info
+    top rules: NET_DOMAIN_LITERAL 2, NET_HTTP_CLIENT 2, DL_CHAIN_FETCH_EXECUTE 1, DL_PIPE_TO_SHELL 1, PERSIST_CRON 1 (+5 more rules)
 
     observed capabilities (from executable files only)
       network: get.workspace-tools.example.net
@@ -170,7 +179,7 @@ $ skillguard scan ./download-execute
 **`skillguard diff`** — the check nothing else does:
 
 ```console
-$ skillguard diff ./undeclared-egress
+$ skillguard diff tests/fixtures/suspicious/undeclared-egress
 
   SkillGuard diff - declared permissions vs observed behaviour
 
@@ -190,7 +199,7 @@ $ skillguard diff ./undeclared-egress
 **`skillguard policy-check`** — a deny is a deny, before anything is written:
 
 ```console
-$ skillguard policy-check ./undeclared-egress
+$ skillguard policy-check tests/fixtures/suspicious/undeclared-egress
 
   SkillGuard policy
 
@@ -210,12 +219,12 @@ Other output formats: `--format json`, `--format sarif` (GitHub Code Scanning),
 
 | Command | What it does |
 |---|---|
-| `scan <path>` | Evidence-grade report: text, JSON, SARIF or Markdown |
+| `scan <path>` | Evidence-grade report: text, JSON, SARIF or Markdown (`--min-severity` to triage a noisy skill) |
 | `inspect <path>` | Observed capabilities and dependencies only, no judgement (`--format json` for tooling) |
 | `inspect --labeling <path>` | Normalized text + line numbers only (for annotators) |
 | `diff <path>` | Declared permissions vs observed behaviour |
 | `adopt <path>` | Derive a `permissions:` block from observation, for authors to review |
-| `policy-check <path>` | Evaluate `SKILLGUARD.policy.yaml`; block on a deny |
+| `policy-check <path>` | Evaluate `SKILLGUARD.policy.yaml`; block on a deny (`--format json` for the decision, not just the exit code) |
 | `lock <path>` | Write `SKILLGUARD.lock` (content digest + per-file inventory) |
 | `verify <path>` | Recompute source + commit + digest; name any changed file |
 | `approve <path>` | Record an approval bound to an exact digest, with the reasons |
@@ -251,7 +260,7 @@ permissions:
   security-events: write   # required for the SARIF upload
 steps:
   - uses: actions/checkout@v4
-  - uses: lxbworld/SkillGuard/action@v0.1.0
+  - uses: lxbworld/SkillGuard/action@v0.1.1
     with:
       path: .
       fail-on: high
@@ -262,7 +271,7 @@ steps:
 ```yaml
 repos:
   - repo: https://github.com/lxbworld/SkillGuard
-    rev: v0.1.0
+    rev: v0.1.1
     hooks:
       - id: skillguard
 ```
