@@ -453,6 +453,12 @@ integrity failure · `3` usage error.
 `src/lib.rs`.)
 `--fail-on <SEVERITY>`, `--format text|json|sarif|markdown`, `--no-color`.
 
+`scan` also takes `--min-severity <SEVERITY>`: it hides findings below it and
+prints how many it hid, and the gate evaluates the same set, so a build fails on
+what it was shown. `policy-check --format json` emits the decision
+(`{skill, policy, decision, violations, worst_finding}`) for a CI step that needs
+more than the exit code.
+
 ---
 
 ## 11. Test strategy (per requirements §21.10; current state in `tests/`)

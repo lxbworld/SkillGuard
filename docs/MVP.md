@@ -59,7 +59,7 @@ carry declarations from day one.
 - The normalization pipeline (NFKC / zero-width / base64 shadow text / homoglyph marking)
 - Rule sets: secrets / shell / network / filesystem / download (chains) / injection (heuristics) / obfuscation
 - Output: text / json / sarif
-- Exit codes: controlled by `--fail-on <SEVERITY>`
+- Exit codes: controlled by `--fail-on <SEVERITY>`; `--min-severity <SEVERITY>` filters the report and the gate together
 - Severities: INFO / LOW / MEDIUM / HIGH / CRITICAL
 - Every finding must carry `file` + `line` + `evidence` (invariant S3)
 
