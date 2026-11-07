@@ -363,9 +363,13 @@ protocol's two-annotator **human** GOLD
 ([#11](https://github.com/lxbworld/SkillGuard/issues/11)) and the full study are
 still open.
 
-Test suite and CI are green: Linux on every commit (about 1.5 billed minutes),
-Windows and macOS on release tags and weekly, and `cargo fmt`, `cargo clippy -D
-warnings` and `cargo deny check` are clean on every platform in the matrix.
+Test suite and CI: Linux on every commit (about 1.5 billed minutes), Windows and
+macOS on release tags and weekly, `cargo fmt` and `cargo clippy -D warnings` clean
+everywhere. `cargo deny check` is **not** clean at the moment: RUSTSEC-2024-0449
+flags `unsafe-libyaml`, which arrives through `serde_yaml` (itself deprecated).
+The policy in `deny.toml` is "no exceptions, drop or upgrade the crate", so the
+fix is a YAML parser swap and it is tracked in
+[#17](https://github.com/lxbworld/SkillGuard/issues/17) rather than silenced.
 
 | Phase | Scope | Status |
 |---|---|---|
