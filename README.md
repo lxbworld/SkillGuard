@@ -369,7 +369,7 @@ everywhere. `cargo deny check` is **not** clean at the moment: RUSTSEC-2024-0449
 flags `unsafe-libyaml`, which arrives through `serde_yaml` (itself deprecated).
 The policy in `deny.toml` is "no exceptions, drop or upgrade the crate", so the
 fix is a YAML parser swap and it is tracked in
-[#17](https://github.com/lxbworld/SkillGuard/issues/17) rather than silenced.
+[#16](https://github.com/lxbworld/SkillGuard/issues/17) rather than silenced.
 
 | Phase | Scope | Status |
 |---|---|---|
