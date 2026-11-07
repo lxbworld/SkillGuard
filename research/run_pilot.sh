@@ -139,6 +139,12 @@ fi
 > excluded; the 17 disagreements were adjudicated by a third session shown both
 > verdicts, and every rule figure below is per rule, never micro-averaged.
 >
+> The label set was drawn at revision 50. Revision 51 changed **capability
+> derivation only** — shell variables, regex character classes and attribute
+> accesses are no longer recorded as file paths — which altered no text rule and
+> therefore no row above; it did remove four false `MISMATCH_UNDER_DECLARED`
+> accusations from the prevalence table.
+>
 > Neither annotator being human is the limitation, not a detail. Two sessions of
 > one model share blind spots, so they agree on a wrong label as readily as on a
 > right one, and the kappa above is a test–retest figure rather than inter-human
@@ -182,7 +188,6 @@ fi
 > The `PI_*` heuristics that remain are measured above, and every one of them is
 > below the gate. They are published because the evidence line is still worth a
 > human read, and their prevalence figures are upper bounds like every other row.
-
 HEADER
   echo "## Collection"
   echo

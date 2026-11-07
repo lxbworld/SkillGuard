@@ -1117,7 +1117,11 @@ pub fn rule_count() -> usize {
 /// display cap and the report then printed a finding whose evidence did not
 /// contain what it reported (issue #10). No rule matches differently, but the
 /// cache stores findings including their evidence, so the revision moves.
-pub const SCAN_LOGIC_REVISION: u32 = 50;
+/// rev 51: capability derivation stops reading shell variables (`$CMD`), regex
+/// character classes (`w./-`) and attribute accesses (`json.dumps`) as file
+/// paths. No text rule changed, but the declared-vs-observed findings and the
+/// corpus cache both carry the old (wrong) capabilities, so the revision moves.
+pub const SCAN_LOGIC_REVISION: u32 = 51;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

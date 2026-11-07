@@ -520,8 +520,21 @@ fn path_re() -> &'static Regex {
         // The last alternative catches separator-less dotfiles such as `.env`.
         // It also matches attribute accesses like `.json`; those are filtered
         // out downstream by `is_config_file`, which is why that check exists.
+        //
+        // A bare `$VAR` used to be an alternative here, and it was wrong: a
+        // variable *name* says nothing about which file is read. Measured on one
+        // real skill it put `$BRANCH`, `$CG_TMPDIR`, `$CMD` and 40 more into
+        // `fs read`, which the declared-vs-observed diff then reports as
+        // undeclared filesystem access. The path a variable points at is not
+        // knowable statically; `$HOME/.ssh` still yields a path through the
+        // alternatives below.
+        // A `$VAR`-rooted path is kept whole (`$HOME/.ssh/id_rsa`): the first
+        // alternative has to come first, because alternation is leftmost-first
+        // and the generic pattern would otherwise start after the `$`, leaving
+        // `HOME/.ssh/id_rsa` — a relative path that names a directory that does
+        // not exist at the top of the skill.
         re(
-            r"(?:~|\.{1,2})?/?(?:[\w.\-]+/){0,6}[\w.\-]+(?:\.[A-Za-z0-9]{1,6})?|\$\{?[A-Z_]{3,}\}?|/[A-Za-z0-9._\-/]{3,}|\.[A-Za-z0-9_][A-Za-z0-9_.\-]{0,19}",
+            r"\$\{?[A-Z_][A-Z0-9_]*\}?(?:/[\w.\-{}]+)+|(?:~|\.{1,2})?/?(?:[\w.\-]+/){0,6}[\w.\-]+(?:\.[A-Za-z0-9]{1,6})?|/[A-Za-z0-9._\-/]{3,}|\.[A-Za-z0-9_][A-Za-z0-9_.\-]{0,19}",
         )
     })
 }
@@ -569,10 +582,29 @@ fn normalize_path_token(t: &str) -> String {
     if t.matches('.').count() > 3 {
         return String::new();
     }
+    // Every path segment has to carry a letter or a digit. Without this the
+    // regex reads fragments of a character class as directories: a script that
+    // contains `[A-Za-z0-9_./-]` produced the capability `w./-`, and a real
+    // skill's `diff` and `policy-check` then reported "UNDECLARED MEDIUM w./-"
+    // and blocked installation on it. A segment made only of `-`, `_` or `.`
+    // is punctuation, not a name.
+    let textual = t.trim_start_matches(['~', '.', '/']);
+    if !textual
+        .split('/')
+        .filter(|seg| !seg.is_empty() && *seg != "." && *seg != "..")
+        .all(|seg| seg.chars().any(|c| c.is_ascii_alphanumeric()))
+    {
+        return String::new();
+    }
     if t.len() < 4 {
         return String::new();
     }
-    t.replace('\\', "/")
+    // `${X}/a` and `$X/a` are the same path; one spelling keeps the set deduped.
+    let canonical = match t.strip_prefix("${").and_then(|r| r.split_once('}')) {
+        Some((var, tail)) => format!("${var}{tail}"),
+        None => t.to_owned(),
+    };
+    canonical.replace('\\', "/")
 }
 
 /// True when a token's last `/`-separated segment is only digits and dots.
@@ -687,6 +719,14 @@ fn bare_file_token(t: &str) -> Option<String> {
     if !ext.chars().all(|c| c.is_ascii_alphanumeric()) {
         return None;
     }
+    // `json.dumps(…)`, `data.get(…)`, `section.strip()` are attribute accesses,
+    // not files: `dumps`, `get` and `strip` are method names, and the extension
+    // position is where the path regex cannot tell the two apart. A real write
+    // next to them (`path.write_text(json.dumps(x))`) then reported the *method*
+    // as the file written, which is a false `filesystem.write` in the diff.
+    if METHOD_NAMES.contains(&ext.to_ascii_lowercase().as_str()) {
+        return None;
+    }
     if !stem
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
@@ -695,6 +735,45 @@ fn bare_file_token(t: &str) -> Option<String> {
     }
     Some(t.to_owned())
 }
+
+/// Extension-position words that are method names, never file extensions.
+///
+/// Deliberately short and word-shaped: `.json`, `.yaml`, `.text` and `.md` are
+/// real extensions and stay in, even though they are also attribute names.
+const METHOD_NAMES: &[&str] = &[
+    "get",
+    "dumps",
+    "loads",
+    "strip",
+    "split",
+    "join",
+    "items",
+    "keys",
+    "values",
+    "append",
+    "update",
+    "format",
+    "copy",
+    "pop",
+    "encode",
+    "decode",
+    "lower",
+    "upper",
+    "replace",
+    "close",
+    "read",
+    "write",
+    "isfile",
+    "isdir",
+    "exists",
+    "resolve",
+    "glob",
+    "rglob",
+    "index",
+    "startswith",
+    "endswith",
+    "encode",
+];
 
 /// `cmd > out.txt` and `cmd >> log.txt`: is `start` the target of a redirect?
 fn is_redirect_target(line: &str, start: usize) -> bool {
@@ -1223,6 +1302,65 @@ mod tests {
         assert!(
             cap.filesystem_write.is_empty(),
             "{:#?}",
+            cap.filesystem_write
+        );
+    }
+
+    /// The capability list is read by humans and by the declared-vs-observed
+    /// diff, so a token that is not a path is not noise — it is a false
+    /// accusation. Measured on one real skill: `w./-` (a character class) was
+    /// reported as an undeclared read and blocked `policy-check`, `$CMD` and
+    /// friends listed 40 shell variables as files, and `json.dumps` was listed as
+    /// the file written.
+    #[test]
+    fn punctuation_and_variable_names_are_not_paths() {
+        let mut a = Accumulator::new();
+        a.add_text("const CLASS = /[A-Za-z0-9_./-]/;");
+        a.add_text("w./-");
+        a.add_text("echo $BRANCH $CMD $TMPDIR");
+        let cap = a.finish();
+        assert!(
+            cap.filesystem_read.is_empty(),
+            "no token here names a file: {:#?}",
+            cap.filesystem_read
+        );
+
+        // A `$VAR`-rooted path is a real path and keeps its variable, so the
+        // reader can tell it apart from an absolute one.
+        let mut a = Accumulator::new();
+        a.add_text("cat \"$HOME/.ssh/id_rsa\"");
+        a.add_text("cat ${SCRIPT_DIR}/engine.sh");
+        let cap = a.finish();
+        assert!(
+            cap.filesystem_read.iter().any(|p| p == "$HOME/.ssh/id_rsa"),
+            "{:#?}",
+            cap.filesystem_read
+        );
+        assert!(
+            cap.filesystem_read
+                .iter()
+                .any(|p| p == "$SCRIPT_DIR/engine.sh"),
+            "{:#?}",
+            cap.filesystem_read
+        );
+    }
+
+    #[test]
+    fn an_attribute_access_is_not_a_file() {
+        let mut a = Accumulator::new();
+        a.add_text("path.write_text(json.dumps(cache))");
+        a.add_text("with open('out.txt', 'w') as f:");
+        let cap = a.finish();
+        assert!(
+            !cap.filesystem_write
+                .iter()
+                .any(|p| p.contains("json.dumps")),
+            "a method name is not the file written: {:#?}",
+            cap.filesystem_write
+        );
+        assert!(
+            cap.filesystem_write.iter().any(|p| p.ends_with("out.txt")),
+            "the real write must survive the filter: {:#?}",
             cap.filesystem_write
         );
     }
