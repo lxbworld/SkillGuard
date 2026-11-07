@@ -134,9 +134,10 @@ fi
 > per rule in hash order, one judgment per skill and rule. Two independent
 > sessions of `command-code/deepseek-v4.1-flash` labelled them blind to each
 > other — **no human annotated this set**, and neither annotator wrote the rules.
-> Cohen's kappa is **0.827** over the 209 scored rows (gate 0.75); the 17
-> disagreements were adjudicated by a third session shown both verdicts, and
-> every rule figure below is per rule, never micro-averaged.
+> Cohen's kappa is **0.827** over the 209 scored rows (gate 0.75), or **0.845**
+> over all 225 rows the annotators saw before the two skill-level rules were
+> excluded; the 17 disagreements were adjudicated by a third session shown both
+> verdicts, and every rule figure below is per rule, never micro-averaged.
 >
 > Neither annotator being human is the limitation, not a detail. Two sessions of
 > one model share blind spots, so they agree on a wrong label as readily as on a

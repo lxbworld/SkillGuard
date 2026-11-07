@@ -434,6 +434,7 @@ not refresh it on its own (issue #10). GOLD-v6 re-labels the current set.
 | annotators | two independent sessions of `command-code/deepseek-v4.1-flash`, blind to each other |
 | agreement | 192/209 (91.9%), **Cohen's κ 0.827** (gate 0.75) |
 | disagreements | 17, adjudicated by a third session shown both verdicts |
+| raw record | the committed annotator files hold all 225 rows they were shown, κ 0.845; the two skill-level rules below are excluded from the scored 209 |
 
 `opencode-go/deepseek-v4.1-flash` — the annotator of GOLD-v1..v5 — is no longer
 available on this machine (403, "an active subscription is required"), so the
@@ -453,6 +454,8 @@ python3 research/annotate_gold.py --worksheet research/gold/GOLD-v6.worksheet.js
 # 2. agreement, then adjudicate the disagreements into GOLD-v6.jsonl
 skillguard corpus agreement research/gold/GOLD-v6.annotator-a6.jsonl \
                             research/gold/GOLD-v6.annotator-b6.jsonl
+# that scores all 225 rows (κ 0.845); the scored set is the 209 that remain after
+# excluding SKILL_LEVEL_RULES, and 0.827 is the figure for those
 # 3. score
 skillguard corpus report --findings research/raw-findings.jsonl \
     --gold research/gold/GOLD-v6.jsonl --out /tmp/body.md
