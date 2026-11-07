@@ -173,9 +173,9 @@ only one of the three with a plain email address.
 
 | Source | Contact route | Sent | Reply | Decision |
 |---|---|---|---|---|
-| skills.sh | GitHub issue [#2442](https://github.com/vercel-labs/skills/issues/2442) on `vercel-labs/skills` (no email, no `SECURITY.md`) | **2026-10-09** | — | excluded until reply |
-| ClawHub | RFC [openclaw/clawhub#3931](https://github.com/openclaw/clawhub/issues/3931) — `type: rfc`, `status: review` | **2026-10-09** | automated review 2026-10-09; **recommends standing terms**; policy owner pending | excluded until reply |
-| skillsmp.com | `support@skillsmp.com` | **2026-10-09** | — | excluded until reply |
+| skills.sh | GitHub issue [#2442](https://github.com/vercel-labs/skills/issues/2442) on `vercel-labs/skills` (no email, no `SECURITY.md`) | **2026-10-09** | none as of 2026-11-07 (issue open, 0 comments) | excluded until reply |
+| ClawHub | RFC [openclaw/clawhub#3931](https://github.com/openclaw/clawhub/issues/3931) — `type: rfc`, `status: review` | **2026-10-09** | automated review 2026-10-09 recommended standing terms; policy owner never answered; **closed by automation for inactivity 2026-11-01** | excluded until reply; a new request is needed |
+| skillsmp.com | `support@skillsmp.com` | **2026-10-09** | none as of 2026-11-07 | excluded until reply |
 | GitHub (L3) | n/a — API docs | n/a | n/a | **permitted**, proceed |
 
 While these are unanswered, the study runs on **L3 only**
@@ -194,7 +194,9 @@ the evidence stays on the scanning machine.
 |---|---|---|---|---|
 | 2026-10-09 | permission request, no finding yet | skillsmp.com `support@` | 2026-10-16 | awaiting reply |
 | 2026-10-09 | permission request, no finding yet | skills.sh — `vercel-labs/skills` issue #2442 | 2026-10-16 | awaiting reply |
-| 2026-10-09 | permission request, no finding yet | ClawHub — RFC `openclaw/clawhub#3931` | 2026-10-23 | awaiting policy owner |
+| 2026-10-09 | permission request, no finding yet | ClawHub — RFC `openclaw/clawhub#3931` | 2026-10-23 | no reply from the policy owner |
+| 2026-11-01 | the ClawHub RFC was closed by the repository's automation for inactivity, with no decision recorded | — | — | request lapsed; a new issue is needed before any ClawHub figure could be published |
+| 2026-11-07 | both remaining requests are past their 7-day window with no reply (skills.sh 29 days, skillsmp.com 29 days) | — | — | still excluded: silence is not permission (§1, protocol R-4) |
 | 2026-10-09 | reply accepting the re-identification point, narrowing the ask to publication terms | ClawHub — comment 6075720307 | — | sent |
 | 2026-10-09 | follow-up: propose the export endpoint + a scoped token instead of a standing policy | ClawHub — comment 6075752106 | — | sent |
 
