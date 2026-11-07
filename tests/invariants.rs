@@ -257,6 +257,86 @@ fn the_readme_rule_count_matches_the_code() {
     assert!(checked > 0, "the README should state the rule count");
 }
 
+/// The threat → rule map must name rules that exist, with the severity the code
+/// gives them, and must not silently omit a rule.
+///
+/// Before issue #15 it failed all three: `SECRET_EXFIL_CHAIN`,
+/// `REF_OUTSIDE_SKILL`, `LOCK_DIGEST_MISMATCH`, `LOCK_HAND_EDITED` and
+/// `MISMATCH_UNDECLARED_CAPABILITY` were never real ids, four rules that do
+/// exist had no row, and the "default severity" column was wrong for ten rows.
+/// A reader asking "what catches T2" was sent to a rule that does not exist,
+/// which is the same defect as a rule advertising a capability it never
+/// observes. The claim is mechanical, so it is checked mechanically.
+#[test]
+fn the_threat_model_names_real_rules_with_their_real_severity() {
+    let doc = read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/THREAT_MODEL.md"));
+    let table = doc
+        .split("## 5.")
+        .nth(1)
+        .and_then(|s| s.split("\n## ").next())
+        .expect("docs/THREAT_MODEL.md must keep a section 5 with the rule map");
+
+    let catalogue = skillguard::scan::rules::catalogue();
+    let severity_of = |id: &str| {
+        catalogue
+            .iter()
+            .find(|r| r.id == id)
+            .map(|r| r.severity.as_str())
+    };
+
+    let mut named: Vec<&str> = Vec::new();
+    let mut rows = 0usize;
+    for line in table.lines().filter(|l| l.starts_with('|')) {
+        rows += 1;
+        for (start, _) in line.match_indices('`') {
+            let Some(end) = line[start + 1..].find('`') else {
+                continue;
+            };
+            let id = &line[start + 1..start + 1 + end];
+            let is_rule_id = id.contains('_')
+                && id
+                    .chars()
+                    .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
+            if !is_rule_id {
+                continue;
+            }
+            named.push(id);
+            let Some(actual) = severity_of(id) else {
+                panic!("docs/THREAT_MODEL.md §5 names `{id}`, which is not in the catalogue");
+            };
+            let after = &line[start + 1 + end + 1..];
+            let claimed = after
+                .strip_prefix(" (")
+                .and_then(|s| s.split(')').next())
+                .and_then(|s| s.split([',', ' ']).next())
+                .unwrap_or_else(|| {
+                    panic!(
+                        "docs/THREAT_MODEL.md §5 states `{id}` without ` (SEVERITY)`; \
+                         the severity is a claim about the code and must stay checkable"
+                    )
+                });
+            assert_eq!(
+                claimed, actual,
+                "docs/THREAT_MODEL.md §5 says `{id}` is {claimed}; the catalogue says {actual}"
+            );
+        }
+    }
+
+    assert!(
+        rows > 10,
+        "§5's table looks empty; the check would be vacuous"
+    );
+    let missing: Vec<&str> = catalogue
+        .iter()
+        .map(|r| r.id)
+        .filter(|id| !named.contains(id))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "rules with no row in docs/THREAT_MODEL.md §5: {missing:?}"
+    );
+}
+
 #[test]
 fn no_telemetry_crate_is_a_dependency() {
     // The README makes offline operation a project constraint. A usage ping

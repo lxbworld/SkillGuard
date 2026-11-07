@@ -409,7 +409,7 @@ the rule set at labelling time rather than of the code.
 | `PI_CONCEALMENT` | 50 | 29 | 0/4 |
 | `PI_INJECTION_OVERRIDE` | 24 | 10 | 0/2 |
 | `PI_EXFIL_INSTRUCTION` | 15 | 9 | 0/4 |
-| `PI_SYSTEM_IMPERSATION` | 11 | 6 | 1/4 |
+| `PI_SYSTEM_IMPERSONATION` | 11 | 6 | 1/4 |
 
 The rules do catch real injections (`tests/fixtures/malicious/download-execute`),
 but on a random corpus sample they remain low-precision tripwires: the corpus is

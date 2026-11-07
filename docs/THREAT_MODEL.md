@@ -58,7 +58,7 @@ comments, and luring the agent into reading other files and exfiltrating them.
 
 **Detection (deterministic)**
 - An injection phrase table (case-insensitive, matched on the normalized view):
-  `PI_INJECTION_OVERRIDE` / `PI_SYSTEM_IMPERSATION` / `PI_CONCEALMENT` /
+  `PI_INJECTION_OVERRIDE` / `PI_SYSTEM_IMPERSONATION` / `PI_CONCEALMENT` /
   `PI_EXFIL_INSTRUCTION`
 - Shadow text (base64 decode candidates) rescanned
 - Description-vs-behaviour mismatch: `PI_DESCRIPTION_MISMATCH` (the frontmatter
@@ -77,19 +77,22 @@ not become the only line of defence either.
 `.git-credentials`; dumping `process.env` wholesale; `printenv`; reading shell
 history.
 
-**Detection**: `SECRET_PATH_READ` (a path table plus fuzzy matching),
-`SECRET_ENV_DUMP` (a whole `env` / `printenv` / `os.environ`),
-`SECRET_EXFIL_CHAIN` (a credential path and a network sink in the same place →
-CRITICAL).
+**Detection**: `FS_SENSITIVE_PATH` (a read of a known key store),
+`SECRET_PATH_READ` (a credential path matched more loosely),
+`SECRET_ENV_DUMP` (a whole `env` / `printenv` / `os.environ`), and
+`MISMATCH_CONFLICTING` (CRITICAL) when a skill declares `secrets: false` and
+reads one anyway. **There is no credential-to-network chain rule**: nothing pairs
+a credential path with a network sink, so exfiltration is visible only as two
+separate findings, or as a declared-vs-observed conflict.
 **Must distinguish**: `export FOO=$(cat key.pem)` (real) from a document saying
 "best practice for reading ~/.ssh" (explanatory) — mark the latter with
 `Confidence` rather than raising severity.
 
 ### T3 Hardcoded secrets
 `SECRET_PRIVATE_KEY` / `SECRET_AWS_ACCESS_KEY` / `SECRET_GITHUB_TOKEN` /
-`SECRET_GENERIC_ASSIGN` / `SECRET_JWT`. High-entropy detection needs care:
-**judge only by known prefixes and structural patterns**, so that a sha256 or a
-commit hash is not mistaken for a token (a common source of false positives, which
+`SECRET_GENERIC_ASSIGN` / `SECRET_JWT` / `SECRET_PROVIDER_TOKEN`. High-entropy
+detection needs care: **judge only by known prefixes and structural patterns**,
+so that a sha256 or a commit hash is not mistaken for a token (a common source of false positives, which
 requires hash allowlist patterns).
 
 ### T4 Shell execution and privilege escalation
@@ -119,7 +122,10 @@ Writing a hook into `.claude/settings.json`, `~/.claude/CLAUDE.md`, `AGENTS.md`,
 ### T8 Cross-Skill / cross-agent reference escapes
 `@../other-skill/SKILL.md`, reading all of `~/.claude/skills/`, treating the
 contents of another Skill as instructions.
-→ `REF_OUTSIDE_SKILL` plus the out-of-bounds accesses in the capability diff.
+→ `FS_PATH_ESCAPE` (a path that resolves outside the skill) plus the
+out-of-bounds accesses in the capability diff. The escape check is a path
+containment question, so it lives in `FS_PATH_ESCAPE` rather than in a rule of
+its own.
 
 ### T9 Obfuscation and hidden text
 base64 blobs, zero-width characters, homoglyphs, instructions inside HTML comments,
@@ -229,24 +235,42 @@ skill records `allow` with no override record).
 
 ## 5. Threat → rule → severity mapping
 
-| Threat | Rule IDs | Default severity |
-|---|---|---|
-| T1 | `PI_INJECTION_OVERRIDE`, `PI_SYSTEM_IMPERSATION`, `PI_CONCEALMENT`, `PI_EXFIL_INSTRUCTION` | Info |
-| T2 | `SECRET_PATH_READ`, `SECRET_ENV_DUMP`, `SECRET_EXFIL_CHAIN` | LOW / HIGH / CRITICAL |
-| T3 | `SECRET_PRIVATE_KEY`, `SECRET_AWS_ACCESS_KEY`, `SECRET_GITHUB_TOKEN`, `SECRET_GENERIC_ASSIGN`, `SECRET_JWT` | CRITICAL / HIGH |
-| T4 | `SHELL_EXEC`, `SHELL_PRIVILEGE_ESCALATION`, `SHELL_DESTRUCTIVE` | MEDIUM / HIGH |
-| T5 | `DL_PIPE_TO_SHELL`, `DL_REMOTE_INSTALL`, `DL_UNTRUSTED_DOMAIN`, `DL_PASSWORD_ARCHIVE`, `DL_CHAIN_FETCH_EXECUTE` | CRITICAL |
-| T6 | `DEP_TYPOSQUAT`, `DEP_CUSTOM_REGISTRY`, `DEP_UNPINNED_SCRIPT` | HIGH |
-| T7 | `PERSIST_AGENT_CONFIG`, `PERSIST_SHELL_RC`, `PERSIST_HOOK`, `PERSIST_CRON` | MEDIUM |
-| T8 | `REF_OUTSIDE_SKILL` | MEDIUM |
-| T9 | `OBFUSC_BASE64_BLOB`, `OBFUSC_ZERO_WIDTH`, `OBFUSC_HOMOGLYPH`, `OBFUSC_TRACKING_PIXEL` | MEDIUM |
-| T10 | `LICENSE_MISSING`, `LICENSE_MISMATCH`, `LICENSE_RESTRICTIVE` | LOW / MEDIUM |
-| T11 | `PARSE_FAILED`, `RESOURCE_LIMIT_EXCEEDED` | INFO |
-| T12/13 | `FS_PATH_ESCAPE`, `FS_SYMLINK_OUTSIDE` | HIGH / MEDIUM |
-| T15 | `LOCK_DIGEST_MISMATCH`, `LOCK_HAND_EDITED` | HIGH / MEDIUM |
-| T17 | the approval record (`overrode_decision` / `overrode_violations`, not a text rule) | records the original decision, never rewrites it |
-| — | `MISMATCH_UNDECLARED_CAPABILITY` (produced by the diff, not a text rule) | HIGH |
-| — | `POLICY_VIOLATION` (produced by policy) | by violated capability |
+The severity is written next to each id because it is a property of the rule, not
+of the threat: the same threat covers a CRITICAL rule and an INFO one. Every id
+here exists in the catalogue, every catalogue rule appears here, and the
+severities are checked against the code by
+`tests/invariants.rs::the_threat_model_names_real_rules_with_their_real_severity`
+— the table had drifted on all three counts before that test existed (#15).
+
+| Threat | Rules, each with the severity the catalogue gives it |
+|---|---|
+| T1 | `PI_INJECTION_OVERRIDE` (INFO), `PI_SYSTEM_IMPERSONATION` (INFO), `PI_CONCEALMENT` (INFO), `PI_EXFIL_INSTRUCTION` (INFO), `PI_DESCRIPTION_MISMATCH` (MEDIUM) |
+| T2 | `FS_SENSITIVE_PATH` (HIGH), `SECRET_PATH_READ` (LOW), `SECRET_ENV_DUMP` (MEDIUM), `MISMATCH_CONFLICTING` (CRITICAL) |
+| T1/T2 | `NET_FETCH_CALL` (MEDIUM), `NET_HTTP_CLIENT` (MEDIUM), `NET_DYNAMIC_URL` (HIGH), `NET_DOMAIN_LITERAL` (LOW) — egress is not a threat by itself; these make the sink visible so T1's exfiltration and T2's theft can be read against it |
+| T3 | `SECRET_PRIVATE_KEY` (CRITICAL), `SECRET_AWS_ACCESS_KEY` (CRITICAL), `SECRET_GITHUB_TOKEN` (CRITICAL), `SECRET_GENERIC_ASSIGN` (HIGH), `SECRET_JWT` (HIGH), `SECRET_PROVIDER_TOKEN` (HIGH) |
+| T4 | `SHELL_EXEC` (LOW), `SHELL_PRIVILEGE_ESCALATION` (HIGH), `SHELL_DESTRUCTIVE` (HIGH), `SHELL_EVAL` (MEDIUM) |
+| T5 | `DL_PIPE_TO_SHELL` (CRITICAL), `DL_CHAIN_FETCH_EXECUTE` (CRITICAL), `DL_POWERSHELL_IEX` (CRITICAL), `DL_REMOTE_INSTALL` (HIGH), `DL_PASSWORD_ARCHIVE` (HIGH), `DL_UNTRUSTED_DOMAIN` (MEDIUM) |
+| T6 | `DEP_TYPOSQUAT` (HIGH), `DEP_CUSTOM_REGISTRY` (HIGH), `DEP_UNPINNED_SCRIPT` (MEDIUM) |
+| T7 | `PERSIST_HOOK` (HIGH), `PERSIST_CRON` (HIGH), `PERSIST_AGENT_CONFIG` (MEDIUM), `PERSIST_SHELL_RC` (MEDIUM) |
+| T8 | `FS_PATH_ESCAPE` (HIGH), `FS_SYMLINK_OUTSIDE` (MEDIUM), `FS_ABSOLUTE_PATH` (MEDIUM), `FS_RECURSIVE_WALK` (MEDIUM), `FS_HOME_ACCESS` (LOW), `FS_MODE_UNRESOLVED` (INFO) |
+| T9 | `OBFUSC_BASE64_PAYLOAD` (HIGH), `OBFUSC_BIDI_CONTROL` (HIGH), `OBFUSC_ZERO_WIDTH` (MEDIUM), `OBFUSC_HOMOGLYPH` (MEDIUM), `OBFUSC_TRACKING_PIXEL` (MEDIUM), `DL_BASE64_BLOB` (LOW, the decoded-blob signal) |
+| T10 | `LICENSE_MISMATCH` (MEDIUM), `LICENSE_RESTRICTIVE` (MEDIUM), `LICENSE_MISSING` (INFO) |
+| T11 | `PARSE_FAILED` (INFO), `RESOURCE_LIMIT_EXCEEDED` (INFO) |
+| T12/13 | `FS_PATH_ESCAPE` (HIGH), `FS_SYMLINK_OUTSIDE` (MEDIUM) — the same two rules T8 needs, listed here because the hazard is the containment check, not the intent |
+| T15 | no text rule: `verify` reports the digest mismatch and `approve` records the override |
+| T17 | the approval record (`overrode_decision` / `overrode_violations`, not a text rule) — it records the original decision and never rewrites it |
+| — | declared vs observed, produced by the diff rather than a pattern: `MISMATCH_UNDER_DECLARED` (HIGH), `MISMATCH_CONFLICTING` (CRITICAL), `MISMATCH_OVER_DECLARED` (INFO) |
+
+Two of these need stating plainly rather than implying coverage:
+
+- **There is no rule that pairs a credential path with a network sink.**
+  `SECRET_PATH_READ` and `SECRET_ENV_DUMP` name the read; nothing names the
+  exfiltration that would make it a chain. Until one exists, T2's worst outcome
+  is caught only as two separate findings, which is why `MISMATCH_*` matters:
+  a skill that declares nothing and both reads and posts is a conflicting diff.
+- **A policy violation is not a rule.** `policy-check` emits a violation with a
+  capability, a detail and a severity taken from the policy, so it has no id to
+  list here and no row in `docs/RULES.md`.
 
 ---
 

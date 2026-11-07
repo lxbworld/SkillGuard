@@ -249,7 +249,7 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | `PI_EXFIL_INSTRUCTION` | 7 | 5442 | 0.1% |
 | `DEP_CUSTOM_REGISTRY` | 6 | 5442 | 0.1% |
 | `PERSIST_HOOK` | 6 | 5442 | 0.1% |
-| `PI_SYSTEM_IMPERSATION` | 6 | 5442 | 0.1% |
+| `PI_SYSTEM_IMPERSONATION` | 6 | 5442 | 0.1% |
 | `PERSIST_SHELL_RC` | 5 | 5442 | 0.1% |
 | `DL_REMOTE_INSTALL` | 4 | 5442 | 0.1% |
 | `FS_SENSITIVE_PATH` | 4 | 5442 | 0.1% |
@@ -360,7 +360,7 @@ Gate G4: precision >= 0.85 and recall >= 0.60, per rule (no micro-average).
 | `PI_CONCEALMENT` | 0 | 4 | 0 | 0.0% | n/a | below |
 | `PI_EXFIL_INSTRUCTION` | 0 | 2 | 0 | 0.0% | n/a | below |
 | `PI_INJECTION_OVERRIDE` | 0 | 2 | 0 | 0.0% | n/a | below |
-| `PI_SYSTEM_IMPERSATION` | 1 | 4 | 0 | 20.0% | 100.0% | below |
+| `PI_SYSTEM_IMPERSONATION` | 1 | 4 | 0 | 20.0% | 100.0% | below |
 | `SECRET_GENERIC_ASSIGN` | 1 | 0 | 0 | 100.0% | 100.0% | pass |
 | `SECRET_PATH_READ` | 5 | 3 | 0 | 62.5% | 100.0% | below |
 | `SECRET_PROVIDER_TOKEN` | 2 | 1 | 0 | 66.7% | 100.0% | below |

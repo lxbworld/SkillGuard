@@ -931,7 +931,7 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         "PI_CONCEALMENT"
         | "PI_EXFIL_INSTRUCTION"
         | "PI_INJECTION_OVERRIDE"
-        | "PI_SYSTEM_IMPERSATION"
+        | "PI_SYSTEM_IMPERSONATION"
         | "PERSIST_HOOK" => {
             doc || discusses_the_attack(&line) || looks_like_test(&line) || looks_like_usage(&line)
         }

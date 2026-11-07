@@ -155,8 +155,8 @@
 {"rule": "PI_EXFIL_INSTRUCTION", "source_id": "github:vertivolatam/monorepo@bc91648e3d185270d4629e173ceaa0f0093db40a/skills/flutter/firebase", "verdict": "fp"}
 {"rule": "PI_INJECTION_OVERRIDE", "source_id": "github:majiayu000/claude-skill-registry-data@8dc0adab6588e963b72e8ce43538e6f6bf8d121e/agent/core", "verdict": "fp"}
 {"rule": "PI_INJECTION_OVERRIDE", "source_id": "github:jdforsythe/wolfe-pack@37d724d2a78f3a739c471ed1930d2c27bd24b2c2/templates/bots/wolfe-tech-debt", "verdict": "fp"}
-{"rule": "PI_SYSTEM_IMPERSATION", "source_id": "github:cangtianhuang/humanizer-academic-zh@9a30ac38200692916efae5e5128273def2099ae6", "verdict": "fp"}
-{"rule": "PI_SYSTEM_IMPERSATION", "source_id": "github:majiayu000/claude-skill-registry-data@8dc0adab6588e963b72e8ce43538e6f6bf8d121e/agent/agent-development-kurohit2-mlproject-f02f4772", "verdict": "fp"}
+{"rule": "PI_SYSTEM_IMPERSONATION", "source_id": "github:cangtianhuang/humanizer-academic-zh@9a30ac38200692916efae5e5128273def2099ae6", "verdict": "fp"}
+{"rule": "PI_SYSTEM_IMPERSONATION", "source_id": "github:majiayu000/claude-skill-registry-data@8dc0adab6588e963b72e8ce43538e6f6bf8d121e/agent/agent-development-kurohit2-mlproject-f02f4772", "verdict": "fp"}
 {"rule": "SECRET_AWS_ACCESS_KEY", "source_id": "github:rdmgator12/Parent-Helper@74ca42426fb5226fcd04e5a0ce8215d261c720ee", "verdict": "fp"}
 {"rule": "SECRET_ENV_DUMP", "source_id": "github:skillberry-ai/cap-evolve@ce242ba05ac1eb41a9ae786db116b8222be18c87/templates/skill", "verdict": "fp"}
 {"rule": "SECRET_ENV_DUMP", "source_id": "github:jetteim/platform-workstation-bootstrap@40827cd0973f4b82c7c6597cad2c1e7b50c0f322/agents/skills/platform/observability-engineering", "verdict": "tp"}
