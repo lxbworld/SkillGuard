@@ -92,8 +92,11 @@ impl NormFlags {
 pub struct NormLine {
     /// 1-based line number in the original file.
     pub line: usize,
-    /// Verbatim original, display-sanitized only.
+    /// Verbatim original, display-sanitized and capped for the terminal.
     pub raw: String,
+    /// The same text before the display cap, for evidence that must contain the
+    /// match. `raw` is what suppression logic reads, so it keeps the cap.
+    pub raw_full: String,
     /// NFKC-normalized, invisibles stripped, homoglyphs folded.
     pub norm: String,
     pub flags: NormFlags,
@@ -263,10 +266,12 @@ pub fn normalize_file(input: &str, max_bytes: usize) -> Normalized {
 
     for (i, line) in body.lines().enumerate() {
         let (norm, flags) = normalize_line(line);
-        let raw = sanitize_for_display(line);
+        let raw_full = sanitize_controls(line);
+        let raw = truncate_chars(&raw_full, MAX_DISPLAY_CHARS);
         out.lines.push(NormLine {
             line: i + 1,
             raw,
+            raw_full,
             norm,
             flags,
         });
@@ -384,6 +389,65 @@ pub fn truncate_chars(s: &str, max: usize) -> String {
     out
 }
 
+/// Evidence text for a finding: the line as displayed, windowed around the match
+/// when the display cap would cut the match off.
+///
+/// `raw_full` is the sanitized line and `raw` is that text after the cap that
+/// keeps a hostile skill from repainting the terminal (invariant S5). The
+/// regexes run on the *uncapped* normalized line, so on a minified or
+/// single-line file the match can sit past the cut and the report then prints a
+/// finding whose evidence does not contain what was reported — which defeats the
+/// only thing separating an evidence-grade tool from a heuristic (issue #10;
+/// measured at 24 of 8,187 findings on the pilot corpus).
+///
+/// The window is centred a third of the way in, which is enough to show the
+/// match with context on both sides.
+pub fn evidence_window(raw_full: &str, raw: &str, matched: &str) -> String {
+    let needle = matched.trim();
+    if needle.is_empty()
+        || raw_full.len() <= raw.len()
+        || find_ignoring_ascii_case(raw, needle).is_some()
+    {
+        return raw.to_owned();
+    }
+    let Some(at) = find_ignoring_ascii_case(raw_full, needle) else {
+        return raw.to_owned();
+    };
+    let needle_len = needle.chars().count();
+    // Three characters at each end for the markers, so the result never exceeds
+    // the display cap.
+    let keep = MAX_DISPLAY_CHARS.saturating_sub(6).max(needle_len + 1);
+    let start = at.saturating_sub((keep - needle_len).min(keep / 3));
+    let total = raw_full.chars().count();
+    let mut out: String = raw_full.chars().skip(start).take(keep).collect();
+    if start > 0 {
+        out.insert_str(0, "...");
+    }
+    if start + keep < total {
+        out.push_str("...");
+    }
+    out
+}
+
+/// Character offset of `needle` in `hay`, folding ASCII case only.
+///
+/// The match text comes from a lowercased haystack and the line does not, so the
+/// comparison has to ignore case. Only ASCII is folded: non-ASCII case folding
+/// can change the character count, and this offset indexes characters.
+fn find_ignoring_ascii_case(hay: &str, needle: &str) -> Option<usize> {
+    let h: Vec<char> = hay.chars().collect();
+    let n: Vec<char> = needle.chars().collect();
+    if n.is_empty() || n.len() > h.len() {
+        return None;
+    }
+    (0..=h.len() - n.len()).find(|&i| {
+        h[i..i + n.len()]
+            .iter()
+            .zip(&n)
+            .all(|(a, b)| a.eq_ignore_ascii_case(b))
+    })
+}
+
 /// Decode long base64 blobs and keep the plaintext for the injection rules.
 ///
 /// Attackers base64-encode instructions so keyword rules miss them. We do not
@@ -470,6 +534,7 @@ mod tests {
         let nl = |raw: &str| NormLine {
             line: 1,
             raw: raw.to_owned(),
+            raw_full: raw.to_owned(),
             norm: raw.to_ascii_lowercase(),
             flags: NormFlags::default(),
         };
@@ -531,6 +596,41 @@ mod tests {
         assert!(!cleaned.contains('\u{1B}'));
         // The display version still caps length.
         assert!(sanitize_for_display(&long).chars().count() <= MAX_DISPLAY_CHARS);
+    }
+
+    #[test]
+    fn evidence_window_keeps_the_match_visible() {
+        // A minified line: the display cap cuts at 200 characters, and the
+        // match sits past the cut. Before this, the report printed 200
+        // characters of padding and then claimed a token that was not in them.
+        let token = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
+        let full = format!("const a = 1;{} \"{token}\";", "x".repeat(400));
+        let raw = truncate_chars(&full, MAX_DISPLAY_CHARS);
+        assert!(!raw.contains(token), "the fixture must reproduce the cut");
+
+        let windowed = evidence_window(&full, &raw, token);
+        assert!(windowed.contains(token), "got {windowed}");
+        assert!(windowed.chars().count() <= MAX_DISPLAY_CHARS);
+        assert!(windowed.starts_with("..."), "the cut head must be marked");
+
+        // The match text comes from a lowercased haystack while the evidence is
+        // the line's own text, so the search folds ASCII case. The window shows
+        // the line as written (`AIZA…`), which is the point of evidence.
+        let full = format!("{} {} end", "y".repeat(300), token.to_uppercase());
+        let raw = truncate_chars(&full, MAX_DISPLAY_CHARS);
+        let windowed = evidence_window(&full, &raw, token);
+        assert!(windowed.contains(&token.to_uppercase()), "got {windowed}");
+        assert!(windowed.ends_with(" end"), "the tail must be reachable too");
+
+        // A short line is returned untouched, marker and all.
+        let short = "export KEY=abc";
+        let raw = truncate_chars(short, MAX_DISPLAY_CHARS);
+        assert_eq!(evidence_window(short, &raw, "abc"), short);
+
+        // A match that cannot be located degrades to the old behaviour rather
+        // than to an empty window.
+        let raw = truncate_chars(&full, MAX_DISPLAY_CHARS);
+        assert_eq!(evidence_window(&full, &raw, "not-on-this-line"), raw);
     }
 
     #[test]

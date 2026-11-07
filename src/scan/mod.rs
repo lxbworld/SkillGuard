@@ -545,7 +545,7 @@ fn apply_text_rules(rel: &str, kind: ArtifactKind, norm: &Normalized, out: &mut 
                 message: rule.spec.message.to_owned(),
                 evidence: vec![Evidence {
                     line: line.line,
-                    text: line.raw.clone(),
+                    text: text::evidence_window(&line.raw_full, &line.raw, &matched),
                     secondary: None,
                     note: Some(format!("matched: {}", text::truncate_chars(&matched, 60))),
                 }],

