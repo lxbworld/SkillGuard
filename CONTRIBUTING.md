@@ -20,7 +20,7 @@ cargo build --release
 cargo test --all-targets
 ```
 
-Rust 1.78 or newer. The binary has no runtime dependencies and no network
+Rust 1.89 or newer. The binary has no runtime dependencies and no network
 access; scanning is offline by design.
 
 ## Before you open a PR

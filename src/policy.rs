@@ -179,11 +179,8 @@ pub fn load_policy(path: &Path) -> Result<Policy, String> {
 }
 
 pub fn parse_policy(src: &str) -> Result<Policy, String> {
-    let value: serde_yaml::Value =
-        serde_yaml::from_str(src).map_err(|e| format!("policy is not valid YAML: {e}"))?;
-    let policy: Policy =
-        serde_yaml::from_value(value).map_err(|e| format!("policy is not valid: {e}"))?;
-    Ok(policy)
+    crate::yaml::from_str(src)
+        .map_err(|e| format!("policy is not valid YAML or does not match the schema: {e}"))
 }
 
 // ── decisions ─────────────────────────────────────────────────────────────
@@ -1185,6 +1182,14 @@ mod tests {
         assert!(err.is_err(), "a misspelled key must fail loudly: {err:?}");
         let err = parse_policy("network:\n  deny: maybe\n");
         assert!(err.is_err(), "a wrong type must fail loudly");
+    }
+
+    #[test]
+    fn duplicate_policy_keys_are_rejected() {
+        // Two `deny` keys have no single meaning. Keeping the last one would
+        // let a duplicated key silently reverse a security control.
+        let err = parse_policy("network:\n  deny: true\n  deny: false\n");
+        assert!(err.is_err(), "duplicate keys must fail loudly: {err:?}");
     }
 
     #[test]

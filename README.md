@@ -7,7 +7,7 @@ SkillGuard reads a skill before you install it, reports every capability it can 
 [![CI](https://github.com/lxbworld/SkillGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/lxbworld/SkillGuard/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/lxbworld/SkillGuard)](https://github.com/lxbworld/SkillGuard/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.78%2B-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.89%2B-orange.svg)](https://www.rust-lang.org/)
 [![offline · deterministic · no LLM](https://img.shields.io/badge/offline-deterministic%20%C2%B7%20no%20LLM-brightgreen.svg)](#design-constraints)
 
 ---
@@ -112,7 +112,7 @@ cargo install --path .
 # https://github.com/lxbworld/SkillGuard/releases/latest
 ```
 
-Requires Rust 1.78+. Git is used only to read a skill's commit SHA for
+Requires Rust 1.89+. Git is used only to read a skill's commit SHA for
 provenance; everything else works on a plain directory.
 
 Then scan something:
@@ -374,11 +374,10 @@ still open.
 
 Test suite and CI: Linux on every commit (about 1.5 billed minutes), Windows and
 macOS on release tags and weekly, `cargo fmt` and `cargo clippy -D warnings` clean
-everywhere. `cargo deny check` is **not** clean at the moment: RUSTSEC-2024-0449
-flags `unsafe-libyaml`, which arrives through `serde_yaml` (itself deprecated).
-The policy in `deny.toml` is "no exceptions, drop or upgrade the crate", so the
-fix is a YAML parser swap and it is tracked in
-[#16](https://github.com/lxbworld/SkillGuard/issues/16) rather than silenced.
+everywhere. `cargo deny check` is clean with an empty `ignore` list: the deprecated
+`serde_yaml` and the unmaintained `unsafe-libyaml` it pulled in were replaced with
+the safe-Rust, fuzz-tested [`serde-saphyr`](https://crates.io/crates/serde-saphyr)
+parser ([#16](https://github.com/lxbworld/SkillGuard/issues/16)).
 
 | Phase | Scope | Status |
 |---|---|---|

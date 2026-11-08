@@ -423,7 +423,7 @@ fn a_comment_is_not_a_capability() {
 #[test]
 fn a_multi_line_description_is_read_as_its_lines() {
     // The frontmatter reader took a block scalar's `|` indicator as the value,
-    // so `description` was the one-character string "|". serde_yaml accepted
+    // so `description` was the one-character string "|". The YAML parser accepted
     // the document, so nothing raised PARSE_FAILED: `admits()` simply compared
     // the credential vocabulary against a pipe and never matched. A skill that
     // declared its credential access in a multi-line description - the
@@ -447,6 +447,28 @@ fn a_multi_line_description_is_read_as_its_lines() {
     assert!(
         mismatch.is_empty(),
         "the description names the credential access, so the mismatch rule must not fire: {mismatch:#?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// edge cases: hostile or ambiguous input must degrade to a finding
+// ---------------------------------------------------------------------------
+
+#[test]
+fn duplicate_frontmatter_keys_fail_loudly_instead_of_picking_one() {
+    // A mapping with two `network` keys has no single meaning. Silently keeping
+    // the last one would invent a declaration the author never wrote, so the
+    // parse must fail and the report must say so.
+    let out = scan_fixture("edge_cases", "duplicate-frontmatter-keys");
+    assert!(
+        out.findings.iter().any(|f| f.rule.0 == "PARSE_FAILED"),
+        "ambiguous frontmatter must produce PARSE_FAILED: {:#?}",
+        out.findings
+    );
+    assert!(
+        !out.declared.declared,
+        "no declaration may be recovered from an ambiguous document: {:?}",
+        out.declared
     );
 }
 

@@ -115,17 +115,15 @@ fn parse_nested(raw: &str) -> PermissionDecl {
 /// Build a declaration from an already-parsed YAML frontmatter.
 ///
 /// This is the authoritative path. The frontmatter has been through
-/// `serde_yaml` by the time it gets here, so real YAML semantics apply —
+/// [`crate::yaml`] by the time it gets here, so real YAML semantics apply —
 /// including flow mappings like `network: {outbound: [a, b]}`, which no
 /// line-based splitter can recover.
-pub fn parse_yaml(fm: &serde_yaml::Value) -> PermissionDecl {
-    let map = match fm.as_mapping() {
+pub fn parse_yaml(fm: &serde_json::Value) -> PermissionDecl {
+    let map = match fm.as_object() {
         Some(m) => m,
         None => return PermissionDecl::default(),
     };
-    let get = |k: &str| -> Option<&serde_yaml::Value> {
-        map.get(serde_yaml::Value::String(k.to_owned()))
-    };
+    let get = |k: &str| -> Option<&serde_json::Value> { map.get(k) };
 
     for key in ["permissions", "skillguard.permissions"] {
         if let Some(v) = get(key) {
@@ -148,20 +146,19 @@ pub fn parse_yaml(fm: &serde_yaml::Value) -> PermissionDecl {
 ///
 /// Accepts both shapes seen in the wild: nested (`network: {outbound: [...]}`)
 /// and flat dotted keys (`network.outbound: [...]`).
-fn from_yaml_node(node: &serde_yaml::Value) -> PermissionDecl {
+fn from_yaml_node(node: &serde_json::Value) -> PermissionDecl {
     let mut d = PermissionDecl::default();
     walk_permissions(node, &mut d, "");
     d.declared = true;
     d
 }
 
-fn walk_permissions(node: &serde_yaml::Value, d: &mut PermissionDecl, prefix: &str) {
-    let Some(map) = node.as_mapping() else {
+fn walk_permissions(node: &serde_json::Value, d: &mut PermissionDecl, prefix: &str) {
+    let Some(map) = node.as_object() else {
         return;
     };
     for (k, v) in map {
-        let Some(key) = k.as_str() else { continue };
-        let key = key.trim().to_ascii_lowercase().replace('_', ".");
+        let key = k.trim().to_ascii_lowercase().replace('_', ".");
         let path = if prefix.is_empty() {
             key.clone()
         } else {
@@ -177,7 +174,7 @@ fn walk_permissions(node: &serde_yaml::Value, d: &mut PermissionDecl, prefix: &s
         }
 
         // A nested mapping recurses; its keys extend the path.
-        if v.as_mapping().is_some() {
+        if v.is_object() {
             walk_permissions(v, d, &path);
             continue;
         }
@@ -203,21 +200,21 @@ fn walk_permissions(node: &serde_yaml::Value, d: &mut PermissionDecl, prefix: &s
     }
 }
 
-fn yaml_strings(v: &serde_yaml::Value) -> Vec<String> {
+fn yaml_strings(v: &serde_json::Value) -> Vec<String> {
     match v {
-        serde_yaml::Value::Sequence(seq) => seq.iter().filter_map(scalar_string).collect(),
-        serde_yaml::Value::String(s) => vec![s.trim().to_owned()],
-        serde_yaml::Value::Number(n) => vec![n.to_string()],
-        serde_yaml::Value::Bool(b) => vec![b.to_string()],
+        serde_json::Value::Array(seq) => seq.iter().filter_map(scalar_string).collect(),
+        serde_json::Value::String(s) => vec![s.trim().to_owned()],
+        serde_json::Value::Number(n) => vec![n.to_string()],
+        serde_json::Value::Bool(b) => vec![b.to_string()],
         _ => Vec::new(),
     }
 }
 
-fn scalar_string(v: &serde_yaml::Value) -> Option<String> {
+fn scalar_string(v: &serde_json::Value) -> Option<String> {
     let s = match v {
-        serde_yaml::Value::String(s) => s.clone(),
-        serde_yaml::Value::Number(n) => n.to_string(),
-        serde_yaml::Value::Bool(b) => b.to_string(),
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::Bool(b) => b.to_string(),
         _ => return None,
     };
     let t = s.trim().to_owned();
@@ -228,7 +225,7 @@ fn scalar_string(v: &serde_yaml::Value) -> Option<String> {
 }
 
 /// Claude Code style: a flat list of allowed tools.
-fn from_allowed_tools(v: &serde_yaml::Value) -> PermissionDecl {
+fn from_allowed_tools(v: &serde_json::Value) -> PermissionDecl {
     let mut d = PermissionDecl::default();
     for tool in yaml_strings(v) {
         match tool.to_ascii_lowercase().as_str() {
@@ -661,7 +658,7 @@ mod tests {
 
     /// Parse real YAML, the way the scanner does.
     fn decl(yaml: &str) -> PermissionDecl {
-        let v: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap_or(serde_yaml::Value::Null);
+        let v = crate::yaml::parse_value(yaml).unwrap_or(serde_json::Value::Null);
         parse_yaml(&v)
     }
 
@@ -684,7 +681,7 @@ mod tests {
 
     #[test]
     fn parses_flow_mappings_and_bracket_lists() {
-        // A line-based splitter cannot recover this; serde_yaml can.
+        // A line-based splitter cannot recover this; the YAML parser can.
         let d = decl(
             "permissions: {network: {outbound: [a.example.com, b.example.com]}, shell: {execute: [bash]}}",
         );
@@ -748,7 +745,7 @@ mod tests {
     #[test]
     fn malformed_yaml_does_not_panic() {
         for bad in ["permissions: [unclosed", "\t- : :", "permissions:\n  - - -"] {
-            let v: serde_yaml::Value = serde_yaml::from_str(bad).unwrap_or(serde_yaml::Value::Null);
+            let v = crate::yaml::parse_value(bad).unwrap_or(serde_json::Value::Null);
             let d = parse_yaml(&v);
             let _ = d.normalized();
         }

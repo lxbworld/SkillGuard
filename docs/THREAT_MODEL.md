@@ -151,9 +151,9 @@ This section is the part where **a security tool has to defend itself first**.
 tiny files (inode exhaustion), regex backtracking (ReDoS).
 
 **Mitigation**
-- Serialize as **JSON**; YAML is used only for policy/lockfile and with a depth cap
-  in `serde_yaml`. A read failure is treated as untrusted and produces
-  `PARSE_FAILED` (no panic).
+- Serialize as **JSON**; YAML is used only for policy/lockfile and with an explicit
+  depth, node, anchor and event budget in `serde-saphyr`. A read failure is treated
+  as untrusted and produces `PARSE_FAILED` (no panic).
 - Caps: 4 MiB per file, depth 12, 10,000 files (over a cap → `INFO` and expansion
   stops)
 - Only `regex` (linear time, no backtracking); hand-written backtracking NFA
