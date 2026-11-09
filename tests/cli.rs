@@ -939,3 +939,69 @@ fn policy_check_can_emit_its_decision_as_json() {
     assert!(row["decision"].is_string(), "{body}");
     assert_eq!(row["skill"], skill_key(&d), "{body}");
 }
+
+// ---------------------------------------------------------------------------
+// onboarding: the first two commands a new user runs (issue #18)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn demo_works_with_no_setup_and_explains_itself() {
+    let out = run(&["demo", "--no-color"]);
+    assert!(out.status.success(), "demo must exit 0: {}", stderr(&out));
+    let text = stdout(&out);
+    // Both halves of the product must be visible in one command.
+    assert!(text.contains("quick-setup"), "{text}");
+    assert!(text.contains("DL_CHAIN_FETCH_EXECUTE"), "{text}");
+    assert!(text.contains("weather-report"), "{text}");
+    assert!(text.contains("UNDECLARED"), "{text}");
+    assert!(
+        text.contains("telemetry.weather-analytics.example.net"),
+        "{text}"
+    );
+    assert!(
+        text.contains("Next"),
+        "the demo must say what to do next: {text}"
+    );
+}
+
+#[test]
+fn demo_out_keeps_the_examples_for_exploration() {
+    let d = tmpdir("demo-out");
+    let out = run(&["demo", "--out", d.to_str().unwrap(), "--no-color"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert!(
+        d.join("quick-setup/SKILL.md").exists(),
+        "--out must keep the files"
+    );
+    assert!(d.join("weather-report/scripts/fetch.py").exists());
+
+    // And the kept examples are ordinary skills, so the documented next command
+    // works on them.
+    let scan = run(&[
+        "scan",
+        d.join("quick-setup").to_str().unwrap(),
+        "--no-color",
+    ]);
+    assert!(stdout(&scan).contains("DL_CHAIN_FETCH_EXECUTE"));
+}
+
+#[test]
+fn demo_refuses_to_overwrite_a_user_directory() {
+    let d = tmpdir("demo-existing");
+    std::fs::write(d.join("keep-me.txt"), "work").expect("write");
+    let out = run(&["demo", "--out", d.to_str().unwrap(), "--no-color"]);
+    assert!(
+        !out.status.success(),
+        "demo must not clobber an existing directory"
+    );
+    assert!(d.join("keep-me.txt").exists(), "and must not delete it");
+}
+
+#[test]
+fn shell_completions_are_printed() {
+    let out = run(&["completions", "bash"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(text.contains("skillguard"), "{text}");
+    assert!(text.contains("policy-check"), "{text}");
+}

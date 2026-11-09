@@ -5,7 +5,7 @@
 
 #![forbid(unsafe_code)]
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use skillguard::exit;
 use skillguard::models::Severity;
 use skillguard::report::{Format, Report, SkillReport};
@@ -209,6 +209,26 @@ enum Command {
         format: Format,
     },
 
+    /// Scan two embedded example skills and explain the output.
+    ///
+    /// Zero setup: nothing is downloaded, nothing is executed, and the examples
+    /// live inside this binary. This is the fastest way to see what `scan` and
+    /// `diff` actually report before pointing the tool at a real skill.
+    Demo {
+        /// Write the examples here and keep them, instead of using a temporary
+        /// directory that is removed afterwards.
+        #[arg(long, value_name = "DIR")]
+        out: Option<PathBuf>,
+    },
+
+    /// Print shell completion code for bash, zsh, fish, PowerShell or elvish.
+    ///
+    /// Example: `skillguard completions bash > /etc/bash_completion.d/skillguard`
+    Completions {
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
+
     /// Phase 0 corpus study: index, batch-scan and measure, offline.
     Corpus {
         #[command(subcommand)]
@@ -397,6 +417,8 @@ fn main() -> ExitCode {
         } => run_approve(path, reviewer, reason, *force, lockfile.as_deref(), &cli),
         Command::Import { file, out } => run_import(file, out.as_deref(), &cli),
         Command::Rules { format } => run_rules(*format, &cli, color),
+        Command::Demo { out } => run_demo(out.as_deref(), color),
+        Command::Completions { shell } => run_completions(*shell),
         Command::Corpus { command } => run_corpus(command, &cli),
     };
 
@@ -1403,6 +1425,100 @@ fn run_rules(format: Format, cli: &Cli, color: bool) -> Result<i32, String> {
         }
     };
     emit(cli, &body)?;
+    Ok(exit::OK)
+}
+
+/// Zero-setup demonstration for a first-time user.
+///
+/// The examples are written to a temporary directory and scanned through the
+/// same code path as a real skill; the only difference is that the result is
+/// explained. The exit code is always 0: a demo that exits non-zero because its
+/// sample is malicious would break `set -e` in exactly the script a new user is
+/// trying to run.
+fn run_demo(out: Option<&Path>, color: bool) -> Result<i32, String> {
+    let (root, keep) = match out {
+        Some(p) => (p.to_path_buf(), true),
+        None => (
+            std::env::temp_dir().join(format!("skillguard-demo-{}", std::process::id())),
+            false,
+        ),
+    };
+    if root.exists() {
+        if keep {
+            // An existing *empty* directory is fine; a populated one is the
+            // user's work and a demo must never be the thing that deletes it.
+            let populated = std::fs::read_dir(&root)
+                .map(|mut it| it.next().is_some())
+                .unwrap_or(true);
+            if populated {
+                return Err(format!(
+                    "{} already exists and is not empty; choose an empty directory for --out",
+                    clean_path(&root)
+                ));
+            }
+        } else {
+            let _ = std::fs::remove_dir_all(&root);
+        }
+    }
+
+    let result = (|| -> Result<(), String> {
+        skillguard::demo::write_all(&root)?;
+        let outcomes = scan_all(std::slice::from_ref(&root), true)?;
+        let quick = outcomes
+            .iter()
+            .find(|o| o.skill_name == "quick-setup")
+            .ok_or_else(|| "demo: quick-setup was not written".to_owned())?;
+        let weather = outcomes
+            .iter()
+            .find(|o| o.skill_name == "weather-report")
+            .ok_or_else(|| "demo: weather-report was not written".to_owned())?;
+
+        let mut o = String::new();
+        o.push_str("\n  SkillGuard demo - two embedded skills, scanned offline\n");
+        o.push_str("  Nothing is downloaded and nothing in them is executed.\n\n");
+
+        o.push_str("  [1/2] scan - every finding names a file, a line and the text\n");
+        let report = Report::new(vec![SkillReport::from_outcome(quick)]);
+        o.push_str(&skillguard::report::to_text_with(&report, color));
+        o.push_str("\n  [2/2] diff - what the code does vs what the skill declared\n");
+        o.push_str(&skillguard::permissions::render(&weather.diff));
+
+        o.push_str("\n  What this means\n");
+        o.push_str(
+            "    quick-setup is caught by evidence, not by a verdict: the two\n\
+             \x20   CRITICAL lines are a fetch -> make executable -> run chain.\n\
+             \x20   weather-report declared weather.example.com and its code also\n\
+             \x20   contacts telemetry.weather-analytics.example.net. That gap is\n\
+             \x20   the check no other tool performs, and `policy-check` can block it.\n\n",
+        );
+
+        o.push_str("  Next\n");
+        o.push_str("    skillguard scan <path>          full evidence report\n");
+        o.push_str("    skillguard diff <path>          declared vs observed\n");
+        o.push_str("    skillguard policy-check <path>  block on your policy\n");
+        if keep {
+            o.push_str(&format!("    the examples are in {}\n", clean_path(&root)));
+        } else {
+            o.push_str("    skillguard demo --out ./demo-skills   keep the examples\n");
+        }
+        o.push('\n');
+
+        let stdout = std::io::stdout();
+        let mut h = stdout.lock();
+        h.write_all(o.as_bytes())
+            .and_then(|()| h.flush())
+            .map_err(|e| format!("cannot write to stdout: {e}"))
+    })();
+
+    if !keep {
+        let _ = std::fs::remove_dir_all(&root);
+    }
+    result.map(|()| exit::OK)
+}
+
+fn run_completions(shell: clap_complete::Shell) -> Result<i32, String> {
+    let mut cmd = Cli::command();
+    clap_complete::generate(shell, &mut cmd, "skillguard", &mut std::io::stdout());
     Ok(exit::OK)
 }
 

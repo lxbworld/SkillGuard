@@ -183,3 +183,104 @@ fn a_missing_release_falls_back_to_a_source_build() {
         "the fallback should reach the source build: {stderr}"
     );
 }
+
+/// The README documents `curl … | bash`, and that shape has no script
+/// directory, so the front-door installer cannot delegate to a relative path.
+/// It was broken exactly that way until issue #18: `BASH_SOURCE[0]: unbound
+/// variable`, then a lookup of `./action/install.sh` under the caller's cwd.
+#[test]
+fn the_piped_installer_fetches_the_real_one_from_the_same_ref() {
+    let version = "v0.1.0";
+    let base = fake_release("piped", version);
+
+    // Stand in for raw.githubusercontent.com: the installer is fetched from
+    // `<raw>/<ref>/action/install.sh`, so the fake tree has to hold it.
+    let raw = tmpdir("piped-raw");
+    let refdir = raw.join(version).join("action");
+    std::fs::create_dir_all(&refdir).expect("mkdir raw tree");
+    std::fs::copy(installer(), refdir.join("install.sh")).expect("copy installer");
+
+    let dest = tmpdir("install-piped");
+    // Run from an unrelated directory, like a first-time user does: from the
+    // repository root the broken version would find `./action/install.sh` by
+    // accident and the test would pass on both.
+    let cwd = tmpdir("piped-cwd");
+    let script = std::fs::File::open(repo_root().join("install.sh")).expect("open install.sh");
+    let out = Command::new("bash")
+        .arg("-s")
+        .arg("--")
+        .arg(version)
+        .arg(&dest)
+        .current_dir(&cwd)
+        .stdin(script)
+        .env("SKILLGUARD_RAW_BASE", format!("file://{}", raw.display()))
+        .env(
+            "SKILLGUARD_RELEASE_BASE",
+            format!("file://{}", base.display()),
+        )
+        .output()
+        .expect("run piped install.sh");
+
+    assert!(
+        out.status.success(),
+        "the documented one-liner must work: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        dest.join("bin/skillguard").exists(),
+        "binary not installed from the piped path"
+    );
+    let run = Command::new(dest.join("bin/skillguard"))
+        .arg("--version")
+        .output()
+        .expect("run installed binary");
+    assert!(run.status.success());
+}
+
+/// A first-time user runs the one-liner with no arguments beyond the version.
+/// The binary must land somewhere that survives a reboot and is on PATH, not in
+/// a temp directory the CI installer defaults to.
+#[test]
+fn the_front_door_installs_into_the_user_prefix_by_default() {
+    let version = "v0.1.0";
+    let base = fake_release("prefix", version);
+    let raw = tmpdir("prefix-raw");
+    let refdir = raw.join(version).join("action");
+    std::fs::create_dir_all(&refdir).expect("mkdir raw tree");
+    std::fs::copy(installer(), refdir.join("install.sh")).expect("copy installer");
+
+    let home = tmpdir("prefix-home");
+    let cwd = tmpdir("prefix-cwd");
+    let script = std::fs::File::open(repo_root().join("install.sh")).expect("open install.sh");
+    let out = Command::new("bash")
+        .arg("-s")
+        .arg("--")
+        .arg(version)
+        .current_dir(&cwd)
+        .stdin(script)
+        .env("HOME", &home)
+        .env("SKILLGUARD_RAW_BASE", format!("file://{}", raw.display()))
+        .env(
+            "SKILLGUARD_RELEASE_BASE",
+            format!("file://{}", base.display()),
+        )
+        .output()
+        .expect("run piped install.sh");
+
+    assert!(
+        out.status.success(),
+        "install failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        home.join(".local/bin/skillguard").exists(),
+        "the default prefix must be the user's, not a temp dir: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // And it must say what to do when that directory is not on PATH.
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("is not on your PATH"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}

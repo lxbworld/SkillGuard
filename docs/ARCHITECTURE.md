@@ -445,7 +445,16 @@ skillguard lock <path>...                 # write the current state into the loc
 skillguard approve <path>                 # record an approval
 skillguard import <file> [--out]          # skills-lock.json / package.json+npm migration
 skillguard rules                          # the rule catalogue (id / severity / description / how to turn it off)
+skillguard demo [--out DIR]               # scan two embedded examples, explain the output, exit 0
+skillguard completions <shell>            # bash, zsh, fish, powershell, elvish
 ```
+
+`demo` is the onboarding path (issue #18): the two skills live inside the binary
+(`src/demo/`), so it needs no network, no account and no skill to find, and it
+exits `0` even when the embedded skill is malicious — it is a demonstration, not a
+gate. `install.sh` at the repository root is the front door to
+`action/install.sh`: it is self-contained enough to work when piped to `bash`
+(`curl … | bash`), where there is no script directory to delegate from.
 
 **Exit codes**: `0` pass · `1` policy violation or `--fail-on` reached · `2`
 integrity failure · `3` usage error.

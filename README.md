@@ -104,24 +104,55 @@ you want to know before it runs.
 
 ## Quick start
 
-```bash
-# from a clone
-cargo install --path .
+**Install** (Linux, macOS, Windows; every release asset ships a SHA-256 that the
+installer verifies before it runs anything):
 
-# or download a prebuilt binary (Linux, macOS, Windows; sha256 published)
-# https://github.com/lxbworld/SkillGuard/releases/latest
+```bash
+# Linux / macOS - installs to ~/.local/bin and verifies the release checksum
+curl -fsSL https://raw.githubusercontent.com/lxbworld/SkillGuard/main/install.sh | bash -s -- v0.1.2
+
+# from a checkout, or if you would rather build it yourself
+cargo install --path .
 ```
 
-Requires Rust 1.89+. Git is used only to read a skill's commit SHA for
-provenance; everything else works on a plain directory.
+```powershell
+# Windows
+irm https://raw.githubusercontent.com/lxbworld/SkillGuard/main/install.ps1 -OutFile install.ps1
+.\install.ps1 -Version v0.1.2 -AddToPath
+```
 
-Then scan something:
+If `~/.local/bin` is not on your `PATH`, the installer says so and prints the
+line to add; pass a different prefix as the second argument
+(`... | bash -s -- v0.1.2 ~/bin`).
+
+Requires Rust 1.89+ for a source build; a prebuilt binary needs nothing. Git is
+used only to read a skill's commit SHA for provenance; everything else works on a
+plain directory.
+
+**See it work with zero setup** — two skills are embedded in the binary, one
+malicious and one that lies about its permissions:
+
+```bash
+skillguard demo
+```
+
+That prints a full `scan` report and the `diff` that no other tool performs, then
+tells you which command to run next. Nothing is downloaded and nothing is
+executed.
+
+**Then point it at a real skill:**
 
 ```bash
 skillguard scan ./my-skill          # evidence-grade report
 skillguard scan ./my-skill --min-severity high   # same report, triaged
 skillguard diff ./my-skill          # declared permissions vs observed behaviour
 skillguard policy-check ./my-skill  # evaluate SKILLGUARD.policy.yaml, block if denied
+```
+
+Shell completions are one command too:
+
+```bash
+skillguard completions bash   # also zsh, fish, powershell, elvish
 ```
 
 A real skill can produce a hundred findings. `--min-severity` hides the rest and
@@ -135,6 +166,10 @@ Exit codes are part of the contract, so it drops into any CI:
 `0` clean · `1` findings · `2` integrity failure · `3` usage error.
 
 ## See it work
+
+The fastest path is `skillguard demo`, which scans the two examples embedded in
+the binary and explains each section. The output below is the same report, run
+against the fixtures the test suite uses.
 
 **`skillguard scan`** — every finding carries a file, a line and the original
 text. No evidence, no finding.
@@ -230,6 +265,8 @@ Other output formats: `--format json`, `--format sarif` (GitHub Code Scanning),
 | `approve <path>` | Record an approval bound to an exact digest, with the reasons |
 | `import <file>` | Read a `skills-lock.json` into `SKILLGUARD.lock` |
 | `rules` | The rule catalogue (55 rules, `--format markdown` for docs) |
+| `demo` | Scan two embedded examples and explain the output; `--out DIR` keeps them |
+| `completions <shell>` | Shell completion code (bash, zsh, fish, powershell, elvish) |
 | `corpus …` | Offline, reproducible corpus study driver |
 
 <details>
@@ -260,7 +297,7 @@ permissions:
   security-events: write   # required for the SARIF upload
 steps:
   - uses: actions/checkout@v4
-  - uses: lxbworld/SkillGuard/action@v0.1.1
+  - uses: lxbworld/SkillGuard/action@v0.1.2
     with:
       path: .
       fail-on: high
@@ -271,7 +308,7 @@ steps:
 ```yaml
 repos:
   - repo: https://github.com/lxbworld/SkillGuard
-    rev: v0.1.1
+    rev: v0.1.2
     hooks:
       - id: skillguard
 ```
