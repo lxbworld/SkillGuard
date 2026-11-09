@@ -1,6 +1,6 @@
 # SkillGuard — Architecture
 
-Stack: **Rust (edition 2021, MSRV 1.78)**, one binary, no runtime dependencies.
+Stack: **Rust (edition 2021, MSRV 1.89)**, one binary, no runtime dependencies.
 This document describes the architecture and the interface boundaries. It contains
 no implementation code.
 
@@ -61,7 +61,7 @@ skillguard/
 │  │
 │  ├─ parser/                   # SKILL.md → SkillDocument
 │  │  ├─ mod.rs                 # frontmatter splitting (byte-level, no assumption about which line the YAML starts on)
-│  │  ├─ frontmatter.rs         # serde_yaml subset, safe deserialization
+│  │  ├─ frontmatter.rs         # YAML subset, safe deserialization
 │  │  ├─ markdown.rs            # code fence extraction / line-number mapping
 │  │  └─ references.rs          # resolve references inside references/ assets/ scripts/
 │  │
@@ -151,7 +151,7 @@ skillguard/
 |---|---|---|
 | CLI | `clap` (derive) | |
 | Serialization | `serde`, `serde_json` | |
-| YAML | `serde_yaml` (switch to `serde_norway` or `saphyr` if the deprecation warning lands) | frontmatter / policy |
+| YAML | `serde-saphyr` (safe Rust, fuzz-tested, explicit parse budget) | frontmatter / policy |
 | TOML | `toml` | pyproject parsing |
 | Regex | `regex` | no backtracking, linear time, ReDoS-safe |
 | SHA256 | `sha2` | |

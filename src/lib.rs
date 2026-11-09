@@ -35,6 +35,7 @@ pub mod report;
 pub mod scan;
 pub mod text;
 pub mod walk;
+pub mod yaml;
 
 pub use models::{
     Capability, CapabilitySet, Confidence, DiffReport, Finding, Mismatch, MismatchKind,

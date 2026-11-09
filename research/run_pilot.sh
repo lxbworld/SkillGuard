@@ -139,6 +139,15 @@ fi
 > excluded; the 17 disagreements were adjudicated by a third session shown both
 > verdicts, and every rule figure below is per rule, never micro-averaged.
 >
+> The frontmatter parser changed at revision 50 (`serde_yaml`, deprecated, and
+> the unmaintained `unsafe-libyaml` behind it, replaced by `serde-saphyr` — issue
+> #16). The cost is measured and stated: `PARSE_FAILED` goes 71 -> 76 on the same
+> corpus. Four of the five are real skills whose frontmatter is valid to libyaml
+> and PyYAML but not to the YAML 1.2.2 grammar — a quoted scalar continued at the
+> key's own column — and the fifth (`name: {{SKILL_NAME}}`) is not valid YAML at
+> all. The declaration rate is unaffected (386 skills declare, before and after),
+> and everything else is identical.
+>
 > The label set was drawn at revision 50. Revision 51 changed **capability
 > derivation only** — shell variables, regex character classes and attribute
 > accesses are no longer recorded as file paths — which altered no text rule and

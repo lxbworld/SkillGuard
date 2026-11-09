@@ -115,7 +115,7 @@ pub fn scan_walked(name: &str, walked: Walked) -> ScanOutcome {
     let mut frontmatter_unparsed = false;
     let mut declared_permissions_raw = None;
     let mut frontmatter_map: BTreeMap<String, String> = BTreeMap::new();
-    let mut frontmatter_yaml: Option<serde_yaml::Value> = None;
+    let mut frontmatter_yaml: Option<serde_json::Value> = None;
     let mut skill_md: Option<Normalized> = None;
 
     for f in &walked.files {
@@ -139,7 +139,7 @@ pub fn scan_walked(name: &str, walked: Walked) -> ScanOutcome {
         if is_skill_md(&f.rel) {
             let split = crate::parser::split_frontmatter(textsrc);
             if let Some((yaml, _)) = &split.frontmatter {
-                match serde_yaml::from_str::<serde_yaml::Value>(yaml) {
+                match crate::yaml::parse_value(yaml) {
                     Ok(v) => {
                         frontmatter_map = crate::parser::flatten_frontmatter(yaml);
                         frontmatter_yaml = Some(v);

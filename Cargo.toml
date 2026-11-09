@@ -2,7 +2,7 @@
 name = "skillguard"
 version = "0.1.1"
 edition = "2021"
-rust-version = "1.78"
+rust-version = "1.89"
 authors = ["lxbworld <lxbworld@users.noreply.github.com>"]
 description = "Offline, deterministic verification layer for AI Agent Skills: evidence-grade scanning, declared-vs-observed permission diffing, and policy gating."
 license = "Apache-2.0"
@@ -17,7 +17,7 @@ exclude = ["tests/fixtures/**"]
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-serde_yaml = "0.9"
+serde-saphyr = { version = "2.1", default-features = false, features = ["deserialize"] }
 regex = "1.11"
 sha2 = "0.10"
 unicode-normalization = "0.1"

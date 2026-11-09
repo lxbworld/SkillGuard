@@ -39,6 +39,15 @@
 > excluded; the 17 disagreements were adjudicated by a third session shown both
 > verdicts, and every rule figure below is per rule, never micro-averaged.
 >
+> The frontmatter parser changed at revision 50 (`serde_yaml`, deprecated, and
+> the unmaintained `unsafe-libyaml` behind it, replaced by `serde-saphyr` — issue
+> #16). The cost is measured and stated: `PARSE_FAILED` goes 71 -> 76 on the same
+> corpus. Four of the five are real skills whose frontmatter is valid to libyaml
+> and PyYAML but not to the YAML 1.2.2 grammar — a quoted scalar continued at the
+> key's own column — and the fifth (`name: {{SKILL_NAME}}`) is not valid YAML at
+> all. The declaration rate is unaffected (386 skills declare, before and after),
+> and everything else is identical.
+>
 > The label set was drawn at revision 50. Revision 51 changed **capability
 > derivation only** — shell variables, regex character classes and attribute
 > accesses are no longer recorded as file paths — which altered no text rule and
@@ -88,6 +97,7 @@
 > The `PI_*` heuristics that remain are measured above, and every one of them is
 > below the gate. They are published because the evidence line is still worth a
 > human read, and their prevalence figures are upper bounds like every other row.
+
 
 
 
@@ -259,7 +269,7 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | `FS_HOME_ACCESS` | 121 | 5442 | 2.2% |
 | `FS_ABSOLUTE_PATH` | 78 | 5442 | 1.4% |
 | `MISMATCH_UNDER_DECLARED` | 77 | 5442 | 1.4% |
-| `PARSE_FAILED` | 71 | 5442 | 1.3% |
+| `PARSE_FAILED` | 76 | 5442 | 1.4% |
 | `NET_HTTP_CLIENT` | 54 | 5442 | 1.0% |
 | `LICENSE_RESTRICTIVE` | 52 | 5442 | 1.0% |
 | `OBFUSC_TRACKING_PIXEL` | 33 | 5442 | 0.6% |
@@ -331,13 +341,13 @@ Every headline figure must be reported per stratum (protocol §4.2); without str
 | 32k_128k | 720 | 0 | `SHELL_EXEC` 20.1%, `NET_DOMAIN_LITERAL` 19.0%, `LICENSE_MISSING` 14.6%, `PI_DESCRIPTION_MISMATCH` 10.4%, `FS_PATH_ESCAPE` 8.9% |
 | 8k_32k | 1537 | 0 | `LICENSE_MISSING` 24.7%, `SHELL_EXEC` 5.2%, `NET_DOMAIN_LITERAL` 5.1%, `PI_DESCRIPTION_MISMATCH` 3.6%, `FS_PATH_ESCAPE` 2.7% |
 | gt_128k | 306 | 0 | `SHELL_EXEC` 52.6%, `NET_DOMAIN_LITERAL` 46.4%, `PI_DESCRIPTION_MISMATCH` 26.5%, `FS_RECURSIVE_WALK` 24.8%, `NET_FETCH_CALL` 20.9% |
-| lt_8k | 2879 | 0 | `LICENSE_MISSING` 21.8%, `PARSE_FAILED` 1.0%, `NET_DOMAIN_LITERAL` 0.9%, `SHELL_EXEC` 0.6%, `MISMATCH_OVER_DECLARED` 0.5% |
+| lt_8k | 2879 | 0 | `LICENSE_MISSING` 21.8%, `PARSE_FAILED` 1.1%, `NET_DOMAIN_LITERAL` 0.9%, `SHELL_EXEC` 0.6%, `MISMATCH_OVER_DECLARED` 0.5% |
 ### by `scripts`
 
 | value | n | failed | top rules |
 |---|---|---|---|
 | js | 305 | 0 | `NET_DOMAIN_LITERAL` 46.9%, `FS_PATH_ESCAPE` 33.4%, `SHELL_EXEC` 28.9%, `PI_DESCRIPTION_MISMATCH` 26.6%, `NET_FETCH_CALL` 23.6% |
-| none | 4498 | 0 | `LICENSE_MISSING` 22.5%, `PARSE_FAILED` 1.2%, `OBFUSC_TRACKING_PIXEL` 0.4%, `LICENSE_RESTRICTIVE` 0.4%, `PI_CONCEALMENT` 0.4% |
+| none | 4498 | 0 | `LICENSE_MISSING` 22.5%, `PARSE_FAILED` 1.3%, `OBFUSC_TRACKING_PIXEL` 0.4%, `LICENSE_RESTRICTIVE` 0.4%, `PI_CONCEALMENT` 0.4% |
 | other | 5 | 0 | `NET_DOMAIN_LITERAL` 40.0%, `PI_DESCRIPTION_MISMATCH` 40.0%, `FS_HOME_ACCESS` 20.0%, `MISMATCH_UNDER_DECLARED` 20.0%, `NET_DYNAMIC_URL` 20.0% |
 | python | 424 | 0 | `SHELL_EXEC` 51.4%, `NET_DOMAIN_LITERAL` 38.7%, `FS_RECURSIVE_WALK` 19.8%, `LICENSE_MISSING` 18.2%, `PI_DESCRIPTION_MISMATCH` 17.0% |
 | shell | 210 | 0 | `SHELL_EXEC` 46.7%, `NET_DOMAIN_LITERAL` 34.3%, `PI_DESCRIPTION_MISMATCH` 27.6%, `NET_HTTP_CLIENT` 23.8%, `LICENSE_MISSING` 23.3% |

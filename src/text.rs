@@ -464,7 +464,7 @@ fn extract_shadow(lines: &[NormLine]) -> Vec<ShadowText> {
                 })
                 .to_owned();
             // Short blobs are noise; long ones are where payloads hide.
-            if cleaned.len() < 24 || cleaned.len() % 4 != 0 {
+            if cleaned.len() < 24 || !cleaned.len().is_multiple_of(4) {
                 continue;
             }
             if !cleaned
