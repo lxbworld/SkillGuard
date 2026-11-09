@@ -48,6 +48,19 @@ pub fn from_str<T: DeserializeOwned>(src: &str) -> Result<T, String> {
 fn options() -> serde_saphyr::Options {
     serde_saphyr::options! {
         strict_booleans: true,
+        // Frontmatter in the wild closes flow collections at the column of the
+        // key (`allowed-tools: [\nRead, Grep\n]`), which the strict setting
+        // rejects and libyaml accepts. Relaxing indentation does not affect
+        // duplicate-key rejection, the single-document limit, or the budgets.
+        //
+        // It does *not* rescue a multi-line quoted scalar whose continuation
+        // sits at the key's own column: saphyr enforces YAML 1.2.2 [69]
+        // (`s-flow-line-prefix(n)`), and that check is not gated on this flag.
+        // Five real skills in the 5,442-skill pilot are `PARSE_FAILED` because
+        // of it (four non-conforming, one genuinely invalid `{{PLACEHOLDER}}`
+        // frontmatter); PyYAML and libyaml accept the first four, so the cost is
+        // recorded in `docs/CORPUS_REPORT.md` rather than hidden here.
+        strict_indentation: false,
         budget: serde_saphyr::budget! {
             max_documents: 1,
             max_depth: 32,

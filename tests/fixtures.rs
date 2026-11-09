@@ -455,6 +455,32 @@ fn a_multi_line_description_is_read_as_its_lines() {
 // ---------------------------------------------------------------------------
 
 #[test]
+fn an_under_indented_quoted_scalar_is_the_documented_cost_of_the_parser_swap() {
+    // YAML 1.2.2 [69] requires a quoted scalar's continuation lines to be
+    // indented past the enclosing block. libyaml and PyYAML accept column 1
+    // anyway, and four real skills in the pilot corpus are written that way, so
+    // the parser swap surfaces them as PARSE_FAILED instead of silently
+    // dropping them. This test pins the behaviour in both directions: the
+    // frontmatter is refused, and the rest of the file is still scanned.
+    let out = scan_fixture("edge_cases", "under-indented-quoted-scalar");
+    assert!(
+        out.findings.iter().any(|f| f.rule.0 == "PARSE_FAILED"),
+        "the frontmatter is not valid YAML 1.2: {:#?}",
+        out.findings
+    );
+    assert!(
+        !out.declared.declared,
+        "nothing may be read out of a document that did not parse: {:?}",
+        out.declared
+    );
+    assert!(
+        out.findings.iter().any(|f| f.file == "SKILL.md"),
+        "the body must still be scanned: {:#?}",
+        out.findings
+    );
+}
+
+#[test]
 fn duplicate_frontmatter_keys_fail_loudly_instead_of_picking_one() {
     // A mapping with two `network` keys has no single meaning. Silently keeping
     // the last one would invent a declaration the author never wrote, so the
@@ -782,6 +808,7 @@ fn edge_case_fixtures_do_not_panic() {
         "weird-encoding",
         "huge-line",
         "unicode-torture",
+        "under-indented-quoted-scalar",
     ] {
         let out = scan_fixture("edge_cases", sub);
         // The only requirement is that we return, with the files we skipped
