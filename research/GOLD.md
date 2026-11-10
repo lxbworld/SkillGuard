@@ -8,7 +8,9 @@ precision column.
 
 The pilot report publishes a precision column from a **model-labelled** GOLD set
 (GOLD-v6, two independent sessions, κ 0.827). That is not G3 — the protocol asks
-for two humans — and every mention of the column says so. A single-annotator
+for two humans — and every mention of the column says so. GOLD-v8 measures what
+that caveat is worth: the same rows labelled by a second model family agree at
+κ 0.723. A single-annotator
 read-through is not a metric at all; it found and fixed a dozen false-positive
 rules and is recorded as such.
 
@@ -578,6 +580,82 @@ attempt should be the line-kind model (`docs/THREAT_MODEL.md` T14, issue #10):
 deciding "docstring versus code" lexically, rather than by looking for negation
 words. That also removes the evasion this attempt would have introduced: an
 attacker could have prefixed a payload with `not` to silence seven action rules.
+
+---
+
+## GOLD-v8: a second model family agrees less (κ 0.723)
+
+GOLD-v6's κ 0.827 rests on two sessions of **one** model, which is the weakness
+issue #11 names: sessions of the same model share its blind spots, so they agree
+on a wrong answer as readily as on a right one, and κ is inflated without any
+evidence being added. GOLD-v8 tests how much, by adding exactly one variable.
+
+| | |
+|---|---|
+| sample | **v6's worksheet, unchanged** — the same 209 rows, 36 rules |
+| annotator A | `command-code/deepseek-v4.1-flash` (the model behind v6's `a6`/`b6`) |
+| annotator B | `command-code/z-ai/glm-5.3-flash` (a different model family) |
+| agreement | 182/209 (**87.1%**), **Cohen's κ 0.723** |
+| gate G3 (κ ≥ 0.75) | **FAIL** |
+| raw record | `research/gold/GOLD-v8.annotator-{a8,b8}.jsonl` |
+
+Same rows, same rules, same prompt shape: the only thing that changed is whose
+prior the second annotator brings. κ fell from 0.845 to 0.723, below the gate.
+
+```
+python3 research/annotate_gold.py --worksheet research/gold/GOLD-v6.worksheet.jsonl \
+    --provider command-code --model deepseek/deepseek-v4.1-flash \
+    --out research/gold/GOLD-v8.annotator-a8.jsonl
+python3 research/annotate_gold.py --worksheet research/gold/GOLD-v6.worksheet.jsonl \
+    --provider command-code --model z-ai/glm-5.3-flash \
+    --out research/gold/GOLD-v8.annotator-b8.jsonl
+skillguard corpus agreement research/gold/GOLD-v8.annotator-a8.jsonl \
+                            research/gold/GOLD-v8.annotator-b8.jsonl
+```
+
+### Where they disagree, and why it is the same problem again
+
+27 rows, 16 of them `deepseek=fp, glm=tp`:
+
+| rule | disagreements / rows |
+|---|---|
+| `PI_EXFIL_INSTRUCTION` | 5 / 7 |
+| `PI_INJECTION_OVERRIDE` | 4 / 8 |
+| `DL_REMOTE_INSTALL` | 3 / 4 |
+| `DL_UNTRUSTED_DOMAIN` | 3 / 6 |
+| `DEP_CUSTOM_REGISTRY`, `FS_ABSOLUTE_PATH`, `PI_CONCEALMENT` | 2 each |
+| five others | 1 each |
+
+Reading the rows, the split is almost entirely **"is a documented example an
+instance?"**:
+
+- `// Send token to your backend` — a code comment. GLM: the claim "an instruction
+  to transmit local data" is literally true here (`tp`). DeepSeek: it is a comment,
+  not an instruction the agent would follow (`fp`). Four of the five
+  `PI_EXFIL_INSTRUCTION` disagreements are this shape.
+- `pip install git+https://github.com/…` — GLM: that is a VCS install, not a URL
+  (`fp`). DeepSeek: it bypasses the registry from a URL (`tp`); the claim's wording
+  is what is thin here, since users read "directly from a URL" as "a tarball".
+- `../../process-assess-workflow/references/…` — a documentation link. GLM: the
+  path does traverse above the skill (`tp`); DeepSeek: a markdown link is not a
+  filesystem access (`fp`).
+
+This is the same ambiguity that sank GOLD-v7, arriving from a different direction:
+two sessions of one model agree because they share one reading of "instance";
+two model families disagree because each brings its own. It is measurement of the
+rule definitions, not of the annotators — the claims that fail the gate are
+precisely the ones whose text does not say whether a comment, a docstring, a
+markdown link or an example counts. That is what the line-kind model (T14, #10)
+is for.
+
+### What v8 does not license
+
+No precision figure moves. GOLD-v8 produced no adjudicated label set (the gate
+failed, the runbook says stop), so `docs/CORPUS_REPORT.md` keeps publishing the
+GOLD-v6 column with its `model-labelled` label. What v8 establishes is the size of
+that label's caveat: **0.845 was two sessions of one model; a second family
+agrees at 0.723 on the same rows.** Any human-derived κ should be expected to sit
+near or below that, not near 0.85.
 
 ---
 

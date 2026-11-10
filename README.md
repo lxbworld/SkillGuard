@@ -404,7 +404,10 @@ The Phase 0 corpus pipeline (`index` / `scan` / `stats` / `report` /
 is implemented and offline. `GOLD-v6` is a reproducible precision pass (209
 findings across 36 measured rules, κ 0.827, two independent model annotators — no
 human, and not the rule author), measured at revision 50; `research/build_gold.py`
-and `research/annotate_gold.py` are the two commands that re-derive it. The
+and `research/annotate_gold.py` are the two commands that re-derive it. That κ is
+an **upper bound on human agreement**: re-labelling the same 209 rows with a
+different model family (`GOLD-v8`, DeepSeek vs GLM) agrees at κ 0.723, below the
+project's own gate. The
 protocol's two-annotator **human** GOLD
 ([#11](https://github.com/lxbworld/SkillGuard/issues/11)) and the full study are
 still open.
