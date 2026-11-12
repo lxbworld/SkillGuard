@@ -33,7 +33,8 @@ cache. `docs/CORPUS_REPORT.md` regenerates identically from it.
 | skills scanned | 5,442 |
 | declare permissions | 386 (7.1%) |
 | findings | 8,776 |
-| `MISMATCH_UNDER_DECLARED` | 76 of 386 (19.7%) |
+| `MISMATCH_UNDER_DECLARED` | 76 of 386 declared (19.7%) |
+| `PI_DESCRIPTION_MISMATCH` | 212 of 5,442 (3.9%), i.e. 54.9% of declared |
 | `PARSE_FAILED` | 76 (1.4%) |
 | top rule | `LICENSE_MISSING` 1,148 skills (21.1%) |
 

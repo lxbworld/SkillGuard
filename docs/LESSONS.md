@@ -68,6 +68,15 @@ verified by breaking it in all three directions.
 while writing `docs/STATE.md`, four commits after the number changed. Nothing
 checks prose against tables.
 
+**A commit message carried an invented number.** The same commit that added the
+entry above stated `PI_DESCRIPTION_MISMATCH` was "7.6% of declared skills"; the
+measured value is 54.9% of the 386 declaring skills (3.9% of all 5,442), and it
+was never in `docs/STATE.md` at all — I recalled it instead of reading it.
+`cbfc36f` cannot be rewritten, so the correct figure is in `docs/STATE.md` and
+this entry is the record. The habit that prevents it: every number written into a
+commit message or a summary is copied from a command's output in the same
+session, never from memory.
+
 Lesson: the generated table is the source of truth; prose that repeats a number
 is a copy, and copies drift. Prefer "see the table below".
 
