@@ -387,3 +387,41 @@ fn no_rule_claims_a_capability_it_did_not_observe() {
          `secrets.read`"
     );
 }
+
+#[test]
+fn the_three_kinds_of_evidence_cannot_be_confused_in_the_source() {
+    // `docs/GOLD_EVALUATION.md` §1: synthetic fixtures, human GOLD and model
+    // silver are separate kinds of evidence, and two models agreeing must never
+    // be published as a human label. Types enforce it at compile time; this
+    // checks that the enforcement has not been routed around.
+    let body = read(&src_root().join("gold.rs"));
+
+    // The matrix takes human labels. If a signature ever takes `SilverLabel`
+    // where a human one is expected, this catches it before a reviewer does.
+    for f in ["pub fn matrix(", "pub fn matrix_with_rules("] {
+        let at = body
+            .find(f)
+            .unwrap_or_else(|| panic!("{f} must exist in gold.rs"));
+        let sig = &body[at..body[at..].find('{').map(|i| at + i).unwrap_or(body.len())];
+        assert!(
+            sig.contains("human: &[HumanLabel]"),
+            "{f} must be defined over human labels, got: {sig}"
+        );
+    }
+
+    // The two label types must stay distinct: sharing one struct is how a model
+    // label ends up in the published precision column.
+    assert!(
+        body.contains("pub struct HumanLabel") && body.contains("pub struct SilverLabel"),
+        "human and model labels must be distinct types"
+    );
+
+    // No model may be called from the binary. The judge is an external program
+    // the user runs; `research/annotate_gold.py` is the one that drives one.
+    for suspect in ["std::process::Command", "Command::new"] {
+        assert!(
+            !body.contains(suspect),
+            "gold.rs must not spawn anything ({suspect}): the judge is external"
+        );
+    }
+}

@@ -8,6 +8,18 @@ Last updated at `7c4ed6b`.
 
 ## Ready to start, no human needed
 
+### 0. A human labels `research/gold/HUMAN-v1.worksheet.csv`
+
+The cheapest thing on this list and the only one that unblocks the most: 95 rows,
+one per rule per skill, ~40 minutes. The tooling landed (`skillguard gold
+sample` / `import` / `stats` / `matrix`), `docs/ANNOTATION_GUIDE.md` is written for
+someone who has never seen this repository, and the CSV needs no database.
+
+Until it happens, `docs/RULE_QUALITY_MATRIX.md` has every rule at `INFORMATIONAL`
+with `recall unknown`, which is the honest state but not a useful one.
+
+Two annotators would also close #11; one gets precision for 36 rules but no κ.
+
 ### 1. Narrow the claims of the rules that fail G4 on prose
 
 The five worst rules fail because their claim is ambiguous, not because the

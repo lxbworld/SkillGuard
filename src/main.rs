@@ -5,8 +5,9 @@
 
 #![forbid(unsafe_code)]
 
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use skillguard::exit;
+use skillguard::gold::{self, Confidence, HumanLabel, Label, SilverLabel, Stratum};
 use skillguard::models::Severity;
 use skillguard::report::{Format, Report, SkillReport};
 use skillguard::scan::{self, scan_skill, ScanOutcome};
@@ -234,6 +235,118 @@ enum Command {
         #[command(subcommand)]
         command: CorpusCommand,
     },
+    /// Rule quality evaluation: human GOLD, model silver, and the matrix.
+    #[command(name = "gold")]
+    Gold {
+        #[command(subcommand)]
+        command: GoldCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum GoldCommand {
+    /// Draw a stratified, reproducible sample and write a reviewable worksheet.
+    Sample {
+        /// Findings JSONL, e.g. `research/raw-findings.jsonl`.
+        #[arg(long)]
+        findings: PathBuf,
+
+        /// Manifest the findings came from (for source ids and paths).
+        #[arg(long)]
+        manifest: PathBuf,
+
+        /// Tree the manifest paths are relative to, to read the evidence line.
+        #[arg(long)]
+        tree: PathBuf,
+
+        #[arg(long, value_enum, default_value = "rule")]
+        stratify: Stratum,
+
+        /// Rows per stratum.
+        #[arg(long, default_value_t = 8)]
+        per_stratum: usize,
+
+        /// Report rows per skill and rule. Defaults to one, so a rule that fires
+        /// five times in one skill counts once: precision is about whether the
+        /// rule is right, not how often it repeats.
+        #[arg(long, default_value_t = 1)]
+        per_skill: usize,
+
+        #[arg(long)]
+        out: PathBuf,
+    },
+
+    /// Write a worksheet out as CSV or JSONL for an external judge, or for people.
+    Export {
+        /// The worksheet or label file to convert.
+        input: PathBuf,
+
+        #[arg(long, value_enum, default_value = "csv")]
+        format: Template,
+
+        #[arg(long)]
+        out: PathBuf,
+    },
+
+    /// Read a reviewer's CSV (or a model's JSONL) back in.
+    Import {
+        /// The filled-in file.
+        input: PathBuf,
+
+        /// Where the parsed labels go. Human and model labels must not share a
+        /// directory: a model opinion is not a human label and must never be
+        /// read as one.
+        #[arg(long)]
+        out: PathBuf,
+
+        /// Treat this as model silver rather than human GOLD. Requires
+        /// `--model`, `--model-version` and `--prompt-version`, because an
+        /// unversioned opinion cannot be reproduced or withdrawn.
+        #[arg(long)]
+        silver: bool,
+
+        #[arg(long)]
+        model: Option<String>,
+
+        #[arg(long)]
+        model_version: Option<String>,
+
+        #[arg(long)]
+        prompt_version: Option<String>,
+    },
+
+    /// Summarise a label file: how many rows, from whom, and what is missing.
+    Stats {
+        input: PathBuf,
+
+        #[arg(long, short, default_value = "text", value_enum)]
+        format: Format,
+    },
+
+    /// The rule quality matrix, from human labels only.
+    Matrix {
+        /// Seed every rule in `skillguard rules` with zero samples, so an
+        /// unmeasured rule is visibly unmeasured rather than absent.
+        #[arg(long)]
+        all_rules: bool,
+
+        /// Human GOLD labels (JSONL). Model silver may be passed to `--silver`
+        /// for a count, and never affects precision or status.
+        #[arg(long)]
+        gold: PathBuf,
+
+        #[arg(long)]
+        silver: Option<PathBuf>,
+
+        #[arg(long, short, default_value = "text", value_enum)]
+        format: Format,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum Template {
+    Csv,
+    Jsonl,
 }
 
 #[derive(Subcommand)]
@@ -420,6 +533,7 @@ fn main() -> ExitCode {
         Command::Demo { out } => run_demo(out.as_deref(), color),
         Command::Completions { shell } => run_completions(*shell),
         Command::Corpus { command } => run_corpus(command, &cli),
+        Command::Gold { command } => run_gold(command, &cli),
     };
 
     match result {
@@ -1762,5 +1876,493 @@ fn index_into(
             clean_path(out)
         ),
     )?;
+    Ok(exit::OK)
+}
+
+// ---------------------------------------------------------------------------
+// Rule quality evaluation (`gold`)
+// ---------------------------------------------------------------------------
+
+fn run_gold(command: &GoldCommand, cli: &Cli) -> Result<i32, String> {
+    match command {
+        GoldCommand::Sample {
+            findings,
+            manifest,
+            tree,
+            stratify,
+            per_stratum,
+            per_skill,
+            out,
+        } => gold_sample(
+            findings,
+            manifest,
+            tree,
+            *stratify,
+            *per_stratum,
+            *per_skill,
+            out,
+            cli,
+        ),
+        GoldCommand::Export { input, format, out } => gold_export(input, *format, out),
+        GoldCommand::Import {
+            input,
+            out,
+            silver,
+            model,
+            model_version,
+            prompt_version,
+        } => gold_import(
+            input,
+            out,
+            *silver,
+            model,
+            model_version,
+            prompt_version,
+            cli,
+        ),
+        GoldCommand::Stats { input, format } => gold_stats(input, *format, cli),
+        GoldCommand::Matrix {
+            gold,
+            silver,
+            format,
+            all_rules,
+        } => gold_matrix(gold, silver.as_deref(), *format, *all_rules, cli),
+    }
+}
+
+/// Read findings + manifest and build candidate rows. Shared by `sample`.
+fn gold_candidates(
+    findings: &Path,
+    manifest: &Path,
+    tree: &Path,
+    per_skill: usize,
+) -> Result<Vec<gold::Candidate>, String> {
+    use std::collections::HashMap;
+
+    let mut path_of: HashMap<String, String> = HashMap::new();
+    let mbody = std::fs::read_to_string(manifest)
+        .map_err(|e| format!("cannot read manifest {}: {e}", manifest.display()))?;
+    for line in mbody.lines() {
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let rec: serde_json::Value =
+            serde_json::from_str(t).map_err(|e| format!("{}: {e}", manifest.display()))?;
+        if let (Some(id), Some(path)) = (
+            rec.get("source_id").and_then(|v| v.as_str()),
+            rec.get("path").and_then(|v| v.as_str()),
+        ) {
+            path_of.insert(id.to_owned(), path.to_owned());
+        }
+    }
+
+    let mut out = Vec::new();
+    let fbody = std::fs::read_to_string(findings)
+        .map_err(|e| format!("cannot read findings {}: {e}", findings.display()))?;
+    for line in fbody.lines() {
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        let rec: serde_json::Value =
+            serde_json::from_str(t).map_err(|e| format!("{}: {e}", findings.display()))?;
+        let Some(source_id) = rec.get("source_id").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let base = path_of.get(source_id).cloned().unwrap_or_default();
+        // Cap repeats per skill: a rule that fires eight times in one script is
+        // one judgement about that rule, not eight votes in its favour.
+        let mut seen: HashMap<String, usize> = HashMap::new();
+        for f in rec
+            .get("findings")
+            .and_then(|v| v.as_array())
+            .into_iter()
+            .flatten()
+        {
+            let (Some(rule), Some(file)) = (
+                f.get("rule").and_then(|v| v.as_str()),
+                f.get("file").and_then(|v| v.as_str()),
+            ) else {
+                continue;
+            };
+            let line_no = f.get("line").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+            // Skill-level rules have no evidence line; a line-level judgment
+            // about them is a judgment about line 1 (the frontmatter `---`).
+            if line_no == 0 || crate::gold::is_skill_level(rule) {
+                continue;
+            }
+            let n = seen.entry(rule.to_owned()).or_insert(0);
+            *n += 1;
+            if *n > per_skill {
+                continue;
+            }
+            let evidence = std::fs::read_to_string(tree.join(&base).join(file))
+                .ok()
+                .and_then(|body| {
+                    body.lines()
+                        .nth(line_no.saturating_sub(1))
+                        .map(|l| l.trim().to_owned())
+                })
+                .unwrap_or_default();
+            if evidence.is_empty() {
+                continue;
+            }
+            out.push(gold::Candidate {
+                finding_id: gold::finding_id(source_id, rule, file, line_no),
+                rule_id: rule.to_owned(),
+                source_id: source_id.to_owned(),
+                file: file.to_owned(),
+                line_start: line_no,
+                evidence: skillguard::text::truncate_chars(&evidence, 300),
+                severity: f
+                    .get("severity")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_owned(),
+            });
+        }
+    }
+    Ok(out)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn gold_sample(
+    findings: &Path,
+    manifest: &Path,
+    tree: &Path,
+    stratum: Stratum,
+    per_stratum: usize,
+    per_skill: usize,
+    out: &Path,
+    cli: &Cli,
+) -> Result<i32, String> {
+    let candidates = gold_candidates(findings, manifest, tree, per_skill)?;
+    let drawn = gold::sample(&candidates, stratum, per_stratum);
+    // A fresh worksheet has no verdicts: `label`, `confidence`, `rationale`,
+    // `reviewer` and `reviewed_at` are left empty on purpose. A pre-filled
+    // "TP" would be the tool answering its own question.
+    let rows: Vec<HumanLabel> = drawn
+        .iter()
+        .map(|c| HumanLabel {
+            finding_id: c.finding_id.clone(),
+            rule_id: c.rule_id.clone(),
+            file: c.file.clone(),
+            line_start: c.line_start,
+            line_end: c.line_start,
+            evidence: c.evidence.clone(),
+            // `AMBIGUOUS` is the template value? No: an unreviewed row must be
+            // distinguishable from a reviewed-and-unsure one, so the CSV leaves
+            // the cell blank and `gold import` skips it.
+            label: Label::Tp,
+            confidence: Confidence::Medium,
+            rationale: String::new(),
+            reviewer: String::new(),
+            reviewed_at: String::new(),
+        })
+        .collect();
+    // Write with the label column blanked, which is what an unreviewed row is.
+    let text = {
+        let mut o = format!("{}\n", gold::CSV_HEADER.join(","));
+        for r in &rows {
+            // Evidence can contain commas and quotes; reuse the CSV writer by
+            // round-tripping through a temporary writer with a blank label.
+            let mut buf = Vec::new();
+            {
+                let mut w = csv::Writer::from_writer(&mut buf);
+                w.write_record([
+                    r.finding_id.as_str(),
+                    r.rule_id.as_str(),
+                    r.file.as_str(),
+                    &r.line_start.to_string(),
+                    &r.line_end.to_string(),
+                    r.evidence.as_str(),
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                ])
+                .map_err(|e| format!("cannot build CSV: {e}"))?;
+                w.flush().map_err(|e| format!("cannot build CSV: {e}"))?;
+            }
+            o.push_str(&String::from_utf8_lossy(&buf));
+        }
+        o
+    };
+    if let Some(dir) = out.parent() {
+        std::fs::create_dir_all(dir)
+            .map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+    }
+    std::fs::write(out, &text).map_err(|e| format!("cannot write {}: {e}", out.display()))?;
+    let msg = format!(
+        "\n  {} rows sampled from {} findings (stratified by {})\n  wrote {}\n\n  \
+         Fill `label` with TP, FP, AMBIGUOUS or NOT_APPLICABLE, then:\n    \
+         skillguard gold import {} --out <human gold.jsonl>\n",
+        drawn.len(),
+        candidates.len(),
+        match stratum {
+            Stratum::Rule => "rule",
+            Stratum::Severity => "severity",
+            Stratum::Frequency => "frequency",
+        },
+        out.display(),
+        out.display()
+    );
+    emit(cli, &msg)?;
+    Ok(exit::OK)
+}
+
+fn gold_export(input: &Path, format: Template, out: &Path) -> Result<i32, String> {
+    // Accept either a filled CSV or a JSONL label file, so a round can be
+    // converted in whichever direction the reviewer needs.
+    let rows = if input.extension().is_some_and(|e| e == "jsonl") {
+        gold::read_jsonl_human(input)?
+    } else {
+        gold::read_csv(input)?
+    };
+    match format {
+        Template::Csv => gold::write_csv(out, &rows)?,
+        Template::Jsonl => {
+            let mut o = String::new();
+            for r in &rows {
+                o.push_str(&serde_json::to_string(r).map_err(|e| e.to_string())?);
+                o.push('\n');
+            }
+            std::fs::write(out, o).map_err(|e| format!("cannot write {}: {e}", out.display()))?;
+        }
+    }
+    Ok(exit::OK)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn gold_import(
+    input: &Path,
+    out: &Path,
+    silver: bool,
+    model: &Option<String>,
+    model_version: &Option<String>,
+    prompt_version: &Option<String>,
+    cli: &Cli,
+) -> Result<i32, String> {
+    if silver {
+        // An unversioned model opinion cannot be reproduced or withdrawn, and
+        // "some model said so" is not provenance. Refuse rather than record it.
+        let (Some(model), Some(model_version), Some(prompt_version)) =
+            (model, model_version, prompt_version)
+        else {
+            return Err(
+                "--silver requires --model, --model-version and --prompt-version: an \
+                 unversioned model opinion is not reproducible"
+                    .to_owned(),
+            );
+        };
+        let rows = gold::read_csv(input)?;
+        let mut o = String::new();
+        for r in rows {
+            let s = SilverLabel {
+                finding_id: r.finding_id,
+                rule_id: r.rule_id,
+                label: r.label,
+                confidence: r.confidence,
+                rationale: r.rationale,
+                model: model.clone(),
+                model_version: model_version.clone(),
+                prompt_version: prompt_version.clone(),
+                judged_at: r.reviewed_at,
+            };
+            o.push_str(&serde_json::to_string(&s).map_err(|e| e.to_string())?);
+            o.push('\n');
+        }
+        if let Some(dir) = out.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        }
+        std::fs::write(out, o).map_err(|e| format!("cannot write {}: {e}", out.display()))?;
+        return Ok(exit::OK);
+    }
+
+    let rows = if input.extension().is_some_and(|e| e == "jsonl") {
+        gold::read_jsonl_human(input)?
+    } else {
+        gold::read_csv(input)?
+    };
+    for r in &rows {
+        // The schema says a human label comes from a human. Leaving `reviewer`
+        // empty is the one thing we can check offline, so it is checked.
+        if r.reviewer.trim().is_empty() {
+            return Err(format!(
+                "{}: row {} has no reviewer; a human label records who made it",
+                input.display(),
+                r.finding_id
+            ));
+        }
+    }
+    let mut o = String::new();
+    for r in &rows {
+        o.push_str(&serde_json::to_string(r).map_err(|e| e.to_string())?);
+        o.push('\n');
+    }
+    if let Some(dir) = out.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    std::fs::write(out, o).map_err(|e| format!("cannot write {}: {e}", out.display()))?;
+    emit(
+        cli,
+        &format!("{} human label(s) -> {}\n", rows.len(), out.display()),
+    )?;
+    Ok(exit::OK)
+}
+
+fn gold_stats(input: &Path, format: Format, cli: &Cli) -> Result<i32, String> {
+    let rows = if input.extension().is_some_and(|e| e == "jsonl") {
+        gold::read_jsonl_human(input)?
+    } else {
+        gold::read_csv(input)?
+    };
+    let total = rows.len();
+    let mut by_rule: std::collections::BTreeMap<&str, [usize; 4]> = Default::default();
+    let mut reviewers: std::collections::BTreeMap<&str, usize> = Default::default();
+    for r in &rows {
+        let e = by_rule.entry(r.rule_id.as_str()).or_default();
+        let i = match r.label {
+            Label::Tp => 0,
+            Label::Fp => 1,
+            Label::Ambiguous => 2,
+            Label::NotApplicable => 3,
+        };
+        e[i] += 1;
+        *reviewers.entry(r.reviewer.as_str()).or_default() += 1;
+    }
+    let body = match format {
+        Format::Json => {
+            let v: Vec<_> = by_rule
+                .iter()
+                .map(|(rule, c)| {
+                    serde_json::json!({
+                        "rule": rule, "samples": c[0]+c[1]+c[2]+c[3],
+                        "tp": c[0], "fp": c[1], "ambiguous": c[2], "not_applicable": c[3],
+                    })
+                })
+                .collect();
+            serde_json::to_string_pretty(&serde_json::json!({
+                "rows": total, "reviewers": reviewers, "by_rule": v
+            }))
+            .map_err(|e| e.to_string())?
+        }
+        _ => {
+            let mut o = String::from("\n  SkillGuard GOLD label set\n\n");
+            o.push_str(&format!("    rows        {total}\n"));
+            o.push_str(&format!("    rules       {}\n", by_rule.len()));
+            o.push_str("    reviewers   ");
+            if reviewers.is_empty() {
+                o.push_str("(none)\n");
+            } else {
+                let list: Vec<String> = reviewers
+                    .iter()
+                    .map(|(k, v)| {
+                        if k.is_empty() {
+                            format!("(blank) {v}")
+                        } else {
+                            format!("{k} {v}")
+                        }
+                    })
+                    .collect();
+                o.push_str(&list.join(", "));
+                o.push('\n');
+            }
+            o.push_str("\n    rule                        n    tp    fp   amb   n/a\n");
+            for (rule, c) in &by_rule {
+                o.push_str(&format!(
+                    "    {:24} {:>5} {:>5} {:>5} {:>5} {:>5}\n",
+                    skillguard::text::truncate_chars(rule, 24),
+                    c[0] + c[1] + c[2] + c[3],
+                    c[0],
+                    c[1],
+                    c[2],
+                    c[3]
+                ));
+            }
+            o.push('\n');
+            o
+        }
+    };
+    emit(cli, &body)?;
+    Ok(exit::OK)
+}
+
+fn gold_matrix(
+    gold_path: &Path,
+    silver_path: Option<&Path>,
+    format: Format,
+    all_rules: bool,
+    cli: &Cli,
+) -> Result<i32, String> {
+    let human = gold::read_jsonl_human(gold_path)?;
+    let silver = match silver_path {
+        Some(p) => gold::read_jsonl_silver(p)?,
+        None => Vec::new(),
+    };
+    let rules: Vec<String> = if all_rules {
+        skillguard::scan::rules::catalogue()
+            .into_iter()
+            .map(|e| e.id.to_owned())
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let rows = gold::matrix_with_rules(&human, &silver, &rules);
+    let body = match format {
+        Format::Json => serde_json::to_string_pretty(&serde_json::json!({
+            "human_rows": human.len(),
+            "silver_rows": silver.len(),
+            "silver_note": "model labels are counted, never scored",
+            "rules": rows,
+            "thresholds": {
+                "blocking": {"precision": gold::BLOCKING_PRECISION,
+                              "min_samples": gold::BLOCKING_MIN_SAMPLES},
+                "warning": {"precision": gold::WARNING_PRECISION,
+                             "min_samples": gold::WARNING_MIN_SAMPLES},
+            },
+        }))
+        .map_err(|e| e.to_string())?,
+        Format::Markdown => gold::matrix_markdown(&rows),
+        _ => {
+            let mut o = String::from("\n  SkillGuard rule quality matrix (human GOLD only)\n\n");
+            o.push_str(&format!(
+                "    human labels    {}\n    model silver    {} (counted, never scored)\n\n",
+                human.len(),
+                silver.len()
+            ));
+            o.push_str(
+                "    rule                        n    tp    fp   amb   n/a  precision  status\n",
+            );
+            for r in &rows {
+                let p = match r.precision {
+                    Some(x) => format!("{:.1}%", x * 100.0),
+                    None => "n/a".to_owned(),
+                };
+                o.push_str(&format!(
+                    "    {:24} {:>5} {:>5} {:>5} {:>5} {:>5} {:>9}  {}\n",
+                    skillguard::text::truncate_chars(&r.rule_id, 24),
+                    r.samples,
+                    r.tp,
+                    r.fp,
+                    r.ambiguous,
+                    r.not_applicable,
+                    p,
+                    r.status.as_str()
+                ));
+            }
+            let measured = rows.iter().filter(|r| r.precision.is_some()).count();
+            o.push_str(&format!(
+                "\n    {measured} of {} rule(s) have at least one decided human label.\n    \
+                 Recall is unknown for every rule: a finding-level sample cannot see\n    \
+                 what the rules missed. That needs a skill-level sample.\n\n",
+                rows.len()
+            ));
+            o
+        }
+    };
+    emit(cli, &body)?;
     Ok(exit::OK)
 }

@@ -1005,3 +1005,196 @@ fn shell_completions_are_printed() {
     assert!(text.contains("skillguard"), "{text}");
     assert!(text.contains("policy-check"), "{text}");
 }
+
+// ---------------------------------------------------------------------------
+// Rule quality evaluation: the round trip a human actually performs
+// ---------------------------------------------------------------------------
+
+fn tmp(name: &str) -> std::path::PathBuf {
+    let d = std::env::temp_dir().join(format!("sg-cli-{}-{name}", std::process::id()));
+    let _ = std::fs::create_dir_all(&d);
+    d
+}
+
+/// The workflow in `docs/GOLD_EVALUATION.md` §4, end to end: sample, fill in,
+/// import, matrix. If this drifts, the documented instructions are wrong.
+#[test]
+fn a_gold_round_trip_needs_a_name_and_produces_a_matrix() {
+    let dir = tmp("gold-roundtrip");
+    let ws = dir.join("ws.csv");
+    let out = run(&[
+        "gold",
+        "sample",
+        "--findings",
+        "research/raw-findings.jsonl",
+        "--manifest",
+        "research/corpus-manifest.jsonl",
+        "--tree",
+        "research/raw",
+        "--per-stratum",
+        "1",
+        "--out",
+        ws.to_str().expect("path"),
+    ]);
+    if !std::path::Path::new("research/raw-findings.jsonl").exists() {
+        // The corpus tree is gitignored; CI does not have it. The unit tests in
+        // src/gold.rs cover the logic, so skip rather than fail on a checkout.
+        return;
+    }
+    assert!(out.status.success(), "{}", stderr(&out));
+    let text = std::fs::read_to_string(&ws).expect("worksheet written");
+    let header = text.lines().next().expect("header").to_owned();
+    assert_eq!(
+        header,
+        "finding_id,rule_id,file,line_start,line_end,evidence,label,confidence,rationale,reviewer,reviewed_at",
+        "the header is the contract for a reviewer's spreadsheet"
+    );
+    // An unreviewed row leaves all five answer columns blank.
+    let first = text.lines().nth(1).expect("a row");
+    assert!(
+        first.ends_with(".,,,,,") || first.ends_with(",,,,,"),
+        "an unreviewed row must leave the answer columns blank: {first}"
+    );
+
+    // Fill the first data row the way a reviewer would: set the last five
+    // fields. Splitting on commas is wrong here (evidence contains them), so the
+    // test does what a reviewer does and rewrites the tail after the evidence's
+    // closing quote.
+    let mut filled = String::new();
+    filled.push_str(&header);
+    filled.push('\n');
+    for (i, line) in text.lines().skip(1).enumerate() {
+        if i == 0 {
+            let cut = line.rfind(",,,,,").expect("blank answer columns");
+            filled.push_str(&line[..cut + 1]);
+            filled.push_str("TP,HIGH,it is what the rule says,alice,2026-11-12");
+        } else {
+            filled.push_str(line);
+        }
+        filled.push('\n');
+    }
+    std::fs::write(&ws, filled).expect("write");
+
+    let gold = dir.join("human.jsonl");
+    let out = run(&[
+        "gold",
+        "import",
+        ws.to_str().expect("path"),
+        "--out",
+        gold.to_str().expect("path"),
+    ]);
+    assert!(out.status.success(), "{}", stderr(&out));
+
+    let out = run(&[
+        "gold",
+        "matrix",
+        "--gold",
+        gold.to_str().expect("path"),
+        "--format",
+        "markdown",
+    ]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let matrix = stdout(&out);
+    assert!(
+        matrix.contains(
+            "| Rule ID | Samples | TP | FP | Ambiguous | N/A | Precision | Recall | Status |"
+        ),
+        "{matrix}"
+    );
+    assert!(
+        matrix.contains("| unknown |"),
+        "recall must be reported as unknown, never as a number: {matrix}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A human label with no name is not provenance. The one check available
+/// offline is `reviewer`, so it is enforced rather than documented.
+#[test]
+fn a_human_label_without_a_reviewer_is_refused() {
+    let dir = tmp("gold-noreviewer");
+    let ws = dir.join("ws.csv");
+    std::fs::write(
+        &ws,
+        "finding_id,rule_id,file,line_start,line_end,evidence,label,confidence,rationale,reviewer,reviewed_at\n\
+         abc-1-RULE,RULE,SKILL.md,1,1,\"x\",TP,HIGH,why,,2026-11-12\n",
+    )
+    .expect("write");
+    let out = run(&[
+        "gold",
+        "import",
+        ws.to_str().expect("path"),
+        "--out",
+        dir.join("h.jsonl").to_str().expect("path"),
+    ]);
+    assert_eq!(out.status.code(), Some(3), "usage error, not a panic");
+    assert!(stderr(&out).contains("no reviewer"), "{}", stderr(&out));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Model silver needs a version, because an opinion that cannot be reproduced
+/// cannot be withdrawn either.
+#[test]
+fn silver_labels_require_their_provenance() {
+    let dir = tmp("gold-silver");
+    let ws = dir.join("ws.csv");
+    std::fs::write(
+        &ws,
+        "finding_id,rule_id,file,line_start,line_end,evidence,label,confidence,rationale,reviewer,reviewed_at\n\
+         abc-1-RULE,RULE,SKILL.md,1,1,\"x\",TP,HIGH,why,model,2026-11-12\n",
+    )
+    .expect("write");
+    let silver_out = dir.join("s.jsonl");
+    let silver_out_s = silver_out.to_str().expect("path").to_owned();
+    let base = [
+        "gold",
+        "import",
+        ws.to_str().expect("path"),
+        "--out",
+        silver_out_s.as_str(),
+        "--silver",
+    ];
+    let out = run(&base);
+    assert_eq!(out.status.code(), Some(3));
+    assert!(stderr(&out).contains("--model"), "{}", stderr(&out));
+
+    let mut with = base.to_vec();
+    with.extend([
+        "--model",
+        "glm",
+        "--model-version",
+        "1",
+        "--prompt-version",
+        "p1",
+    ]);
+    let out = run(&with);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let written = std::fs::read_to_string(&silver_out).expect("read");
+    assert!(written.contains("\"prompt_version\":\"p1\""), "{written}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The templates under docs/templates are documentation, and documentation that
+/// does not parse is worse than none.
+#[test]
+fn the_documented_templates_parse() {
+    let out = run(&["gold", "stats", "docs/templates/gold.csv"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert!(stdout(&out).contains("reviewers"), "{}", stdout(&out));
+
+    let out = run(&[
+        "gold",
+        "matrix",
+        "--gold",
+        "docs/templates/gold.jsonl",
+        "--format",
+        "json",
+    ]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let v: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("valid json");
+    assert_eq!(v["human_rows"], 3);
+    assert_eq!(
+        v["silver_note"], "model labels are counted, never scored",
+        "the matrix must say out loud that silver is not scored"
+    );
+}

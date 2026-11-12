@@ -14,7 +14,7 @@ number in this file without a revision is a number nobody should quote.
 | version | `0.1.2` (crate + `RULE_SET_VERSION`) |
 | `SCAN_LOGIC_REVISION` | **53** |
 | rules | 55 |
-| tests | 342 pass, 0 fail (`cargo test --all-targets`) |
+| tests | 355 pass, 0 fail (`cargo test --all-targets`) |
 | clippy / fmt | `-D warnings` clean / clean |
 | `cargo deny` | advisories, bans, licenses, sources all ok, `ignore = []` |
 | CI | green on `7c4ed6b` (linux, windows, cargo-deny, Action self-test) |
@@ -46,6 +46,22 @@ cache. `docs/CORPUS_REPORT.md` regenerates identically from it.
 
 Not a human GOLD set. `research/PROTOCOL.md` G3 asks for two humans; no human has
 ever labelled anything here (issue #11).
+
+## Rule quality evaluation
+
+`skillguard gold sample | export | import | stats | matrix`, plus `src/gold.rs`.
+Three kinds of evidence, separated by type rather than convention:
+
+| | where | feeds the published precision |
+|---|---|---|
+| synthetic fixtures | `tests/fixtures/` | never |
+| human GOLD | `research/gold/HUMAN-vN.jsonl` | only this |
+| model silver | `research/gold/silver/` | never; counted and printed |
+
+Current human state: **zero labels**. `research/gold/HUMAN-v1.worksheet.csv` holds
+95 rows awaiting a reviewer, and `docs/RULE_QUALITY_MATRIX.md` therefore lists all
+55 rules as `INFORMATIONAL` with `recall unknown`. That is accurate, not
+unfinished: the `GOLD-v1`..`GOLD-v10` sets in `research/gold/` are model labels.
 
 ## What each thing is measured to be
 

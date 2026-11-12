@@ -268,6 +268,25 @@ Other output formats: `--format json`, `--format sarif` (GitHub Code Scanning),
 | `demo` | Scan two embedded examples and explain the output; `--out DIR` keeps them |
 | `completions <shell>` | Shell completion code (bash, zsh, fish, powershell, elvish) |
 | `corpus …` | Offline, reproducible corpus study driver |
+| `gold …` | Rule quality: sample a worksheet, import human labels, print the matrix |
+
+<details>
+<summary>Rule quality commands</summary>
+
+```bash
+skillguard gold sample --findings research/raw-findings.jsonl \
+    --manifest research/corpus-manifest.jsonl --tree research/raw \
+    --stratify rule --per-stratum 3 --out HUMAN-v1.worksheet.csv
+skillguard gold import HUMAN-v1.worksheet.csv --out research/gold/HUMAN-v1.jsonl
+skillguard gold stats  research/gold/HUMAN-v1.jsonl
+skillguard gold matrix --gold research/gold/HUMAN-v1.jsonl --all-rules --format markdown
+```
+
+No model is called by any of these. `--silver` requires `--model`,
+`--model-version` and `--prompt-version`, and those labels are counted but never
+scored: see `docs/GOLD_EVALUATION.md`.
+
+</details>
 
 <details>
 <summary>Corpus commands (Phase 0)</summary>
@@ -454,6 +473,9 @@ Work is tracked on the [issue board](https://github.com/lxbworld/SkillGuard/issu
 | [Current state](docs/STATE.md) | What is measurably true now, with the revision each number was measured at |
 | [Open work](docs/WORK.md) | The queue, in the order it should be done |
 | [Lessons](docs/LESSONS.md) | Every mistake made here, and the check that now prevents it |
+| [Rule quality evaluation](docs/GOLD_EVALUATION.md) | Human GOLD vs model silver vs fixtures, and what each may prove |
+| [Annotation guide](docs/ANNOTATION_GUIDE.md) | How to label a worksheet in about 40 minutes |
+| [Rule quality matrix](docs/RULE_QUALITY_MATRIX.md) | Per-rule precision and status, from human labels only |
 
 ## Naming and attribution
 

@@ -26,6 +26,7 @@
 pub mod capability;
 pub mod corpus;
 pub mod demo;
+pub mod gold;
 pub mod hash;
 pub mod import;
 pub mod models;

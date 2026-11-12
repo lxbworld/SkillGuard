@@ -16,6 +16,9 @@ exclude = ["tests/fixtures/**"]
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 clap_complete = "4.5"
+# `gold import`/`export` read and write CSV, because the reviewers are people
+# with spreadsheets. CSV parsing by hand is a quoting bug waiting to happen.
+csv = "1.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 serde-saphyr = { version = "2.1", default-features = false, features = ["deserialize"] }
