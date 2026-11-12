@@ -42,9 +42,17 @@ the surrounding context. Judge the claim against the line:
 
 Judge only the claim, not whether the rule is useful or well written.
 - If the claim describes an ACTION or an ACCESS (reads, writes, contacts, runs,
-  installs), then a mention is not an instance: documentation, a comment, a
-  docstring, a help message, a test fixture, an example, a variable name, an
-  import, or text that merely names the thing is "fp".
+  installs), then a mention is not an instance: a comment, a docstring, a help
+  message, a test fixture, a variable name, an import, or text that merely names
+  the thing is "fp".
+- A `SKILL.md` body is the exception and it matters more than anything else
+  here: that text *is* the instruction an agent follows, so a command in it is
+  an instance, not a mention. A fenced code block in a skill's own instructions
+  is the command the agent is told to run. Only a `SKILL.md` passage that talks
+  *about* the command ("never run `curl | bash`", "attacks use `rm -rf /`") is a
+  mention.
+- Other Markdown (a `README`, a `docs/*.md`, a reference file) is documentation:
+  an example there is a mention, unless the file is telling the agent what to do.
 - If the claim describes PRESENCE (a hardcoded credential, a control character,
   an embedded remote image, a licence term), then presence in the line is
   enough, including inside a comment or documentation.

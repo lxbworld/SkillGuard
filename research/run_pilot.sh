@@ -127,17 +127,29 @@ fi
 > flagged every non-English `PI_DESCRIPTION_MISMATCH`, and unstemmed verbs
 > (`execution` did not match `execute`). Each fix is a regression test.
 >
-> ## GOLD-v6
+> ## GOLD-v10
 >
-> The precision column below is measured against `research/gold/GOLD-v6.jsonl`:
-> 209 line-level findings across 36 rules at `SCAN_LOGIC_REVISION = 50`, eight
-> per rule in hash order, one judgment per skill and rule. Two independent
-> sessions of `command-code/deepseek-v4.1-flash` labelled them blind to each
-> other — **no human annotated this set**, and neither annotator wrote the rules.
-> Cohen's kappa is **0.827** over the 209 scored rows (gate 0.75), or **0.845**
-> over all 225 rows the annotators saw before the two skill-level rules were
-> excluded; the 17 disagreements were adjudicated by a third session shown both
-> verdicts, and every rule figure below is per rule, never micro-averaged.
+> The precision column below is measured against `research/gold/GOLD-v10.jsonl`:
+> 205 line-level findings across 36 rules at `SCAN_LOGIC_REVISION = 53`, eight
+> per rule in hash order, one judgment per skill and rule. Two annotators from
+> **different model families** labelled them blind to each other —
+> `command-code/deepseek-v4.1-flash` and `command-code/z-ai/glm-5.3-flash` —
+> **no human annotated this set**, and neither annotator wrote the rules.
+> Cohen's kappa is **0.779** over the 205 rows (gate 0.75); the 20 disagreements
+> were adjudicated by a third session shown both verdicts, and every rule figure
+> below is per rule, never micro-averaged.
+>
+> This round exists because two sessions of *one* model is not independence: they
+> share blind spots and agree on a wrong label as readily as a right one.
+> GOLD-v8 measured that directly by re-labelling GOLD-v6's unchanged 209 rows
+> with a second family — kappa fell from 0.845 to **0.723**, below the gate. The
+> 0.779 here is what two families reach once the ambiguity that split them is
+> removed, and *that* was a defect in this project's own annotation instruction,
+> not in the rules: it said documentation is not an instance without saying what
+> a `SKILL.md` body is. The body is the instruction an agent follows, so a
+> command in it is behaviour; only a passage that talks *about* a command
+> (`never run curl | bash`) is a mention. One round (GOLD-v9) failed at 0.593
+> before that sentence was added, and its labels are kept as the record.
 >
 > The frontmatter parser changed at revision 50 (`serde_yaml`, deprecated, and
 > the unmaintained `unsafe-libyaml` behind it, replaced by `serde-saphyr` — issue
@@ -153,6 +165,19 @@ fi
 > accesses are no longer recorded as file paths — which altered no text rule and
 > therefore no row above; it did remove four false `MISMATCH_UNDER_DECLARED`
 > accusations from the prevalence table.
+>
+> **Revision 53 is a line-kind model (T14), and it removes findings rather
+> than adding them.** A docstring or block comment describes behaviour; it does
+> not perform it, and a single-line comment check cannot see the `"""` that
+> opened forty lines earlier. `SHELL_EXEC` drops 2,495 -> 1,646 (that rule alone
+> is most of the 9,853 -> 8,776 total), `NET_DOMAIN_LITERAL` 2,888 -> 2,768,
+> `FS_HOME_ACCESS` 289 -> 235. On GOLD-v6 it suppressed 7 rows and
+> **all seven were false positives**, which is why the change was made: the same
+> two model families independently rated findings on docstring lines 7% and 14%
+> true against 72% and 73% on executable code. Markdown is deliberately *not*
+> documentation here — a fenced `pip install` is the command the agent is told to
+> run (GOLD-v8 confirms it, 48% precision, and the `remote-install` fixture
+> requires it) — so `PI_*` and `DL_*` behaviour is unchanged in `SKILL.md`.
 >
 > Neither annotator being human is the limitation, not a detail. Two sessions of
 > one model share blind spots, so they agree on a wrong label as readily as on a
@@ -197,6 +222,146 @@ fi
 > The `PI_*` heuristics that remain are measured above, and every one of them is
 > below the gate. They are published because the evidence line is still worth a
 > human read, and their prevalence figures are upper bounds like every other row.
+
+
+
+
+
+## Collection
+
+```json
+{
+  "queries": [
+    "filename:SKILL.md",
+    "filename:SKILL.md path:skills",
+    "filename:SKILL.md path:skills/",
+    "filename:SKILL.md path:.claude",
+    "filename:SKILL.md path:.claude/skills",
+    "filename:SKILL.md path:agent",
+    "filename:SKILL.md path:agent/skills",
+    "filename:SKILL.md path:agents",
+    "filename:SKILL.md path:agents/skills",
+    "filename:SKILL.md path:.cursor",
+    "filename:SKILL.md path:.cursor/skills",
+    "filename:SKILL.md path:plugins",
+    "filename:SKILL.md path:commands",
+    "filename:SKILL.md path:.github",
+    "filename:SKILL.md path:.github/skills",
+    "filename:SKILL.md path:templates",
+    "filename:SKILL.md path:.codex",
+    "filename:SKILL.md path:.gemini",
+    "filename:SKILL.md path:.agent",
+    "filename:SKILL.md path:.agents",
+    "filename:SKILL.md path:.windsurf",
+    "filename:SKILL.md path:.trae",
+    "filename:SKILL.md path:.roo",
+    "filename:SKILL.md path:.continue",
+    "filename:SKILL.md path:prompts",
+    "filename:SKILL.md path:workflows",
+    "filename:SKILL.md path:mcp",
+    "filename:SKILL.md path:tools",
+    "filename:SKILL.md path:functions",
+    "filename:SKILL.md path:recipes",
+    "filename:SKILL.md path:playbooks",
+    "filename:SKILL.md path:assistants",
+    "filename:SKILL.md path:modes",
+    "filename:SKILL.md path:rules",
+    "filename:SKILL.md path:capabilities",
+    "filename:SKILL.md path:packages",
+    "filename:SKILL.md path:integrations",
+    "filename:SKILL.md path:automation",
+    "filename:SKILL.md path:examples",
+    "filename:SKILL.md path:docs",
+    "filename:SKILL.md path:src",
+    "filename:SKILL.md path:lib",
+    "filename:SKILL.md path:apps",
+    "filename:SKILL.md path:services",
+    "filename:SKILL.md path:backend",
+    "filename:SKILL.md path:frontend",
+    "filename:SKILL.md path:infra",
+    "filename:SKILL.md path:ops",
+    "filename:SKILL.md path:security",
+    "filename:SKILL.md path:data",
+    "filename:SKILL.md path:ai",
+    "filename:SKILL.md path:llm",
+    "filename:SKILL.md path:copilot",
+    "filename:SKILL.md path:claude",
+    "filename:SKILL.md path:openai",
+    "filename:SKILL.md path:anthropic"
+  ],
+  "per_query_counts": {
+    "filename:SKILL.md": 100,
+    "filename:SKILL.md path:skills": 100,
+    "filename:SKILL.md path:skills/": 100,
+    "filename:SKILL.md path:.claude": 100,
+    "filename:SKILL.md path:.claude/skills": 100,
+    "filename:SKILL.md path:agent": 100,
+    "filename:SKILL.md path:agent/skills": 100,
+    "filename:SKILL.md path:agents": 100,
+    "filename:SKILL.md path:agents/skills": 100,
+    "filename:SKILL.md path:.cursor": 100,
+    "filename:SKILL.md path:.cursor/skills": 100,
+    "filename:SKILL.md path:plugins": 100,
+    "filename:SKILL.md path:commands": 100,
+    "filename:SKILL.md path:.github": 100,
+    "filename:SKILL.md path:.github/skills": 100,
+    "filename:SKILL.md path:templates": 100,
+    "filename:SKILL.md path:.codex": 100,
+    "filename:SKILL.md path:.gemini": 100,
+    "filename:SKILL.md path:.agent": 100,
+    "filename:SKILL.md path:.agents": 100,
+    "filename:SKILL.md path:.windsurf": 100,
+    "filename:SKILL.md path:.trae": 100,
+    "filename:SKILL.md path:.roo": 100,
+    "filename:SKILL.md path:.continue": 100,
+    "filename:SKILL.md path:prompts": 100,
+    "filename:SKILL.md path:workflows": 100,
+    "filename:SKILL.md path:mcp": 100,
+    "filename:SKILL.md path:tools": 100,
+    "filename:SKILL.md path:functions": 94,
+    "filename:SKILL.md path:recipes": 100,
+    "filename:SKILL.md path:playbooks": 100,
+    "filename:SKILL.md path:assistants": 77,
+    "filename:SKILL.md path:modes": 100,
+    "filename:SKILL.md path:rules": 100,
+    "filename:SKILL.md path:capabilities": 100,
+    "filename:SKILL.md path:packages": 100,
+    "filename:SKILL.md path:integrations": 100,
+    "filename:SKILL.md path:automation": 100,
+    "filename:SKILL.md path:examples": 100,
+    "filename:SKILL.md path:docs": 100,
+    "filename:SKILL.md path:src": 100,
+    "filename:SKILL.md path:lib": 100,
+    "filename:SKILL.md path:apps": 100,
+    "filename:SKILL.md path:services": 100,
+    "filename:SKILL.md path:backend": 100,
+    "filename:SKILL.md path:frontend": 100,
+    "filename:SKILL.md path:infra": 100,
+    "filename:SKILL.md path:ops": 100,
+    "filename:SKILL.md path:security": 100,
+    "filename:SKILL.md path:data": 100,
+    "filename:SKILL.md path:ai": 100,
+    "filename:SKILL.md path:llm": 100,
+    "filename:SKILL.md path:copilot": 100,
+    "filename:SKILL.md path:claude": 100,
+    "filename:SKILL.md path:openai": 100,
+    "filename:SKILL.md path:anthropic": 100
+  },
+  "unique_candidates": 5118,
+  "sample": 5118,
+  "candidates": 5118,
+  "collected": 5124,
+  "collected_this_run": 2608,
+  "skipped": 141,
+  "failed": 460,
+  "api_calls": 2494,
+  "collected_at_utc": "2026-10-08T08:03:26Z"
+}
+```
+
+Rule set version: `0.1.2`.
+
+This file is generated by `skillguard corpus report` from a findings JSONL. A number is only citable together with the manifest and the collection window it came from.
 HEADER
   echo "## Collection"
   echo

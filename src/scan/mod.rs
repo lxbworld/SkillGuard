@@ -285,7 +285,7 @@ pub fn scan_walked(name: &str, walked: Walked) -> ScanOutcome {
                 // performs the path, host or command it names. Counting either
                 // makes the declared-vs-observed diff accuse a skill of
                 // behaviour it only mentions (GOLD.md; rev 21).
-                if l.is_shebang() || l.comment_only() {
+                if l.is_shebang() || l.comment_only() || l.kind.is_documentation() {
                     continue;
                 }
                 // A path whose access mode could not be resolved is surfaced as
@@ -535,6 +535,16 @@ fn apply_text_rules(rel: &str, kind: ArtifactKind, norm: &Normalized, out: &mut 
                 && is_behavioural(rule.spec.id)
                 && line.match_in_comment(&matched)
             {
+                continue;
+            }
+            // The same claim, one level up: a docstring, a block comment or a
+            // fenced Markdown block *describes* behaviour too, and a single line
+            // cannot see the `\"\"\"` that opened forty lines earlier.
+            // GOLD-v6 and GOLD-v8 rated findings on docstring lines 7% and 14%
+            // true (two model families, independently) against 72% and 73% on
+            // executable code. Markdown *prose* is not documentation here: it is
+            // what the agent is told to do, and `PI_*` rules keep firing there.
+            if is_behavioural(rule.spec.id) && line.kind.is_documentation() {
                 continue;
             }
             out.push(Finding {

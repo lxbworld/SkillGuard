@@ -87,6 +87,40 @@ impl NormFlags {
     }
 }
 
+/// What kind of text a line is, decided lexically over the whole file.
+///
+/// A rule's claim is about behaviour, and text that only *describes* behaviour
+/// is not an instance of it. `NormLine::match_in_comment` asks that question
+/// from a single line, which cannot see a docstring that opened 40 lines
+/// earlier, and GOLD-v6/v8 both measured the consequence: findings on docstring
+/// lines are 7% and 14% true across two model families, against 72% and 73% on
+/// executable code. This is the file-level answer to the same question.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LineKind {
+    /// Executable code, or prose in a documentation file.
+    Code,
+    /// Inside a `/* … */` block comment.
+    BlockComment,
+    /// Inside a triple-quoted string, i.e. a docstring or a multi-line literal.
+    Docstring,
+}
+
+impl LineKind {
+    /// Is this line text that only *describes* behaviour?
+    ///
+    /// Markdown is deliberately absent, in both shapes. A `SKILL.md` *is* the
+    /// agent's instruction, so prose is behaviour by definition, and a fenced
+    /// command is literally the command the agent is told to run — the
+    /// `suspicious/remote-install` fixture is a `pip install` inside a fence,
+    /// and both GOLD-v6 and GOLD-v8 call it a true positive. Measured on
+    /// GOLD-v6, fenced blocks score 48% precision against 72% for executable
+    /// code, i.e. no better than Markdown prose (48-57%) and nothing like a
+    /// docstring (7%).
+    pub fn is_documentation(self) -> bool {
+        matches!(self, LineKind::BlockComment | LineKind::Docstring)
+    }
+}
+
 /// One line, in both original and normalized form.
 #[derive(Debug, Clone)]
 pub struct NormLine {
@@ -99,6 +133,8 @@ pub struct NormLine {
     pub raw_full: String,
     /// NFKC-normalized, invisibles stripped, homoglyphs folded.
     pub norm: String,
+    /// Comment, docstring or code, decided over the whole file.
+    pub kind: LineKind,
     pub flags: NormFlags,
 }
 
@@ -249,6 +285,65 @@ pub struct ShadowText {
     pub note: String,
 }
 
+/// Classify every line of a file as code, block comment or docstring.
+///
+/// This is a lexer for two states a single-line check cannot see — an open
+/// `/* … */` and an open triple-quoted string — and nothing more. The question
+/// it answers is "is this line text that *describes* behaviour".
+///
+/// Triple quotes are tracked by parity, not by guessing whether a line looks
+/// like a docstring opener. Recognising the opener (a `def`, a bare line)
+/// misreads the *closer* of a multi-line string: `""".strip()` ending a data
+/// block has an empty prefix, so it looked like an opener and every following
+/// line of the file became "documentation" — it suppressed a real
+/// `NET_DYNAMIC_URL` finding 50 lines later, which is how the mistake was
+/// caught. Parity has no such failure: one unbalanced line flips the state, the
+/// next one flips it back.
+pub fn classify_lines(input: &str) -> Vec<LineKind> {
+    let mut out = Vec::new();
+    let mut in_block = false;
+    let mut triple: Option<&'static str> = None;
+    for line in input.lines() {
+        let t = line.trim_start();
+        if in_block {
+            out.push(LineKind::BlockComment);
+            if t.contains("*/") {
+                in_block = false;
+            }
+            continue;
+        }
+        if let Some(q) = triple {
+            out.push(LineKind::Docstring);
+            if t.matches(q).count() % 2 == 1 {
+                triple = None;
+            }
+            continue;
+        }
+        if let Some(rest) = t.strip_prefix("/*") {
+            out.push(LineKind::BlockComment);
+            if !rest.contains("*/") {
+                in_block = true;
+            }
+            continue;
+        }
+        // An odd number of triple quotes on a line opens a multi-line string.
+        // An even number (including a balanced `x = """a"""`) is data or code,
+        // and `Code` is the right answer: the line is one the program acts on.
+        let opened = ["\"\"\"", "'''"]
+            .iter()
+            .find(|q| t.matches(**q).count() % 2 == 1)
+            .copied();
+        match opened {
+            Some(q) => {
+                out.push(LineKind::Docstring);
+                triple = Some(q);
+            }
+            None => out.push(LineKind::Code),
+        }
+    }
+    out
+}
+
 /// Normalize a whole file. `max_bytes` guards against hostile input sizes;
 /// content past the cap is dropped and `truncated` is set.
 pub fn normalize_file(input: &str, max_bytes: usize) -> Normalized {
@@ -264,6 +359,7 @@ pub fn normalize_file(input: &str, max_bytes: usize) -> Normalized {
         input
     };
 
+    let kinds = classify_lines(body);
     for (i, line) in body.lines().enumerate() {
         let (norm, flags) = normalize_line(line);
         let raw_full = sanitize_controls(line);
@@ -273,6 +369,7 @@ pub fn normalize_file(input: &str, max_bytes: usize) -> Normalized {
             raw,
             raw_full,
             norm,
+            kind: kinds.get(i).copied().unwrap_or(LineKind::Code),
             flags,
         });
     }
@@ -532,6 +629,7 @@ mod tests {
     #[test]
     fn a_comment_is_found_regardless_of_case() {
         let nl = |raw: &str| NormLine {
+            kind: LineKind::Code,
             line: 1,
             raw: raw.to_owned(),
             raw_full: raw.to_owned(),

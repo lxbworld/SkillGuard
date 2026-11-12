@@ -1121,12 +1121,16 @@ pub fn rule_count() -> usize {
 /// character classes (`w./-`) and attribute accesses (`json.dumps`) as file
 /// paths. No text rule changed, but the declared-vs-observed findings and the
 /// corpus cache both carry the old (wrong) capabilities, so the revision moves.
+/// rev 53: a line-kind model (T14). Findings now carry the kind of line they
+/// were found on, so a docstring or block comment no longer reports the commands
+/// it documents: `SHELL_EXEC` 2,495 -> 1,646 on the pilot corpus, and every
+/// cached finding is stale.
 /// rev 52: the frontmatter parser changed (`serde_yaml` -> `serde-saphyr`,
 /// issue #16). No rule changed, but which documents parse at all did:
 /// `PARSE_FAILED` 71 -> 76 on the pilot corpus, and every finding that depends on
 /// a declaration (`MISMATCH_*`, `LICENSE_*`) is downstream of that. Without the
 /// bump a warm cache would keep serving the old parser's results.
-pub const SCAN_LOGIC_REVISION: u32 = 52;
+pub const SCAN_LOGIC_REVISION: u32 = 53;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

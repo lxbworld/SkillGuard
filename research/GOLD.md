@@ -659,6 +659,99 @@ near or below that, not near 0.85.
 
 ---
 
+## GOLD-v10: two model families pass the gate, after the instruction is fixed
+
+GOLD-v8 showed that two sessions of one model are not independent. GOLD-v9 was
+the attempt to do better, and it failed twice for a reason worth recording,
+because the second failure was this project's own measurement bug rather than a
+rule problem.
+
+| round | annotators | rows | agreement | κ | gate |
+|---|---|---|---|---|---|
+| GOLD-v9 | DeepSeek vs GLM | 205 | 167/205 (81.5%) | 0.593 | FAIL |
+| GOLD-v10 | DeepSeek vs GLM, corrected instruction | 205 | 185/205 (90.2%) | **0.779** | **PASS** |
+
+v9's 38 disagreements split by file kind like this:
+
+| where | disagreements |
+|---|---|
+| Markdown (`SKILL.md`, `docs/`, references) | **24** |
+| executable code | 14 |
+
+and the rows were unambiguous on inspection: `--registry skills.sh`,
+`pip install git+https://…`, `--index-url https://download.pytorch.org/whl/cpu`.
+One annotator read "this is a `SKILL.md`, so it is documentation, so it is a
+mention"; the other read "this is a `SKILL.md`, so it is the instruction the
+agent follows, so it is behaviour". **Both readings were defensible because the
+instruction never said which** — it said documentation is not an instance and
+left `SKILL.md` uncovered.
+
+The fix is one paragraph in `research/annotate_gold.py`: a `SKILL.md` body is the
+instruction an agent follows, so a command in it is an instance (including inside
+a fenced block); only a passage that talks *about* the command is a mention.
+With that sentence the same two models, on the same rows, reach κ 0.779.
+
+Two consequences:
+
+- **The pipeline was measuring its own prompt.** A κ that moves 0.19 because a
+  paragraph was added to the annotator's instructions is not a property of the
+  rules under test. Any future round has to state what a `SKILL.md` is before its
+  κ means anything.
+- **Different families are the cheap independence test.** The same two models
+  went from 0.723 (GOLD-v6 rows, old instruction) to 0.593 (rev-53 rows, same
+  instruction) to 0.779 (rev-53 rows, fixed instruction). Only the last one is
+  evidence, and the first two are why it took three rounds.
+
+### What GOLD-v10 publishes
+
+`research/gold/GOLD-v10.jsonl`: 205 rows, 138 tp, 20 adjudicated by a third
+session. Precision, per rule, no micro-average — 16 of 36 measured rules reach
+G4 (precision ≥ 0.85):
+
+| rule | TP | FP | precision |
+|---|---|---|---|
+| `DEP_CUSTOM_REGISTRY` | 6 | 0 | 100% |
+| `DEP_UNPINNED_SCRIPT` | 3 | 0 | 100% |
+| `DL_CHAIN_FETCH_EXECUTE` | 1 | 0 | 100% |
+| `FS_HOME_ACCESS` | 8 | 0 | 100% |
+| `FS_MODE_UNRESOLVED` | 3 | 0 | 100% |
+| `FS_PATH_ESCAPE` | 8 | 0 | 100% |
+| `FS_RECURSIVE_WALK` | 8 | 0 | 100% |
+| `FS_SENSITIVE_PATH` | 4 | 0 | 100% |
+| `LICENSE_RESTRICTIVE` | 8 | 0 | 100% |
+| `NET_HTTP_CLIENT` | 8 | 0 | 100% |
+| `OBFUSC_ZERO_WIDTH` | 1 | 0 | 100% |
+| `SECRET_PROVIDER_TOKEN` | 3 | 0 | 100% |
+| `NET_DOMAIN_LITERAL` | 7 | 1 | 87.5% |
+| `NET_DYNAMIC_URL` | 7 | 1 | 87.5% |
+| `NET_FETCH_CALL` | 7 | 1 | 87.5% |
+| `SECRET_ENV_DUMP` | 7 | 1 | 87.5% |
+
+The prose rules remain the failures, and the line-kind work moved them only
+partly: `PI_EXFIL_INSTRUCTION` 0/7, `PI_INJECTION_OVERRIDE` 1/8,
+`SHELL_PRIVILEGE_ESCALATION` 2/8, `PERSIST_SHELL_RC` 1/4. They are not
+indistinguishable — both annotators agreed on those labels — they are wrong by
+the annotators' own reading, which is a rule-definition problem, not a
+disagreement problem.
+
+```
+python3 research/build_gold.py --per-rule 8 --out research/gold/GOLD-v9.worksheet.jsonl
+# (v10 reuses v9's worksheet: only the annotator instruction changed)
+skillguard corpus report --findings research/raw-findings.jsonl \
+    --gold research/gold/GOLD-v10.jsonl --out /tmp/body.md
+```
+
+### Still not G3
+
+Two model families are independent *of each other*, not of models in general.
+`research/PROTOCOL.md` G3 asks for two humans and this is not that (#11). The
+honest reading of 0.779 is: the rules and the worksheet are reproducible across
+two model priors, which is stronger than GOLD-v6's 0.845 and still weaker than a
+human study. Every precision figure in `docs/CORPUS_REPORT.md` carries that
+caveat.
+
+---
+
 ## SKILL-v2: rule-shaped labels, so recall is measurable
 
 `SKILL-v1` asked broad categories (`network`, `secrets`). That cannot measure a

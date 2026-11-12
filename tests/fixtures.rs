@@ -198,11 +198,41 @@ fn an_install_command_in_a_message_is_not_an_install() {
 }
 
 #[test]
+fn a_docstring_documents_commands_without_running_them() {
+    // GOLD-v6 and GOLD-v8 each rated findings on docstring lines 7% and 14%
+    // true, against 72% and 73% on executable code — two model families,
+    // independently. A `Usage:` block is the common shape: `python setup.py
+    // install`, `curl … | bash` and `rm -rf /tmp/stale` were all reported as
+    // behaviour this file has.
+    //
+    // Line kind is lexical (src/text.rs `classify_lines`): an open triple quote
+    // carries across lines, which a single-line comment check cannot see.
+    let out = scan_fixture("safe", "docstring-usage");
+    assert!(
+        out.findings.is_empty(),
+        "a docstring is not behaviour: {:#?}",
+        out.findings
+    );
+}
+
+#[test]
 fn an_unquoted_install_command_is_still_caught() {
     // The string-literal exclusion must not blind the rule to an instruction
     // the agent is meant to run.
     let out = scan_fixture("suspicious", "remote-install");
     assert_trips(&out, &["DL_REMOTE_INSTALL"]);
+}
+
+#[test]
+fn a_docstring_does_not_make_the_rest_of_the_file_documentation() {
+    // The obvious implementation recognises a docstring *opener* (a bare line, a
+    // definition). It then misreads the closer of a multi-line string —
+    // `""".strip()` at the end of a data block has an empty prefix — and every
+    // following line becomes "documentation". That silently suppressed a real
+    // `NET_DYNAMIC_URL` finding fifty lines later in the corpus, so this pins the
+    // other direction: the call after the docstring must still be reported.
+    let out = scan_fixture("malicious", "docstring-then-code");
+    assert_trips(&out, &["DL_PIPE_TO_SHELL", "SHELL_EXEC"]);
 }
 
 #[test]
@@ -809,6 +839,7 @@ fn edge_case_fixtures_do_not_panic() {
         "huge-line",
         "unicode-torture",
         "under-indented-quoted-scalar",
+        "unterminated-docstring",
     ] {
         let out = scan_fixture("edge_cases", sub);
         // The only requirement is that we return, with the files we skipped
