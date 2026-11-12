@@ -451,6 +451,9 @@ Work is tracked on the [issue board](https://github.com/lxbworld/SkillGuard/issu
 | [Disclosure policy](research/DISCLOSURE.md) | Notify-before-publish, digests only |
 | [Competitive analysis](docs/COMPETITIVE_ANALYSIS.md) | 13 projects surveyed |
 | [MVP roadmap](docs/MVP.md) | Phased scope with exit criteria |
+| [Current state](docs/STATE.md) | What is measurably true now, with the revision each number was measured at |
+| [Open work](docs/WORK.md) | The queue, in the order it should be done |
+| [Lessons](docs/LESSONS.md) | Every mistake made here, and the check that now prevents it |
 
 ## Naming and attribution
 

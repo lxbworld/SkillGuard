@@ -184,16 +184,16 @@ fi
 > right one, and the kappa above is a test–retest figure rather than inter-human
 > agreement. `research/GOLD.md` says what that costs and what would fix it.
 >
-> **13 of 36 rules reach the 0.85 precision gate**, and ten of them are at 100%:
-> `FS_PATH_ESCAPE`, `NET_HTTP_CLIENT`, `FS_SENSITIVE_PATH`, `FS_MODE_UNRESOLVED`,
-> `NET_DYNAMIC_URL`, `LICENSE_RESTRICTIVE`, `FS_HOME_ACCESS`,
-> `SECRET_PROVIDER_TOKEN`, `DL_CHAIN_FETCH_EXECUTE` and `DEP_UNPINNED_SCRIPT`.
-> `FS_RECURSIVE_WALK`, `NET_FETCH_CALL` and `SECRET_ENV_DUMP` are at 7/8.
-> (GOLD-v5 measured `FS_PATH_ESCAPE` and `NET_HTTP_CLIENT` at 87.5%.)
+> **16 of 36 rules reach the 0.85 precision gate**, and twelve of them are at
+> 100%: `DEP_CUSTOM_REGISTRY`, `DEP_UNPINNED_SCRIPT`, `DL_CHAIN_FETCH_EXECUTE`,
+> `FS_HOME_ACCESS`, `FS_MODE_UNRESOLVED`, `FS_PATH_ESCAPE`, `FS_RECURSIVE_WALK`,
+> `FS_SENSITIVE_PATH`, `LICENSE_RESTRICTIVE`, `NET_HTTP_CLIENT`,
+> `OBFUSC_ZERO_WIDTH` and `SECRET_PROVIDER_TOKEN`. `NET_DOMAIN_LITERAL`,
+> `NET_DYNAMIC_URL`, `NET_FETCH_CALL` and `SECRET_ENV_DUMP` are at 7/8.
 >
-> Where they did not: `SHELL_PRIVILEGE_ESCALATION` 0/8, `PERSIST_HOOK` 0/6,
-> `PERSIST_SHELL_RC` 0/4, `PI_INJECTION_OVERRIDE` 0/8 and `DL_PIPE_TO_SHELL` 0/2
-> were false positives on every sampled finding. The `PI_*` family is where
+> Where they did not: `PI_EXFIL_INSTRUCTION` 0/7, `PI_INJECTION_OVERRIDE` 1/8,
+> `SHELL_PRIVILEGE_ESCALATION` 2/8, `PERSIST_SHELL_RC` 1/4 and
+> `PERSIST_HOOK` 1/3 remain false positives on nearly every sampled finding. The `PI_*` family is where
 > GOLD-v5 left it — the corpus is full of security *training* material that
 > discusses injection, and a phrase rule cannot tell "issues this" from
 > "documents this", which is why they are `Info`: a false `Critical` is worse

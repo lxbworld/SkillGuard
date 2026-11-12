@@ -7,10 +7,11 @@ to rule output**, and **Cohen's κ ≥ 0.75**. This is the runbook for one round
 precision column.
 
 The pilot report publishes a precision column from a **model-labelled** GOLD set
-(GOLD-v6, two independent sessions, κ 0.827). That is not G3 — the protocol asks
-for two humans — and every mention of the column says so. GOLD-v8 measures what
-that caveat is worth: the same rows labelled by a second model family agree at
-κ 0.723. A single-annotator
+(GOLD-v10, two model families, κ 0.779). That is not G3 — the protocol asks
+for two humans — and every mention of the column says so. GOLD-v8 measured what
+the older same-model figure was worth: GOLD-v6's κ 0.845 was two sessions of one
+model, and a second family agrees on those same rows at κ 0.723, below the gate.
+A single-annotator
 read-through is not a metric at all; it found and fixed a dozen false-positive
 rules and is recorded as such.
 

@@ -2,6 +2,21 @@
 
 `CONTRIBUTING.md` is the human-facing version of this file. Read it too.
 
+## Read these first
+
+Three files answer the three questions a new agent actually has. They are
+maintained, not append-only: if one disagrees with the code, the code wins and
+the file is a bug.
+
+| file | question | shape |
+|---|---|---|
+| `docs/STATE.md` | what is true right now? | numbers with the revision they were measured at |
+| `docs/WORK.md` | what is left, and in what order? | a queue; done items are deleted |
+| `docs/LESSONS.md` | what already went wrong here? | mistake → cost → the check that prevents it |
+
+`docs/WORK.md` is the only place that lists open work. Issues are the public
+record; this file is the order to do them in.
+
 ## Language
 
 Everything committed or posted here is **English**: commit messages, issues,
