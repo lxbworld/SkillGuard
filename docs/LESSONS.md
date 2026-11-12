@@ -68,6 +68,19 @@ verified by breaking it in all three directions.
 while writing `docs/STATE.md`, four commits after the number changed. Nothing
 checks prose against tables.
 
+**A test passed locally and produced an empty result on CI.** The gold round-trip
+test sampled from `research/raw-findings.jsonl`, and `research/raw/` is gitignored,
+so on CI the worksheet contained only a header. It asserted `lines[1]`, which
+panicked rather than quietly passing — but the lesson is the design: a test must
+build its own fixture, not borrow the corpus. It now samples a three-file tree it
+creates itself.
+
+**A blank CSV tail is already one empty field per column.** Filling a worksheet by
+appending `TP,HIGH,…` added a twelfth field to an eleven-field row, because the
+blank tail `,,,,,` ends with a comma. `gold import` read the label as empty, skipped
+every row, and the matrix printed nothing — a silent no-op. The test now replaces
+the tail rather than appending, which is also what a spreadsheet does.
+
 **A commit message carried an invented number.** The same commit that added the
 entry above stated `PI_DESCRIPTION_MISMATCH` was "7.6% of declared skills"; the
 measured value is 54.9% of the 386 declaring skills (3.9% of all 5,442), and it

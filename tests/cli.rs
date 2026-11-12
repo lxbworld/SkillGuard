@@ -1018,30 +1018,58 @@ fn tmp(name: &str) -> std::path::PathBuf {
 
 /// The workflow in `docs/GOLD_EVALUATION.md` §4, end to end: sample, fill in,
 /// import, matrix. If this drifts, the documented instructions are wrong.
+///
+/// Built from a three-file fixture tree rather than the corpus: `research/raw` is
+/// gitignored, so a test that depends on it passes locally and produces an empty
+/// worksheet on CI — which is exactly how this test first failed.
 #[test]
 fn a_gold_round_trip_needs_a_name_and_produces_a_matrix() {
     let dir = tmp("gold-roundtrip");
+    let tree = dir.join("tree");
+    let skill = tree.join("acme/demo");
+    std::fs::create_dir_all(skill.join("scripts")).expect("mkdir");
+    std::fs::write(
+        skill.join("SKILL.md"),
+        "---\nname: demo\ndescription: d\n---\nbody\n",
+    )
+    .expect("write");
+    std::fs::write(
+        skill.join("scripts/api.py"),
+        "import requests\n\ndef fetch(url):\n    return requests.get(url)\n",
+    )
+    .expect("write");
+
+    let manifest = dir.join("manifest.jsonl");
+    std::fs::write(
+        &manifest,
+        "{\"source_id\":\"local:demo\",\"path\":\"acme/demo\"}\n",
+    )
+    .expect("write");
+    let findings = dir.join("findings.jsonl");
+    std::fs::write(
+        &findings,
+        "{\"source_id\":\"local:demo\",\"declared\":false,\"findings\":[\
+         {\"rule\":\"NET_HTTP_CLIENT\",\"severity\":\"MEDIUM\",\"file\":\"scripts/api.py\",\"line\":4}]}\n",
+    )
+    .expect("write");
+
     let ws = dir.join("ws.csv");
     let out = run(&[
         "gold",
         "sample",
         "--findings",
-        "research/raw-findings.jsonl",
+        findings.to_str().expect("path"),
         "--manifest",
-        "research/corpus-manifest.jsonl",
+        manifest.to_str().expect("path"),
         "--tree",
-        "research/raw",
+        tree.to_str().expect("path"),
         "--per-stratum",
         "1",
         "--out",
         ws.to_str().expect("path"),
     ]);
-    if !std::path::Path::new("research/raw-findings.jsonl").exists() {
-        // The corpus tree is gitignored; CI does not have it. The unit tests in
-        // src/gold.rs cover the logic, so skip rather than fail on a checkout.
-        return;
-    }
     assert!(out.status.success(), "{}", stderr(&out));
+
     let text = std::fs::read_to_string(&ws).expect("worksheet written");
     let header = text.lines().next().expect("header").to_owned();
     assert_eq!(
@@ -1050,24 +1078,27 @@ fn a_gold_round_trip_needs_a_name_and_produces_a_matrix() {
         "the header is the contract for a reviewer's spreadsheet"
     );
     // An unreviewed row leaves all five answer columns blank.
-    let first = text.lines().nth(1).expect("a row");
+    let first = text.lines().nth(1).expect("a data row");
     assert!(
-        first.ends_with(".,,,,,") || first.ends_with(",,,,,"),
-        "an unreviewed row must leave the answer columns blank: {first}"
+        first.ends_with(",,,,,"),
+        "unreviewed rows must leave the answer columns blank: {first}"
+    );
+    assert!(
+        first.contains("requests.get(url)"),
+        "the worksheet must carry the evidence line: {first}"
     );
 
-    // Fill the first data row the way a reviewer would: set the last five
-    // fields. Splitting on commas is wrong here (evidence contains them), so the
-    // test does what a reviewer does and rewrites the tail after the evidence's
-    // closing quote.
+    // Fill the first data row the way a reviewer does: type into the five empty
+    // cells. Appending text would add a twelfth field, because the blank tail is
+    // already one empty field per answer column.
     let mut filled = String::new();
     filled.push_str(&header);
     filled.push('\n');
     for (i, line) in text.lines().skip(1).enumerate() {
         if i == 0 {
-            let cut = line.rfind(",,,,,").expect("blank answer columns");
-            filled.push_str(&line[..cut + 1]);
-            filled.push_str("TP,HIGH,it is what the rule says,alice,2026-11-12");
+            let cut = line.rfind(",,,,,").expect("five blank answer columns");
+            filled.push_str(&line[..cut]);
+            filled.push_str(",TP,HIGH,it is what the rule says,alice,2026-11-12");
         } else {
             filled.push_str(line);
         }
