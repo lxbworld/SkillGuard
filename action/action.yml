@@ -35,7 +35,7 @@ inputs:
     required: false
     default: "true"
   version:
-    description: Prebuilt SkillGuard version (e.g. v0.1.2). Empty builds from this action's commit.
+    description: Prebuilt SkillGuard version (e.g. v0.1.3). Empty builds from this action's commit.
     required: false
     default: ""
 

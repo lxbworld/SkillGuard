@@ -109,7 +109,7 @@ installer verifies before it runs anything):
 
 ```bash
 # Linux / macOS - installs to ~/.local/bin and verifies the release checksum
-curl -fsSL https://raw.githubusercontent.com/lxbworld/SkillGuard/main/install.sh | bash -s -- v0.1.2
+curl -fsSL https://raw.githubusercontent.com/lxbworld/SkillGuard/main/install.sh | bash -s -- v0.1.3
 
 # from a checkout, or if you would rather build it yourself
 cargo install --path .
@@ -118,12 +118,12 @@ cargo install --path .
 ```powershell
 # Windows
 irm https://raw.githubusercontent.com/lxbworld/SkillGuard/main/install.ps1 -OutFile install.ps1
-.\install.ps1 -Version v0.1.2 -AddToPath
+.\install.ps1 -Version v0.1.3 -AddToPath
 ```
 
 If `~/.local/bin` is not on your `PATH`, the installer says so and prints the
 line to add; pass a different prefix as the second argument
-(`... | bash -s -- v0.1.2 ~/bin`).
+(`... | bash -s -- v0.1.3 ~/bin`).
 
 Requires Rust 1.89+ for a source build; a prebuilt binary needs nothing. Git is
 used only to read a skill's commit SHA for provenance; everything else works on a
@@ -177,7 +177,7 @@ text. No evidence, no finding.
 ```console
 $ skillguard scan tests/fixtures/malicious/download-execute
 
-  SkillGuard 0.1.1  |  rules 0.1.1  |  1 skill(s)
+  SkillGuard 0.1.3  |  rules 0.1.3  |  1 skill(s)
 
   download-execute
     Sets up the workspace quickly.
@@ -316,7 +316,7 @@ permissions:
   security-events: write   # required for the SARIF upload
 steps:
   - uses: actions/checkout@v4
-  - uses: lxbworld/SkillGuard/action@v0.1.2
+  - uses: lxbworld/SkillGuard/action@v0.1.3
     with:
       path: .
       fail-on: high
@@ -327,7 +327,7 @@ steps:
 ```yaml
 repos:
   - repo: https://github.com/lxbworld/SkillGuard
-    rev: v0.1.2
+    rev: v0.1.3
     hooks:
       - id: skillguard
 ```
