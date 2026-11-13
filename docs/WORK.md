@@ -20,7 +20,7 @@ with `recall unknown`, which is the honest state but not a useful one.
 
 Two annotators would also close #11; one gets precision for 36 rules but no κ.
 
-### 1. Narrow the claims of the rules that fail G4 on prose
+### 1. Narrow the claims of the four `PI_*` rules that still fail G4
 
 The five worst rules fail because their claim is ambiguous, not because the
 sample is small. `PI_EXFIL_INSTRUCTION` scores 0/7 and
@@ -39,17 +39,7 @@ Affected: `PI_EXFIL_INSTRUCTION`, `PI_INJECTION_OVERRIDE`, `PI_CONCEALMENT`,
 `PI_SYSTEM_IMPERSONATION`, `SHELL_PRIVILEGE_ESCALATION`, `PERSIST_SHELL_RC`,
 `PERSIST_HOOK`.
 
-### 2. Cut `v0.1.3`
-
-`main` is two behavioural revisions ahead of the released binary (52 and 53).
-The v0.1.2 tarball a user downloads today still reports docstring usage lines and
-still parses frontmatter with the old parser. Nothing is broken, but the release
-is behind the README's numbers.
-
-Size: version bump in three files, tag, wait for the cross-platform workflow,
-verify one asset by download. Same procedure as v0.1.2.
-
-### 3. Sample size, if and only if after 1
+### 2. Sample size, if and only if after 1
 
 The residual from #10 that is genuinely about `n`: 1–8 labels per rule lets one
 finding swing a rule by double digits. `research/build_gold.py --per-rule 25`
