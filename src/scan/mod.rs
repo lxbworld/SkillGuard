@@ -501,6 +501,12 @@ fn confidence_for(spec: &rules::RuleSpec, kind: ArtifactKind) -> Option<Confiden
 }
 
 fn apply_text_rules(rel: &str, kind: ArtifactKind, norm: &Normalized, out: &mut Vec<Finding>) {
+    // Is there a real write to a path anywhere in this file? A hook is often
+    // installed as a heredoc body (`cat > settings.json <<'JSON'` ... `JSON`,
+    // whose lines contain no `>`), so the per-line `writes_to` cannot see it.
+    // The flag has to mean *write*: keying on `>` or `open(` anywhere made a
+    // helper that only reads its settings look like an installer.
+    let writes_somewhere = file_has_a_write(norm);
     for rule in rules::all() {
         let Some(conf) = confidence_for(rule.spec, kind) else {
             continue;
@@ -526,7 +532,15 @@ fn apply_text_rules(rel: &str, kind: ArtifactKind, norm: &Normalized, out: &mut 
                 .find(&hay)
                 .map(|m| m.as_str().to_owned())
                 .unwrap_or_default();
-            if suppress_match(rule.spec.id, &line.raw, &matched, kind.is_executable()) {
+            if suppress_match_in(
+                rule.spec.id,
+                &line.raw,
+                &matched,
+                kind.is_executable(),
+                writes_somewhere,
+                norm,
+                line.line,
+            ) {
                 continue;
             }
             // Comment text describes behaviour; it does not perform it. This is
@@ -674,6 +688,175 @@ fn is_documentation_ip(matched: &str) -> bool {
     match (octets[0], octets[1], octets[2]) {
         (1, 2, 3) => octets[3] == 4,
         (192, 0, 2) | (198, 51, 100) | (203, 0, 113) => true,
+        _ => false,
+    }
+}
+
+/// Drop the contents of string literals, keeping the quotes.
+///
+/// `print("... >> ~/.bashrc")` is not a write; `cat > "$HOME/.bashrc"` is, and
+/// the path there is *inside* quotes. So the quotes themselves stay and only
+/// what sits between them is blanked; the caller sees `""` where a literal was.
+fn strip_string_literals(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut quote: Option<char> = None;
+    for c in line.chars() {
+        match quote {
+            Some(q) if c == q => {
+                quote = None;
+                out.push(c);
+            }
+            Some(_) => {}
+            None => {
+                if c == '"' || c == '\'' || c == '`' {
+                    quote = Some(c);
+                }
+                out.push(c);
+            }
+        }
+    }
+    out
+}
+
+/// Is this line inside the body of a heredoc that is being written to `path`?
+///
+/// `cat > "$HOME/.bashrc" <<'RC'` opens a heredoc whose body lines contain no
+/// `>` at all, so a per-line write test cannot see that the body *is* the write.
+/// Walk back to the nearest opener and require that it both names the matched
+/// path and redirects into a path.
+fn heredoc_body_of_shell_rc(norm: &Normalized, line: usize, matched: &str) -> bool {
+    let want = matched.to_lowercase();
+    for l in norm.lines.iter().take(line.saturating_sub(1)).rev() {
+        let Some(op) = l.raw.to_lowercase().find("<<") else {
+            continue;
+        };
+        if !l.raw.to_lowercase().contains(&want) {
+            return false;
+        }
+        return redirects_to_path(&strip_string_literals(&l.raw[..op]));
+    }
+    false
+}
+
+/// Is this line printing the command rather than running it?
+///
+/// `print("echo x >> ~/.bashrc")`, `console.log(...)`, a `raise` with an install
+/// hint, an `echo` of advice — all show the operator what to type. They are not
+/// writes, and GOLD-v10 caught two of them in this rule's four rows.
+fn in_a_printed_literal(line: &str) -> bool {
+    let t = line.trim_start().to_lowercase();
+    const PRINTERS: &[&str] = &[
+        "print(",
+        "println!(",
+        "console.log",
+        "console.error",
+        "console.warn",
+        "log::",
+        "eprintln!",
+        "raise ",
+        "assert ",
+        "echo \"",
+        "echo '",
+        "printf ",
+        "write-host",
+        "os.stderr.write",
+    ];
+    PRINTERS.iter().any(|p| t.starts_with(p))
+}
+
+/// Does this line redirect output into something that looks like a path?
+///
+/// `cat > "$HOME/.bashrc"` yes; `a > b` in code, `->`, and `curl -o` no. Called
+/// once per file, so it may be a little fussy.
+fn redirects_to_path(line: &str) -> bool {
+    let mut rest = line;
+    while let Some(i) = rest.find('>') {
+        let after = rest[i + 1..].trim_start_matches('>').trim_start();
+        let token: String = after
+            .chars()
+            .take_while(|c| !c.is_whitespace() && *c != ';' && *c != '\'' && *c != '"')
+            .collect();
+        if token.contains('/') || token.starts_with('~') || token.starts_with('$') {
+            return true;
+        }
+        rest = &rest[i + 1..];
+    }
+    false
+}
+
+/// Does this file write to a path anywhere?
+///
+/// Only redirects that name a path (`/`, `~`, `$`) and explicit write APIs
+/// count. `print("... >> ~/.bashrc")` is excluded because `strip_string_literals`
+/// blanks the literal before the redirect test runs; `-f "$HOME/.zshrc"` because
+/// it names no destination.
+fn file_has_a_write(norm: &Normalized) -> bool {
+    norm.lines.iter().any(|l| {
+        let code = strip_string_literals(&l.raw);
+        redirects_to_path(&code)
+            || ["write_text", "writefilesync", "appendfile", "append_file"]
+                .iter()
+                .any(|k| code.to_lowercase().contains(k))
+    })
+}
+
+/// [`suppress_match`] with the file-level context the persistence rules need.
+fn suppress_match_in(
+    rule: &str,
+    raw_line: &str,
+    matched: &str,
+    executable: bool,
+    writes_somewhere: bool,
+    norm: &Normalized,
+    line_no: usize,
+) -> bool {
+    if suppress_match(rule, raw_line, matched, executable) {
+        return true;
+    }
+    let line = raw_line.to_lowercase();
+    let m = matched.to_lowercase();
+    let doc_in_docs = !executable
+        && (is_documentation_structure(raw_line) || is_quoted_example(raw_line, matched));
+    match rule {
+        // A privilege escalation is a *call*. `chmod 777` in a deny-list, a
+        // printed install hint and an actual `chmod 777` are the same characters,
+        // and the rule had no suppression at all — GOLD-v10 measured it at 2/8.
+        // Two shapes are not a call: a match inside a string literal (a list of
+        // patterns, a hint printed to the operator) and prose that offers it as
+        // an option.
+        "SHELL_PRIVILEGE_ESCALATION" => {
+            is_quoted_example(raw_line, matched)
+                || (!executable && is_documentation_structure(raw_line))
+                || looks_like_usage(&line)
+                || looks_like_test(&line)
+        }
+        // A hook *event name* handed to an emit function, or a read of a config
+        // the script never wrote, is not an installation. The `persistence`
+        // fixture writes `settings.json` through a heredoc body and must still
+        // fire; a helper that only reads its own settings must not.
+        "PERSIST_HOOK" => !writes_somewhere || doc_in_docs || looks_like_test(&line),
+        // `runtime.profile` is not `~/.profile`, and a printed example export
+        // line is not a write to the user's shell. GOLD-v10 measured this rule at
+        // 1/4 with exactly those two shapes.
+        //
+        // The write has to be on *this* line or in the heredoc body this line
+        // belongs to: a file-level flag readded 29 false findings, because
+        // `load_config(args.profile)` in a module that writes elsewhere is still
+        // not a write to `~/.profile`.
+        "PERSIST_SHELL_RC" => {
+            // Suppress unless the write lands in that file, and unless the write
+            // is only being *printed*.
+            //
+            // The two shapes that GOLD-v10 split on are both string literals:
+            // `doctor_add … 'echo … >> ~/.zshrc'` builds a command that will run,
+            // while `print("echo x >> ~/.bashrc")` shows the operator an example.
+            // Lexically the difference is the call around the literal, so that is
+            // what this asks.
+            !(writes_to(&line, &m) || heredoc_body_of_shell_rc(norm, line_no, &m))
+                || in_a_printed_literal(raw_line)
+                || doc_in_docs
+                || looks_like_test(&line)
+        }
         _ => false,
     }
 }
@@ -1220,7 +1403,10 @@ fn writes_to(line: &str, matched: &str) -> bool {
         // prints a message; the path is its subject, not its destination, and
         // it made every warning line in a hook tool a write to that path. A
         // real redirect (`echo x > file`) is caught by the `>` above.
-        "append",
+        // `.append(` is the list method: `errors.append("...")` names a path in a
+        // message. A file append is `>>` or a named `appendFile`.
+        "appendfile",
+        "append_file",
         "write_text",
         "writefilesync",
         ".write(",

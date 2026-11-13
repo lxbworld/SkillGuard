@@ -7,7 +7,7 @@ to rule output**, and **Cohen's κ ≥ 0.75**. This is the runbook for one round
 precision column.
 
 The pilot report publishes a precision column from a **model-labelled** GOLD set
-(GOLD-v10, two model families, κ 0.779). That is not G3 — the protocol asks
+(GOLD-v11, two model families, κ 0.757). That is not G3 — the protocol asks
 for two humans — and every mention of the column says so. GOLD-v8 measured what
 the older same-model figure was worth: GOLD-v6's κ 0.845 was two sessions of one
 model, and a second family agrees on those same rows at κ 0.723, below the gate.
@@ -657,6 +657,98 @@ GOLD-v6 column with its `model-labelled` label. What v8 establishes is the size 
 that label's caveat: **0.845 was two sessions of one model; a second family
 agrees at 0.723 on the same rows.** Any human-derived κ should be expected to sit
 near or below that, not near 0.85.
+
+---
+
+## GOLD-v11: name versus call, and the rounds that came before it
+
+GOLD-v10 left four `PI_*` rules and three persistence rules at the bottom of the
+table. This round started from the assumption that their claims were ambiguous —
+"does a documented example count?" — and the data said something else. It was a
+*pattern* problem: the rules were matching **names of things** where they claimed
+to match **calls to things**.
+
+| | |
+|---|---|
+| sample | 199 rows, 36 rules, `SCAN_LOGIC_REVISION = 54` |
+| annotators | `deepseek-v4.1-flash` and `z-ai/glm-5.3-flash` (different families) |
+| agreement | 178/199 (89.4%), **Cohen's κ 0.757** |
+| gate G3 (κ ≥ 0.75) | **PASS** |
+| disagreements | 21, adjudicated by a third session |
+| result | **18 of 36 rules reach G4**, up from 16; 13 at 100% |
+
+### What revision 54 actually changed
+
+`SHELL_PRIVILEGE_ESCALATION` had **no suppression arm at all**. All five of these
+produced the same finding, "the skill escalates privileges or modifies file
+permissions":
+
+```python
+DENY = ['rm -rf', 'rm -r', 'sudo', 'chmod 777', 'push --force']   # a deny-list
+print("    Ubuntu/Debian: sudo apt install pymol")                # a hint
+echo "   Install with: sudo apt install python3-yaml"             # a hint
+'chmod 777'                                                       # a string
+subprocess.run("chmod 777 /etc/passwd")                           # the actual call
+```
+
+Only the last one is the claim. A security tool that *names* an attack reported
+itself as performing it — which is the same failure the corpus is full of when it
+scans security training material. Findings went 57 → 27.
+
+`PERSIST_HOOK` and `PERSIST_SHELL_RC` had the opposite defect: they required a
+write, and the write is usually a heredoc body whose lines contain no `>`:
+
+```bash
+cat > "$AGENT_DIR/settings.json" <<'JSON'
+{ "hooks": { "SessionStart": [ ... ] } }        # the line that matches
+JSON
+```
+
+The first attempt used a file-level "this file writes something" flag and it
+readded 29 false findings — `load_config(args.profile)` in a module that writes
+*elsewhere* is not a write to `~/.profile`. The second attempt used quote parity
+and lost the real write in the `persistence` fixture, because quoting a path is
+how shell writes it (`cat > "$HOME/.bashrc"`) — the exact mistake GOLD-v4 recorded
+for `FS_*`. What works is per-line plus heredoc-body, and a check for whether the
+command is only being *printed*:
+
+```python
+print("  echo 'export KEY=\"x\"' >> ~/.bashrc")     # printed hint, suppressed
+doctor_add "~/.local/bin" "WARN" 'echo ... >> ~/.zshrc'   # a command that runs, kept
+```
+
+The fourth fix is unrelated and older: `writes_to` counted the list method
+`.append(` as a file append, so `errors.append("runtime.profile must be …")` read
+as a write to `~/.profile`.
+
+### The measurement
+
+```
+findings   8,776 -> 8,732      SHELL_PRIVILEGE_ESCALATION  57 -> 27
+                                PERSIST_SHELL_RC             7 -> 2
+                                PERSIST_AGENT_CONFIG        49 -> 44
+```
+
+On GOLD-v10's 205 rows the change suppressed **8 findings and all 8 were false
+positives**; precision over the surviving 197 went 67.3% → 70.1%. That is the
+test that matters: a suppression change that costs a true positive is a
+regression even when the total count falls.
+
+### Why the four `PI_*` rules are still at the bottom
+
+`PI_EXFIL_INSTRUCTION` 0/7, `PI_CONCEALMENT` 1/8, `PI_INJECTION_OVERRIDE` 2/8,
+`PI_SYSTEM_IMPERSONATION` 1/6 — and both annotators **agree** on those labels, so
+this is not measurement noise. They are at `Info` severity on purpose: a phrase
+rule cannot tell "issues this" from "documents this", and the corpus is largely
+security *training* material that quotes injections in order to teach them. The
+honest fix is a narrower claim (and a rule that says what it does *not* detect),
+not a bigger sample; that is the next round, not this one.
+
+### Still not G3
+
+Two model families are independent *of each other*, not of models in general.
+`research/PROTOCOL.md` G3 asks for two humans (#11). Every precision figure in
+`docs/CORPUS_REPORT.md` carries that caveat.
 
 ---
 

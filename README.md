@@ -402,11 +402,11 @@ The first large-scale empirical measurement of this ecosystem is the next
 milestone — see the [corpus study](docs/PHASE0_CORPUS_STUDY.md). A pilot has
 already run end to end on 5442 real GitHub skills: **7.1% declare permissions,
 92.9% declare nothing**, which rejects the H6 null at that sample. A precision
-pass (`GOLD-v10`, 205 findings, Cohen's κ 0.779 across two *different* model
+pass (`GOLD-v11`, 199 findings, Cohen's κ 0.757 across two *different* model
 families, no human annotator, measured at `SCAN_LOGIC_REVISION` 53) found that
 **most heuristics over-fire on comments, documentation and string literals**, so
 the prevalence figures are upper bounds and the precision column is the real
-signal: 16 of 36 measured rules reach the 0.85 gate, and nearly all the rules
+signal: 18 of 36 measured rules reach the 0.85 gate, and nearly all the rules
 that fail do so on mentions rather than actions (`research/GOLD.md`). The full N=100,000 stratified study is waiting on registry collection
 permission, not on code — the pipeline is built, reproducible (`corpus
 reproduce` re-derives every digest) and offline.
@@ -420,8 +420,8 @@ Action, a pre-commit hook and prebuilt binaries for five platforms.
 
 The Phase 0 corpus pipeline (`index` / `scan` / `stats` / `report` /
 `reproduce`, plus `agreement` for Cohen's κ and GOLD precision/recall scoring)
-is implemented and offline. `GOLD-v10` is a reproducible precision pass (205
-findings across 36 measured rules, κ 0.779) measured at revision 53 by two
+is implemented and offline. `GOLD-v11` is a reproducible precision pass (199
+findings across 36 measured rules, κ 0.757) measured at revision 54 by two
 annotators from **different model families** — `deepseek-v4.1-flash` and
 `z-ai/glm-5.3-flash` — neither human, neither the rule author;
 `research/build_gold.py` and `research/annotate_gold.py` are the two commands

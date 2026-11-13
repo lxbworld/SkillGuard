@@ -1121,6 +1121,12 @@ pub fn rule_count() -> usize {
 /// character classes (`w./-`) and attribute accesses (`json.dumps`) as file
 /// paths. No text rule changed, but the declared-vs-observed findings and the
 /// corpus cache both carry the old (wrong) capabilities, so the revision moves.
+/// rev 54: four rules that were matching *names* instead of *calls*.
+/// `SHELL_PRIVILEGE_ESCALATION` had no suppression at all, so a deny-list of
+/// dangerous strings counted as performing them (57 -> 27 findings, and every
+/// suppressed GOLD-v10 row was a false positive). `PERSIST_HOOK` and
+/// `PERSIST_SHELL_RC` required a write that a heredoc body cannot show, and
+/// `writes_to` counted the list method `.append(` as a file append.
 /// rev 53: a line-kind model (T14). Findings now carry the kind of line they
 /// were found on, so a docstring or block comment no longer reports the commands
 /// it documents: `SHELL_EXEC` 2,495 -> 1,646 on the pilot corpus, and every
@@ -1130,7 +1136,7 @@ pub fn rule_count() -> usize {
 /// `PARSE_FAILED` 71 -> 76 on the pilot corpus, and every finding that depends on
 /// a declaration (`MISMATCH_*`, `LICENSE_*`) is downstream of that. Without the
 /// bump a warm cache would keep serving the old parser's results.
-pub const SCAN_LOGIC_REVISION: u32 = 53;
+pub const SCAN_LOGIC_REVISION: u32 = 54;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

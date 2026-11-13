@@ -236,6 +236,39 @@ fn a_docstring_does_not_make_the_rest_of_the_file_documentation() {
 }
 
 #[test]
+fn a_deny_list_and_a_help_hint_escalate_nothing() {
+    // GOLD-v10 measured SHELL_PRIVILEGE_ESCALATION at 2/8. The same five
+    // characters appear in a list of blocked patterns, in a printed install hint
+    // and in an actual `sudo apt install`, and the rule had no suppression at all
+    // — so a security tool that *names* the attack looked like it performed it.
+    let out = scan_fixture("safe", "privilege-hints");
+    assert!(
+        out.findings.is_empty(),
+        "naming a privilege escalation is not one: {:#?}",
+        out.findings
+    );
+}
+
+#[test]
+fn reading_hook_settings_is_not_installing_a_hook() {
+    // The rule's claim is that a hook is *installed*. `emit('UserPromptSubmit')`
+    // is an event name, and `config["hooks"]["FileChanged"]` is a read of the
+    // script's own settings. GOLD-v10 measured PERSIST_HOOK at 1/3 with both.
+    let out = scan_fixture("safe", "hook-helper");
+    let all = rules(&out);
+    let noisy: Vec<&str> = all
+        .iter()
+        .filter(|r| r.starts_with("PERSIST_"))
+        .map(|r| r.as_str())
+        .collect();
+    assert!(
+        noisy.is_empty(),
+        "no persistence rule applies to a read: {:#?}",
+        out.findings
+    );
+}
+
+#[test]
 fn a_project_settings_file_is_not_agent_config() {
     // `PERSIST_AGENT_CONFIG` claims "the skill writes agent configuration". A
     // skill's own project-local `settings.json` is not agent configuration, and

@@ -12,16 +12,16 @@ number in this file without a revision is a number nobody should quote.
 |---|---|
 | branch | `main`, level with `origin/main` |
 | version | `0.1.2` (crate + `RULE_SET_VERSION`) |
-| `SCAN_LOGIC_REVISION` | **53** |
+| `SCAN_LOGIC_REVISION` | **54** |
 | rules | 55 |
-| tests | 355 pass, 0 fail (`cargo test --all-targets`) |
+| tests | 357 pass, 0 fail (`cargo test --all-targets`) |
 | clippy / fmt | `-D warnings` clean / clean |
 | `cargo deny` | advisories, bans, licenses, sources all ok, `ignore = []` |
 | CI | green on `7c4ed6b` (linux, windows, cargo-deny, Action self-test) |
 | tag | `v0.1.2` = `130c41e`, 10 release assets |
 
-`v0.1.2` was cut at revision **51**, not 53. Revisions 52 (parser swap) and 53
-(line kinds) are on `main` and in no release. The next tag carries them.
+`v0.1.2` was cut at revision **51**. Revisions 52 (parser swap), 53 (line kinds)
+and 54 (name versus call) are on `main` and in no release. `v0.1.3` carries them.
 
 ## The corpus (revision 53)
 
@@ -32,17 +32,17 @@ cache. `docs/CORPUS_REPORT.md` regenerates identically from it.
 |---|---|
 | skills scanned | 5,442 |
 | declare permissions | 386 (7.1%) |
-| findings | 8,776 |
+| findings | 8,732 |
 | `MISMATCH_UNDER_DECLARED` | 76 of 386 declared (19.7%) |
 | `PI_DESCRIPTION_MISMATCH` | 212 of 5,442 (3.9%), i.e. 54.9% of declared |
 | `PARSE_FAILED` | 76 (1.4%) |
 | top rule | `LICENSE_MISSING` 1,148 skills (21.1%) |
 
-## The precision table (GOLD-v10)
+## The precision table (GOLD-v11)
 
-205 rows, 36 rules, κ **0.779** over two different model families
-(`deepseek-v4.1-flash` vs `z-ai/glm-5.3-flash`), 20 disagreements adjudicated.
-**16 of 36 rules pass G4** (precision ≥ 0.85), 12 of them at 100%.
+199 rows, 36 rules, κ **0.757** over two different model families
+(`deepseek-v4.1-flash` vs `z-ai/glm-5.3-flash`), 21 disagreements adjudicated.
+**18 of 36 rules pass G4** (precision ≥ 0.85), 13 of them at 100%.
 
 Not a human GOLD set. `research/PROTOCOL.md` G3 asks for two humans; no human has
 ever labelled anything here (issue #11).
