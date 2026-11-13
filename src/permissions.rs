@@ -522,10 +522,7 @@ fn path_matches(pattern: &str, path: &str) -> bool {
     }
     // A directory declaration covers everything beneath it.
     let dir = p.trim_end_matches('/').trim_end_matches("/**");
-    if !dir.is_empty() && target.starts_with(&format!("{dir}/")) {
-        return true;
-    }
-    false
+    !dir.is_empty() && target.starts_with(&format!("{dir}/"))
 }
 
 /// `./data/x` and `data/x` are the same path; authors write both.
