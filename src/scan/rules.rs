@@ -367,7 +367,11 @@ static TABLE: &[RuleSpec] = &[
             r"/Applications/",
             r"[A-Za-z]:\\\\?(?:Windows|Users|PROGRA)",
         ],
-        message: "A sensitive system or user path is accessed by absolute path",
+        // "accessed" was the wrong word for what a line-level matcher sees
+        // (GOLD-v14, κ 0.723: twelve of thirty-seven disagreements were exactly
+        // this question). The matcher sees a *reference*: a constant, an export,
+        // a listed directory. Secret-read rules already say "referenced".
+        message: "A sensitive system or user path is referenced by absolute path",
         capability: Some("filesystem.read"),
         remediation: "Confirm the access is required and declare the exact path.",
     },
@@ -1133,6 +1137,9 @@ pub fn rule_count() -> usize {
 /// character classes (`w./-`) and attribute accesses (`json.dumps`) as file
 /// paths. No text rule changed, but the declared-vs-observed findings and the
 /// corpus cache both carry the old (wrong) capabilities, so the revision moves.
+/// rev 58: text only. `FS_ABSOLUTE_PATH`'s message said "accessed" while the
+/// line-level matcher sees a *reference* — GOLD-v14's twelve disagreements were
+/// that one word. Findings are unchanged.
 /// rev 57: the suppression *saw* the whole line for the first time. `raw` was a
 /// 200-character display cap while the regex ran on the full haystack, so a
 /// match past the cap was suppressed by a prefix that did not contain it — and
@@ -1173,7 +1180,7 @@ pub fn rule_count() -> usize {
 /// `PARSE_FAILED` 71 -> 76 on the pilot corpus, and every finding that depends on
 /// a declaration (`MISMATCH_*`, `LICENSE_*`) is downstream of that. Without the
 /// bump a warm cache would keep serving the old parser's results.
-pub const SCAN_LOGIC_REVISION: u32 = 57;
+pub const SCAN_LOGIC_REVISION: u32 = 58;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

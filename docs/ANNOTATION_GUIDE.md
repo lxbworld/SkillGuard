@@ -76,6 +76,24 @@ If the rule's claim is about **presence** — a hardcoded credential, a zero-wid
 character, an embedded image, a licence term — then a comment is still a valid
 place to find it, and `NOT_APPLICABLE` does not apply.
 
+### "Referenced" is not "accessed"
+
+When the claim says a path is **referenced** (`referenced in executable code`,
+`referenced by absolute path`), constructing, exporting, assigning or listing
+the path IS an instance:
+
+> `rule_id: FS_ABSOLUTE_PATH`, claim "…is referenced by absolute path"
+> `evidence: export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"`
+> → **TP**. The line names where the skill touches disk, even though nothing on
+> this line opens a file.
+
+Only prose that mentions a path without code that carries it (a comment, a
+docstring line, a table cell) is not. GOLD-v14 failed its kappa gate on exactly
+this question — twelve of its thirty-seven disagreements were annotators
+answering "accessed" and "referenced" differently — so the rule's own message
+word decides, and that word is now "referenced" everywhere a line-level matcher
+sees a name rather than an operation.
+
 ## The one distinction that decides most rows
 
 Every action rule has this question behind it: **is this text doing the thing, or

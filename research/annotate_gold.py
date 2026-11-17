@@ -58,6 +58,12 @@ Judge only the claim, not whether the rule is useful or well written.
   enough, including inside a comment or documentation.
 - "The home directory is referenced" is satisfied by any `~/`; "the home
   directory is accessed" is not.
+- When a claim says a path is **referenced** (`referenced in executable code`,
+  `referenced by absolute path`), constructing, exporting, assigning or listing
+  the path IS an instance: `export PATH="$HOME/.local/bin:…"`,
+  `Path("/usr/local/bin")`, `"/usr/share/fonts/truetype/"` in a constant are all
+  references. Only prose that mentions the path without code that carries it
+  (a comment, a docstring line, a table cell) is not.
 Be strict and literal. When the line is a false example of the claim, say "fp".
 
 Reply with one JSON array and nothing else, one object per row in input order:
