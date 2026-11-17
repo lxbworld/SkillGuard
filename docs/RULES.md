@@ -1,50 +1,3 @@
-# Rule reference
-
-Generated from `skillguard rules --format markdown`. Do not edit by hand:
-`tests/invariants.rs::the_rule_reference_matches_the_code` regenerates it and
-fails if the committed file drifts from the code (issue #4).
-
-Every finding carries a file, a line and the original text, and every rule below
-is deterministic: no model is called, ever.
-
-## How to read a rule id
-
-`PREFIX_SUBJECT`, where the prefix names the threat class:
-
-| prefix | class |
-|---|---|
-| `SECRET_` | credentials and secrets |
-| `SHELL_` | shell execution and privilege |
-| `NET_` | network access |
-| `FS_` | filesystem access |
-| `DL_` | download and execute chains |
-| `PI_` | prompt injection (heuristic, see `docs/THREAT_MODEL.md` T1) |
-| `OBFUSC_` | obfuscation and hidden text |
-| `PERSIST_` | persistence |
-| `DEP_` | dependencies |
-| `LICENSE_` | licensing |
-| `MISMATCH_` | declared vs observed permissions |
-| structural ids | computed rather than pattern-matched (`PARSE_FAILED`, `RESOURCE_LIMIT_EXCEEDED`, `DL_CHAIN_FETCH_EXECUTE`, ...) |
-
-## How to silence a rule
-
-Silencing is a **policy** decision, so it is recorded in the policy file rather
-than passed as a CLI flag that nobody can audit:
-
-```yaml
-# SKILLGUARD.policy.yaml
-policy_version: 1
-findings:
-  ignore: ["LICENSE_MISSING"]
-```
-
-The rule is still evaluated and still available from `skillguard inspect`; the
-report simply stops carrying it, and `--fail-on` stops failing on it. Prefer
-fixing the finding. An ignored rule is a decision someone made, and the policy
-file is where that decision is legible.
-
-## The catalogue
-
 | rule | severity | capability | what it catches | how to fix it | how to silence it |
 |---|---|---|---|---|---|
 | `DEP_CUSTOM_REGISTRY` | HIGH | package_install | A package manager is pointed at a non-default registry or index | Use the default registry. A custom index removes the ecosystem's review process. | `findings.ignore: ["DEP_CUSTOM_REGISTRY"]` |
@@ -84,11 +37,11 @@ file is where that decision is legible.
 | `PERSIST_CRON` | HIGH | shell.execute | Scheduled execution is installed | Remove it. | `findings.ignore: ["PERSIST_CRON"]` |
 | `PERSIST_HOOK` | HIGH | shell.execute | A hook is installed that runs automatically with the user's privileges | Hooks are the strongest persistence primitive available. Require explicit approval. | `findings.ignore: ["PERSIST_HOOK"]` |
 | `PERSIST_SHELL_RC` | MEDIUM | filesystem.write | A shell startup file is modified, which persists for the user's lifetime | Remove the modification. | `findings.ignore: ["PERSIST_SHELL_RC"]` |
-| `PI_CONCEALMENT` | INFO | agent.injection | An instruction to hide behaviour from the user | Remove it. Transparency to the operator is a hard requirement. | `findings.ignore: ["PI_CONCEALMENT"]` |
+| `PI_CONCEALMENT` | INFO | agent.injection | An instruction telling the agent to conceal what it did; describing the detector is not one | Remove it. Transparency to the operator is a hard requirement. | `findings.ignore: ["PI_CONCEALMENT"]` |
 | `PI_DESCRIPTION_MISMATCH` | MEDIUM | agent.injection | The description does not acknowledge the credential access or the high-severity findings in the code | Make the description honest, or remove the access. | `findings.ignore: ["PI_DESCRIPTION_MISMATCH"]` |
-| `PI_EXFIL_INSTRUCTION` | INFO | network.outbound | An instruction to transmit local data to an external endpoint | Remove it, and treat the skill as compromised until its source is verified. | `findings.ignore: ["PI_EXFIL_INSTRUCTION"]` |
-| `PI_INJECTION_OVERRIDE` | INFO | agent.injection | An instruction to disregard prior instructions (prompt injection pattern) | Remove it. No legitimate skill needs to override its operator's instructions. | `findings.ignore: ["PI_INJECTION_OVERRIDE"]` |
-| `PI_SYSTEM_IMPERSONATION` | INFO | agent.injection | The skill impersonates a system message or asserts a new identity | Remove it. A skill is documentation, not a privileged context. | `findings.ignore: ["PI_SYSTEM_IMPERSONATION"]` |
+| `PI_EXFIL_INSTRUCTION` | INFO | network.outbound | An instruction telling the agent to send local data out; a comment that documents such a call is not one | Remove it, and treat the skill as compromised until its source is verified. | `findings.ignore: ["PI_EXFIL_INSTRUCTION"]` |
+| `PI_INJECTION_OVERRIDE` | INFO | agent.injection | An instruction telling the agent to drop its own instructions; a lesson about injections is not one | Remove it. No legitimate skill needs to override its operator's instructions. | `findings.ignore: ["PI_INJECTION_OVERRIDE"]` |
+| `PI_SYSTEM_IMPERSONATION` | INFO | agent.injection | The skill's own directives speak as a system message or reassign the agent's identity; a quoted jailbreak example is not one | Remove it. A skill is documentation, not a privileged context. | `findings.ignore: ["PI_SYSTEM_IMPERSONATION"]` |
 | `RESOURCE_LIMIT_EXCEEDED` | INFO | - | A resource limit was reached while reading the skill | Check for an oversized or generated file, or a symlink loop. | `findings.ignore: ["RESOURCE_LIMIT_EXCEEDED"]` |
 | `SECRET_AWS_ACCESS_KEY` | CRITICAL | secrets.read | An AWS access key id is hardcoded | Revoke the key and load credentials from the environment or a secret manager. | `findings.ignore: ["SECRET_AWS_ACCESS_KEY"]` |
 | `SECRET_ENV_DUMP` | MEDIUM | secrets.read | The whole process environment is enumerated rather than read by key | Read only the variables you need. A full dump leaks every credential the agent holds. Note: a bare `os.environ` with no keyed access is not matched here because it is ambiguous; capability derivation resolves that case precisely. | `findings.ignore: ["SECRET_ENV_DUMP"]` |

@@ -514,8 +514,13 @@ fn apply_text_rules(rel: &str, kind: ArtifactKind, norm: &Normalized, out: &mut 
         let case_sensitive = rules::is_case_sensitive(rule.spec);
         for line in &norm.lines {
             // A shebang declares the interpreter; it does not access paths or
-            // spawn anything. See NormLine::is_shebang.
+            // spawn anything. See NormLine::is_shebang. A comment is the same
+            // shape: `# reads /proc/version for "microsoft"` names a path and
+            // accesses nothing, which GOLD-v11 measured on this rule.
             if line.is_shebang() && rule.spec.id.starts_with("FS_") {
+                continue;
+            }
+            if line.comment_only() && rule.spec.id.starts_with("FS_") {
                 continue;
             }
             // Credential-format rules must see the original case; everything
@@ -664,7 +669,17 @@ fn is_private_endpoint(matched: &str) -> bool {
         return false;
     }
     let (a, b) = (octets[0], octets[1]);
-    a == 0 || a == 10 || a == 127 || (a == 172 && (16..=31).contains(&b)) || (a == 192 && b == 168)
+    a == 0
+        || a == 10
+        || a == 127
+        || (a == 172 && (16..=31).contains(&b))
+        || (a == 192 && b == 168)
+        // Link-local, RFC 3927. In practice this is the cloud metadata endpoint
+        // (`http://169.254.169.254/latest/meta-data/iam/security-credentials/`),
+        // which is the single most valuable thing a skill can fetch — and it is
+        // not a "low-reputation TLD or raw IP endpoint", so the rule's claim
+        // never covered it. GOLD-v11: 4 of 4 false positives were this address.
+        || (a == 169 && b == 254)
 }
 
 /// Is the address a documentation placeholder rather than one that is
@@ -932,6 +947,23 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
                         .next_back()
                         .is_some_and(|c| c.is_alphanumeric())
                 })
+                // A path inside a string literal is a name, not an access. Two
+                // shapes GOLD-v11 measured as false positives: a path built from
+                // a variable (`resolve(__dirname, "../../../bin/x.js")`) and the
+                // path as a bare quoted string in a deny-list. The variable case
+                // is the one the rule cannot claim: `../../../` is a *relative*
+                // path, so prefixing it with a variable is still not absolute.
+                // A path assembled from a variable is not an absolute access:
+                // `resolve(__dirname, "../../../bin/x.js")` is relative, and
+                // prefixing a relative path with `__dirname` does not make it
+                // absolute. GOLD-v11 had two of these; a literal that starts at
+                // `/` or `~` stays, which is the check below.
+                // A literal that begins at `/` is still absolute
+                // (`open("/etc/passwd")`), so the test is whether the *literal*
+                // starts at a root - not whether the regex hit does. `matched`
+                // for `../../../bin/` is just `/bin/`.
+                || (is_quoted_example(raw_line, matched)
+                    && !quoted_literal_is_anchored(raw_line, matched))
         }
         "NET_DOMAIN_LITERAL" => {
             let trimmed = raw_line.trim_start();
@@ -1190,6 +1222,27 @@ fn is_documentation_structure(line: &str) -> bool {
 }
 
 /// The match sits inside a string literal or a docstring.
+/// Does the string literal containing `matched` begin at a root?
+///
+/// `open("/etc/passwd")` yes, so the access is real. `resolve(__dirname,
+/// "../../../bin/x.js")` no: the literal is relative, and a variable prefix does
+/// not make it absolute.
+fn quoted_literal_is_anchored(line: &str, matched: &str) -> bool {
+    let Some(hit) = line.find(matched) else {
+        return false;
+    };
+    // Walk back to the opening quote, then look at what follows it.
+    let Some(qpos) = line[..hit].rfind(['"', '\'', '`']) else {
+        return true;
+    };
+    let after = &line[qpos + 1..];
+    after.starts_with('/')
+        || after.starts_with('~')
+        || after.starts_with("$HOME")
+        || after.starts_with("%USER")
+        || after.get(1..2) == Some(":")
+}
+
 fn is_quoted_example(line: &str, matched: &str) -> bool {
     let Some(pos) = line.find(matched) else {
         return false;

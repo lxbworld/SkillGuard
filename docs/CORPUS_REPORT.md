@@ -27,17 +27,17 @@
 > flagged every non-English `PI_DESCRIPTION_MISMATCH`, and unstemmed verbs
 > (`execution` did not match `execute`). Each fix is a regression test.
 >
-> ## GOLD-v11
+> ## GOLD-v13
 >
-> The precision column below is measured against `research/gold/GOLD-v11.jsonl`:
-> 199 line-level findings across 36 rules at `SCAN_LOGIC_REVISION = 54`, eight
+> The precision column below is measured against `research/gold/GOLD-v13.jsonl`:
+> 192 line-level findings across 36 rules at `SCAN_LOGIC_REVISION = 56`, eight
 > per rule in hash order, one judgment per skill and rule. Two annotators from
 > **different model families** labelled them blind to each other —
 > `command-code/deepseek-v4.1-flash` and `command-code/z-ai/glm-5.3-flash` —
 > **no human annotated this set**, and neither annotator wrote the rules.
-> Cohen's kappa is **0.757** over the 199 rows (gate 0.75); the 21 disagreements
+> Cohen's kappa is **0.780** over the 192 rows (gate 0.75); the 17 disagreements
 > were adjudicated by a third session shown both verdicts, and every rule figure
-> below is per rule, never micro-averaged. **18 of 36 measured rules reach the
+> below is per rule, never micro-averaged. **20 of 36 measured rules reach the
 > 0.85 gate.**
 >
 > This round exists because two sessions of *one* model is not independence: they
@@ -46,10 +46,7 @@
 > family — kappa fell from 0.845 to **0.723**, below the gate. GOLD-v9 then failed
 > at 0.593 and exposed a defect in this project's own annotation instruction
 > rather than in the rules: it said documentation is not an instance without
-> saying what a `SKILL.md` body is. The body is the instruction an agent follows,
-> so a command in it is behaviour; only a passage that talks *about* a command
-> (`never run curl | bash`) is a mention. Both failed rounds are kept as the
-> record.
+> saying what a `SKILL.md` body is. Both failed rounds are kept as the record.
 >
 > **Revision 53 is a line-kind model (T14), and it removes findings rather
 > than adding them.** A docstring or block comment describes behaviour; it does
@@ -63,6 +60,19 @@
 > documentation here — a fenced `pip install` is the command the agent is told to
 > run (GOLD-v8 confirms it, 48% precision, and the `remote-install` fixture
 > requires it) — so `PI_*` and `DL_*` behaviour is unchanged in `SKILL.md`.
+>
+> **Revision 56 changes no behaviour**: four `PI_*` claims now state what they do
+> *not* detect, because GOLD-v12 left them at 0/8..2/8 with both annotators
+> *agreeing* — the failure was the claim's scope, not measurement noise. Findings
+> are byte-identical.
+>
+> **Revision 55 finishes that sweep: four more rules, same failure.** `SHELL_EVAL`
+> matched `exec(cmd, cb)` (a subprocess) and `exec(): void` (a type declaration);
+> `FS_ABSOLUTE_PATH` reported paths assembled from a variable
+> (`resolve(__dirname, "../../bin/x.js")`) and paths mentioned in comments;
+> `DL_UNTRUSTED_DOMAIN` did not know that `169.254.0.0/16` is the cloud metadata
+> endpoint it claims to care about. 8,732 -> 8,673 findings, and all 9 suppressed
+> GOLD-v11 rows were false positives.
 >
 > **Revision 54 is four rules that were matching names instead of calls.**
 > `SHELL_PRIVILEGE_ESCALATION` had no suppression at all, so `'rm -rf', 'chmod
@@ -78,20 +88,27 @@
 > right one, and the kappa above is a test–retest figure rather than inter-human
 > agreement. `research/GOLD.md` says what that costs and what would fix it.
 >
-> **18 of 36 rules reach the 0.85 precision gate**, and thirteen of them are at
-> 100%: `DEP_CUSTOM_REGISTRY`, `DEP_UNPINNED_SCRIPT`, `DL_CHAIN_FETCH_EXECUTE`,
-> `FS_HOME_ACCESS`, `FS_MODE_UNRESOLVED`, `FS_RECURSIVE_WALK`, `FS_SENSITIVE_PATH`,
-> `LICENSE_RESTRICTIVE`, `NET_DYNAMIC_URL`, `NET_HTTP_CLIENT`, `OBFUSC_ZERO_WIDTH`,
-> `SECRET_PROVIDER_TOKEN` and `SHELL_PRIVILEGE_ESCALATION`. `NET_DOMAIN_LITERAL`,
-> `NET_FETCH_CALL`, `SECRET_ENV_DUMP` and `FS_PATH_ESCAPE` are at 7/8.
+> **20 of 36 rules reach the 0.85 precision gate.** Fifteen are at 100%:
+> `DEP_CUSTOM_REGISTRY`, `DEP_UNPINNED_SCRIPT`, `DL_CHAIN_FETCH_EXECUTE`,
+> `DL_UNTRUSTED_DOMAIN`, `FS_HOME_ACCESS`, `FS_MODE_UNRESOLVED`, `FS_PATH_ESCAPE`,
+> `FS_RECURSIVE_WALK`, `FS_SENSITIVE_PATH`, `NET_DYNAMIC_URL`, `NET_HTTP_CLIENT`,
+> `OBFUSC_ZERO_WIDTH`, `SECRET_PROVIDER_TOKEN`, `SHELL_EVAL` and
+> `SHELL_PRIVILEGE_ESCALATION`. `NET_DOMAIN_LITERAL`, `NET_FETCH_CALL`,
+> `SECRET_ENV_DUMP` and `FS_PATH_ESCAPE` are at 7/8.
 >
-> Where they did not: `PI_EXFIL_INSTRUCTION` 0/7, `PI_CONCEALMENT` 1/8,
-> `PI_INJECTION_OVERRIDE` 2/8 and `PI_SYSTEM_IMPERSONATION` 1/6 remain false
-> positives on nearly every sampled finding — the corpus is full of security
-> *training* material that quotes an injection in order to teach it, and a phrase
-> rule cannot tell "issues this" from "documents this". `SHELL_PRIVILEGE_ESCALATION`
-> (2/8) and `PERSIST_SHELL_RC` (1/4) left this list at revision 54, and
-> `SHELL_EXEC` went 4/8 -> 6/8. The `PI_*` family is where
+> **The `PI_*` family is still 0/8..3/8 and revision 56 did not change that.**
+> Narrowing their claims raised the annotator agreement (0.762 -> 0.780, and two
+> of the four now have the annotators in exact agreement) but **not their
+> precision**, because the findings really are not instances of the narrowed
+> claim either. The corpus is largely security *training* material that quotes an
+> injection in order to teach it, and the suppression heuristic
+> (`discusses_the_attack`) covers the vocabulary of that discussion but not the
+> grammar of it. What is left is a suppression change with its own fixture, not
+> more wording and not more samples.
+>
+> `SHELL_PRIVILEGE_ESCALATION` (2/8) and `PERSIST_SHELL_RC` (1/4) left this list
+> at revision 54; `SHELL_EVAL` (4/8) and `DL_UNTRUSTED_DOMAIN` (2/6) left it at
+> revision 55. The `PI_*` family is where
 > GOLD-v5 left it — the corpus is full of security *training* material that
 > discusses injection, and a phrase rule cannot tell "issues this" from
 > "documents this", which is why they are `Info`: a false `Critical` is worse
@@ -291,9 +308,9 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | `FS_PATH_ESCAPE` | 138 | 5442 | 2.5% |
 | `FS_RECURSIVE_WALK` | 133 | 5442 | 2.4% |
 | `FS_HOME_ACCESS` | 104 | 5442 | 1.9% |
-| `FS_ABSOLUTE_PATH` | 77 | 5442 | 1.4% |
 | `MISMATCH_UNDER_DECLARED` | 76 | 5442 | 1.4% |
 | `PARSE_FAILED` | 76 | 5442 | 1.4% |
+| `FS_ABSOLUTE_PATH` | 68 | 5442 | 1.2% |
 | `NET_HTTP_CLIENT` | 53 | 5442 | 1.0% |
 | `LICENSE_RESTRICTIVE` | 52 | 5442 | 1.0% |
 | `OBFUSC_TRACKING_PIXEL` | 33 | 5442 | 0.6% |
@@ -301,14 +318,13 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | `NET_DYNAMIC_URL` | 24 | 5442 | 0.4% |
 | `MISMATCH_OVER_DECLARED` | 22 | 5442 | 0.4% |
 | `SECRET_PATH_READ` | 15 | 5442 | 0.3% |
-| `SHELL_EVAL` | 12 | 5442 | 0.2% |
 | `PERSIST_AGENT_CONFIG` | 10 | 5442 | 0.2% |
 | `PI_INJECTION_OVERRIDE` | 10 | 5442 | 0.2% |
 | `SECRET_ENV_DUMP` | 10 | 5442 | 0.2% |
 | `PI_EXFIL_INSTRUCTION` | 7 | 5442 | 0.1% |
 | `DEP_CUSTOM_REGISTRY` | 6 | 5442 | 0.1% |
-| `DL_UNTRUSTED_DOMAIN` | 6 | 5442 | 0.1% |
 | `PI_SYSTEM_IMPERSONATION` | 6 | 5442 | 0.1% |
+| `SHELL_EVAL` | 5 | 5442 | 0.1% |
 | `DL_REMOTE_INSTALL` | 4 | 5442 | 0.1% |
 | `FS_SENSITIVE_PATH` | 4 | 5442 | 0.1% |
 | `SECRET_GENERIC_ASSIGN` | 4 | 5442 | 0.1% |
@@ -317,6 +333,7 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | `FS_MODE_UNRESOLVED` | 3 | 5442 | 0.1% |
 | `PERSIST_HOOK` | 3 | 5442 | 0.1% |
 | `SECRET_PROVIDER_TOKEN` | 3 | 5442 | 0.1% |
+| `DL_UNTRUSTED_DOMAIN` | 2 | 5442 | 0.0% |
 | `PERSIST_CRON` | 2 | 5442 | 0.0% |
 | `PERSIST_SHELL_RC` | 2 | 5442 | 0.0% |
 | `SHELL_DESTRUCTIVE` | 2 | 5442 | 0.0% |
@@ -400,34 +417,34 @@ Gate G4: precision >= 0.85 and recall >= 0.60, per rule (no micro-average).
 | `DL_PASSWORD_ARCHIVE` | 0 | 1 | 0 | 0.0% | n/a | below |
 | `DL_PIPE_TO_SHELL` | 0 | 1 | 0 | 0.0% | n/a | below |
 | `DL_REMOTE_INSTALL` | 3 | 1 | 0 | 75.0% | 100.0% | below |
-| `DL_UNTRUSTED_DOMAIN` | 2 | 4 | 0 | 33.3% | 100.0% | below |
-| `FS_ABSOLUTE_PATH` | 4 | 4 | 0 | 50.0% | 100.0% | below |
+| `DL_UNTRUSTED_DOMAIN` | 2 | 0 | 0 | 100.0% | 100.0% | pass |
+| `FS_ABSOLUTE_PATH` | 5 | 3 | 0 | 62.5% | 100.0% | below |
 | `FS_HOME_ACCESS` | 8 | 0 | 0 | 100.0% | 100.0% | pass |
 | `FS_MODE_UNRESOLVED` | 3 | 0 | 0 | 100.0% | 100.0% | pass |
-| `FS_PATH_ESCAPE` | 7 | 1 | 0 | 87.5% | 100.0% | pass |
-| `FS_RECURSIVE_WALK` | 8 | 0 | 0 | 100.0% | 100.0% | pass |
+| `FS_PATH_ESCAPE` | 8 | 0 | 0 | 100.0% | 100.0% | pass |
+| `FS_RECURSIVE_WALK` | 7 | 1 | 0 | 87.5% | 100.0% | pass |
 | `FS_SENSITIVE_PATH` | 4 | 0 | 0 | 100.0% | 100.0% | pass |
 | `LICENSE_RESTRICTIVE` | 8 | 0 | 0 | 100.0% | 100.0% | pass |
 | `NET_DOMAIN_LITERAL` | 7 | 1 | 0 | 87.5% | 100.0% | pass |
 | `NET_DYNAMIC_URL` | 8 | 0 | 0 | 100.0% | 100.0% | pass |
 | `NET_FETCH_CALL` | 7 | 1 | 0 | 87.5% | 100.0% | pass |
 | `NET_HTTP_CLIENT` | 8 | 0 | 0 | 100.0% | 100.0% | pass |
-| `OBFUSC_TRACKING_PIXEL` | 7 | 1 | 0 | 87.5% | 100.0% | pass |
+| `OBFUSC_TRACKING_PIXEL` | 6 | 2 | 0 | 75.0% | 100.0% | below |
 | `OBFUSC_ZERO_WIDTH` | 1 | 0 | 0 | 100.0% | 100.0% | pass |
-| `PERSIST_AGENT_CONFIG` | 5 | 3 | 0 | 62.5% | 100.0% | below |
+| `PERSIST_AGENT_CONFIG` | 6 | 2 | 0 | 75.0% | 100.0% | below |
 | `PERSIST_CRON` | 1 | 1 | 0 | 50.0% | 100.0% | below |
 | `PERSIST_HOOK` | 1 | 2 | 0 | 33.3% | 100.0% | below |
 | `PERSIST_SHELL_RC` | 0 | 2 | 0 | 0.0% | n/a | below |
-| `PI_CONCEALMENT` | 1 | 7 | 0 | 12.5% | 100.0% | below |
-| `PI_EXFIL_INSTRUCTION` | 0 | 7 | 0 | 0.0% | n/a | below |
-| `PI_INJECTION_OVERRIDE` | 2 | 6 | 0 | 25.0% | 100.0% | below |
-| `PI_SYSTEM_IMPERSONATION` | 1 | 5 | 0 | 16.7% | 100.0% | below |
+| `PI_CONCEALMENT` | 3 | 5 | 0 | 37.5% | 100.0% | below |
+| `PI_EXFIL_INSTRUCTION` | 1 | 6 | 0 | 14.3% | 100.0% | below |
+| `PI_INJECTION_OVERRIDE` | 0 | 8 | 0 | 0.0% | n/a | below |
+| `PI_SYSTEM_IMPERSONATION` | 0 | 6 | 0 | 0.0% | n/a | below |
 | `SECRET_ENV_DUMP` | 7 | 1 | 0 | 87.5% | 100.0% | pass |
 | `SECRET_GENERIC_ASSIGN` | 3 | 1 | 0 | 75.0% | 100.0% | below |
-| `SECRET_PATH_READ` | 5 | 3 | 0 | 62.5% | 100.0% | below |
+| `SECRET_PATH_READ` | 7 | 1 | 0 | 87.5% | 100.0% | pass |
 | `SECRET_PROVIDER_TOKEN` | 3 | 0 | 0 | 100.0% | 100.0% | pass |
 | `SHELL_DESTRUCTIVE` | 1 | 1 | 0 | 50.0% | 100.0% | below |
-| `SHELL_EVAL` | 4 | 4 | 0 | 50.0% | 100.0% | below |
+| `SHELL_EVAL` | 5 | 0 | 0 | 100.0% | 100.0% | pass |
 | `SHELL_EXEC` | 6 | 2 | 0 | 75.0% | 100.0% | below |
 | `SHELL_PRIVILEGE_ESCALATION` | 4 | 0 | 0 | 100.0% | 100.0% | pass |
 

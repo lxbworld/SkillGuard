@@ -20,24 +20,21 @@ with `recall unknown`, which is the honest state but not a useful one.
 
 Two annotators would also close #11; one gets precision for 36 rules but no κ.
 
-### 1. Narrow the claims of the four `PI_*` rules that still fail G4
+### 1. Suppress the `PI_*` discussion grammar, not just its vocabulary
 
-The five worst rules fail because their claim is ambiguous, not because the
-sample is small. `PI_EXFIL_INSTRUCTION` scores 0/7 and
-`PI_INJECTION_OVERRIDE` 1/8 — and both annotators *agree* on those labels, so
-more rows will not move them. The claim "an instruction to transmit local data to
-an external endpoint" does not say whether `// Send token to your backend` (a code
-comment) is one. Narrow the wording until the answer is in the text, then
-re-measure.
+Narrowing the claims (rev 56) raised annotator agreement from 0.762 to 0.780 and
+left precision exactly where it was. `PI_INJECTION_OVERRIDE` is 0/8 with both
+annotators in **exact agreement**: they are not confused about the claim, the
+detector fires on the wrong shape.
 
-Size: the wording lives in `message` in `src/scan/rules.rs`, so it is a text-only
-change, but it is still a rule change: fixture + `SCAN_LOGIC_REVISION` bump +
-regenerated `docs/RULES.md` + a GOLD round. Do **not** expect κ to rise; expect
-the precision column to become defensible.
+`discusses_the_attack` matches words ("injection", "jailbreak", "payloads that
+override") and misses the shapes a writeup about attacks uses: a markdown table of
+categories, a reference document enumerating payloads, a `.yaml` of system prompts
+*to detect*. That is a suppression change in the same family as revisions 54 and
+55 — fixture first, then measure that no true positive is lost.
 
-Affected: `PI_EXFIL_INSTRUCTION`, `PI_INJECTION_OVERRIDE`, `PI_CONCEALMENT`,
-`PI_SYSTEM_IMPERSONATION`, `SHELL_PRIVILEGE_ESCALATION`, `PERSIST_SHELL_RC`,
-`PERSIST_HOOK`.
+Affected: `PI_INJECTION_OVERRIDE`, `PI_SYSTEM_IMPERSONATION`, `PI_CONCEALMENT`,
+`PI_EXFIL_INSTRUCTION`. Do not expect a wording change to help; it was tried.
 
 ### 2. Sample size, if and only if after 1
 

@@ -236,6 +236,68 @@ fn a_docstring_does_not_make_the_rest_of_the_file_documentation() {
 }
 
 #[test]
+fn a_name_is_not_a_call_but_a_reference_still_is() {
+    // GOLD-v11 measured four rules whose pattern matched the *name* of a thing
+    // where the claim is a *call* to it. This fixture holds the shapes:
+    //
+    //   exec(): void;                            a type declaration
+    //   exec(cmd, cb) / exec('git', [...])       a subprocess, not dynamic eval
+    //   resolve(__dirname, "../../../bin/x.js")  a relative path, not absolute
+    //   DENY_PATHS='/etc/passwd'                 a constant
+    //
+    // What is fixed: `SHELL_EVAL` no longer fires on a subprocess call or a type,
+    // and `FS_ABSOLUTE_PATH` no longer fires on a relative path assembled from a
+    // variable. What is *not* fixed, deliberately: `FS_ABSOLUTE_PATH` and
+    // `SECRET_PATH_READ` still report a constant holding `/etc/passwd`, because
+    // `SECRET_PATH_READ`'s claim is "is referenced" and a constant is a reference.
+    // Asserting otherwise would be asserting a rule change nobody measured.
+    let out = scan_fixture("safe", "named-not-accessed");
+    let all = rules(&out);
+    for rule in ["SHELL_EVAL", "DL_UNTRUSTED_DOMAIN"] {
+        assert!(
+            !all.iter().any(|r| r == rule),
+            "{rule} fired on a name, not a call: {:#?}",
+            out.findings
+        );
+    }
+    assert!(
+        !out.findings.iter().any(|f| {
+            f.rule.0 == "FS_ABSOLUTE_PATH"
+                && f.evidence.iter().any(|e| e.text.contains("__dirname"))
+        }),
+        "a relative path assembled from a variable is not an absolute access: {:#?}",
+        out.findings
+    );
+}
+
+#[test]
+fn a_link_local_address_is_not_a_contacted_endpoint() {
+    // `169.254.169.254` is the cloud metadata endpoint — the single most valuable
+    // thing a malicious skill can fetch — and the rule's claim ("a low-reputation
+    // TLD or a raw IP endpoint") never covered it. All four of its GOLD-v11
+    // false positives were this address.
+    let out = scan_fixture("safe", "named-not-accessed");
+    assert!(
+        !rules(&out).iter().any(|r| r == "DL_UNTRUSTED_DOMAIN"),
+        "{:#?}",
+        out.findings
+    );
+}
+
+#[test]
+fn an_eval_that_is_really_a_subprocess_is_not_dynamic_evaluation() {
+    // `exec(cmd, cb)` and `exec('git', [...])` spawn a process (`SHELL_EXEC`'s
+    // claim). `exec(compiled, g, locals)` evaluates a string. A `.d.ts`
+    // declaration is neither.
+    let out = scan_fixture("safe", "named-not-accessed");
+    assert!(
+        !rules(&out).iter().any(|r| r == "SHELL_EVAL"),
+        "a subprocess call is not eval: {:#?}",
+        out.findings
+    );
+}
+
+#[test]
 fn a_deny_list_and_a_help_hint_escalate_nothing() {
     // GOLD-v10 measured SHELL_PRIVILEGE_ESCALATION at 2/8. The same five
     // characters appear in a list of blocked patterns, in a printed install hint

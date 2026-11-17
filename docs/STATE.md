@@ -12,9 +12,9 @@ number in this file without a revision is a number nobody should quote.
 |---|---|
 | branch | `main`, level with `origin/main` |
 | version | `0.1.3` (crate + `RULE_SET_VERSION`) |
-| `SCAN_LOGIC_REVISION` | **54** |
+| `SCAN_LOGIC_REVISION` | **56** |
 | rules | 55 |
-| tests | 357 pass, 0 fail (`cargo test --all-targets`) |
+| tests | 360 pass, 0 fail (`cargo test --all-targets`) |
 | clippy / fmt | `-D warnings` clean / clean |
 | `cargo deny` | advisories, bans, licenses, sources all ok, `ignore = []` |
 | CI | green on `7c4ed6b` (linux, windows, cargo-deny, Action self-test) |
@@ -32,17 +32,17 @@ cache. `docs/CORPUS_REPORT.md` regenerates identically from it.
 |---|---|
 | skills scanned | 5,442 |
 | declare permissions | 386 (7.1%) |
-| findings | 8,732 |
+| findings | 8,673 |
 | `MISMATCH_UNDER_DECLARED` | 76 of 386 declared (19.7%) |
 | `PI_DESCRIPTION_MISMATCH` | 212 of 5,442 (3.9%), i.e. 54.9% of declared |
 | `PARSE_FAILED` | 76 (1.4%) |
 | top rule | `LICENSE_MISSING` 1,148 skills (21.1%) |
 
-## The precision table (GOLD-v11)
+## The precision table (GOLD-v13)
 
-199 rows, 36 rules, κ **0.757** over two different model families
-(`deepseek-v4.1-flash` vs `z-ai/glm-5.3-flash`), 21 disagreements adjudicated.
-**18 of 36 rules pass G4** (precision ≥ 0.85), 13 of them at 100%.
+192 rows, 36 rules, κ **0.780** over two different model families
+(`deepseek-v4.1-flash` vs `z-ai/glm-5.3-flash`), 17 disagreements adjudicated.
+**20 of 36 rules pass G4** (precision ≥ 0.85), 15 of them at 100%.
 
 Not a human GOLD set. `research/PROTOCOL.md` G3 asks for two humans; no human has
 ever labelled anything here (issue #11).

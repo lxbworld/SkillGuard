@@ -7,7 +7,7 @@ to rule output**, and **Cohen's κ ≥ 0.75**. This is the runbook for one round
 precision column.
 
 The pilot report publishes a precision column from a **model-labelled** GOLD set
-(GOLD-v11, two model families, κ 0.757). That is not G3 — the protocol asks
+(GOLD-v13, two model families, κ 0.780). That is not G3 — the protocol asks
 for two humans — and every mention of the column says so. GOLD-v8 measured what
 the older same-model figure was worth: GOLD-v6's κ 0.845 was two sessions of one
 model, and a second family agrees on those same rows at κ 0.723, below the gate.
@@ -657,6 +657,64 @@ GOLD-v6 column with its `model-labelled` label. What v8 establishes is the size 
 that label's caveat: **0.845 was two sessions of one model; a second family
 agrees at 0.723 on the same rows.** Any human-derived κ should be expected to sit
 near or below that, not near 0.85.
+
+---
+
+## GOLD-v13: narrowing a claim fixes the agreement, not the precision
+
+Revision 56 changed four rule *messages* and no behaviour. This round measured
+whether that was enough, and the answer is the useful part.
+
+| | GOLD-v12 (rev 55) | GOLD-v13 (rev 56) |
+|---|---|---|
+| rows | 192 | 192 |
+| agreement | 175/192 (91.1%) | 175/192 (91.1%) |
+| Cohen's κ | 0.762 | **0.780** |
+| `PI_INJECTION_OVERRIDE` | κ undefined, 0/8 precision | annotators in **exact agreement**, 0/8 |
+| `PI_SYSTEM_IMPERSONATION` | κ undefined, 1/6 | exact agreement, 0/6 |
+| rules at G4 | 19 | **20** |
+
+Narrowing the claim ("an instruction telling the agent to conceal what it did;
+describing the detector is not one") made the annotators agree and lifted the
+overall κ, and it did **not** lift the precision, because the findings really are
+not instances of the narrowed claim either.
+
+That is the difference between two kinds of broken:
+
+- **a claim that is too wide** — the annotators cannot agree, because they are
+  answering different questions. Narrowing it works.
+- **a detector that fires on the wrong shape** — the annotators agree completely
+  and both say "no". No amount of wording fixes this, and no amount of sample
+  size either.
+
+`PI_INJECTION_OVERRIDE` at 0/8 with full agreement is the second kind. The
+suppression heuristic (`discusses_the_attack`) matches the *vocabulary* of a
+security writeup ("injection", "payloads that override", "jailbreak") and misses
+the *grammar* of it: a markdown table of attack categories, a reference document
+listing payloads, a `.yaml` file of system prompts to detect. What is left is a
+suppression change with its own fixture, in the same family as revisions 54 and
+55 — not more wording, and not more rows.
+
+### Where the project stands after three rule sweeps
+
+| revision | what it fixed | G4 rules | findings |
+|---|---|---|---|
+| 53 | line kinds (docstring vs code) | 16 | 8,776 |
+| 54 | `SHELL_PRIVILEGE_ESCALATION`, `PERSIST_HOOK`, `PERSIST_SHELL_RC` | 18 | 8,732 |
+| 55 | `SHELL_EVAL`, `FS_ABSOLUTE_PATH`, `DL_UNTRUSTED_DOMAIN` | 19 | 8,673 |
+| 56 | four `PI_*` claims (text only) | **20** | 8,673 |
+
+Every suppression was checked the same way: re-scan the corpus, then re-score the
+*previous* GOLD set to confirm the rows that disappeared were false positives. In
+all three sweeps they were (7/7, 8/8, 9/9). A suppression that costs a true
+positive is a regression even when the total falls, which is why that check
+exists and why the lost rows are listed in each write-up.
+
+### Still not G3
+
+Two model families are independent *of each other*, not of models in general.
+`research/PROTOCOL.md` G3 asks for two humans (#11). Every precision figure in
+`docs/CORPUS_REPORT.md` carries that caveat.
 
 ---
 

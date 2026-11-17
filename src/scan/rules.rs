@@ -204,10 +204,13 @@ static TABLE: &[RuleSpec] = &[
         kinds: SCRIPTS,
         patterns: &[
             r#"\beval\s+["'$(`]"#,
-            // `(?:^|[^.\w])` excludes `regex.exec(` and `matchAll(`-style calls,
-            // which are not dynamic code evaluation. Rust's regex crate has no
-            // lookbehind, so the boundary is matched instead.
-            r"(?:^|[^.\w])exec\s*\(",
+            // Python's `exec(source, globals, locals)` runs a string as code.
+            // Node's `exec(cmd, cb)` and `exec('git', [...])` spawn a process,
+            // and a TypeScript declaration `exec(): void;` declares a type: none
+            // of those evaluate anything, and GOLD-v11 measured 4 of this rule's
+            // 8 rows as false positives that were exactly those two shapes.
+            r"(?:^|[^.\w])exec\s*\(\s*(?:compiled|code|src|source|expr|script|payload|template|body|stmt|statement)\b",
+            r"(?:^|[^.\w])exec\s*\(\s*[A-Za-z_][A-Za-z0-9_]*\s*,\s*[A-Za-z_][A-Za-z0-9_]*\s*,\s*[A-Za-z_]",
             r"\bnew\s+Function\s*\(",
             // Importing `child_process` is not eval; executing through it is.
             r"(?i)child_process\s*\.\s*(?:exec|execsync)\b",
@@ -591,7 +594,7 @@ static TABLE: &[RuleSpec] = &[
             r"(?i)\bforget\s+(?:everything|all\s+(?:previous|prior|above))\b",
             r"(?i)\boverride\s+(?:the\s+)?(?:system|safety|previous)\s+(?:prompt|instructions?|rules?)",
         ],
-        message: "An instruction to disregard prior instructions (prompt injection pattern)",
+        message: "An instruction telling the agent to drop its own instructions; a lesson about injections is not one",
         capability: Some("agent.injection"),
         remediation: "Remove it. No legitimate skill needs to override its operator's instructions.",
     },
@@ -608,7 +611,7 @@ static TABLE: &[RuleSpec] = &[
             r"(?i)\bfrom\s+now\s+on[, ]+you\s+(?:will|must|should)\s+ignore",
             r"(?i)\bpretend\s+(?:to\s+be|you\s+are)\s+(?:a\s+)?(?:different|new|unrestricted)",
         ],
-        message: "The skill impersonates a system message or asserts a new identity",
+        message: "The skill's own directives speak as a system message or reassign the agent's identity; a quoted jailbreak example is not one",
         capability: Some("agent.injection"),
         remediation: "Remove it. A skill is documentation, not a privileged context.",
     },
@@ -628,7 +631,7 @@ static TABLE: &[RuleSpec] = &[
             r"(?i)\bdo\s+not\s+log\b",
             r"(?i)\bconceal(?:ed|ing)?\s+(?:from|the|this)\b",
         ],
-        message: "An instruction to hide behaviour from the user",
+        message: "An instruction telling the agent to conceal what it did; describing the detector is not one",
         capability: Some("agent.injection"),
         remediation: "Remove it. Transparency to the operator is a hard requirement.",
     },
@@ -650,7 +653,7 @@ static TABLE: &[RuleSpec] = &[
             r"(?i)\bsend\s+(?:the\s+)?(?:api[_ -]?key|token|credentials?|secrets?|ssh\s+key)\s+(?:to|toward)\b",
             r"(?i)\b(?:post|send)\s+[^\n]{0,60}(?:webhook\.site|ngrok\.io|ngrok-free|pipedream\.net|requestbin)",
         ],
-        message: "An instruction to transmit local data to an external endpoint",
+        message: "An instruction telling the agent to send local data out; a comment that documents such a call is not one",
         capability: Some("network.outbound"),
         remediation: "Remove it, and treat the skill as compromised until its source is verified.",
     },
@@ -1121,6 +1124,16 @@ pub fn rule_count() -> usize {
 /// character classes (`w./-`) and attribute accesses (`json.dumps`) as file
 /// paths. No text rule changed, but the declared-vs-observed findings and the
 /// corpus cache both carry the old (wrong) capabilities, so the revision moves.
+/// rev 56: no behaviour changed. Four `PI_*` claims now say what they do *not*
+/// detect ("describing the detector is not one"), because GOLD-v12 left them at
+/// 0/8..2/8 with both annotators *agreeing* on those labels — so the failure was
+/// the claim's scope, not measurement noise. Findings are byte-identical.
+/// rev 55: the same failure, four more rules. `SHELL_EVAL` matched
+/// `exec(cmd, cb)` (a subprocess) and `exec(): void` (a type); `FS_ABSOLUTE_PATH`
+/// reported paths assembled from a variable and paths mentioned in comments;
+/// `DL_UNTRUSTED_DOMAIN` did not know that 169.254/16 is the cloud metadata
+/// endpoint it claims to care about. 8,732 -> 8,673 findings, and all 9 suppressed
+/// GOLD-v11 rows were false positives.
 /// rev 54: four rules that were matching *names* instead of *calls*.
 /// `SHELL_PRIVILEGE_ESCALATION` had no suppression at all, so a deny-list of
 /// dangerous strings counted as performing them (57 -> 27 findings, and every
@@ -1136,7 +1149,7 @@ pub fn rule_count() -> usize {
 /// `PARSE_FAILED` 71 -> 76 on the pilot corpus, and every finding that depends on
 /// a declaration (`MISMATCH_*`, `LICENSE_*`) is downstream of that. Without the
 /// bump a warm cache would keep serving the old parser's results.
-pub const SCAN_LOGIC_REVISION: u32 = 54;
+pub const SCAN_LOGIC_REVISION: u32 = 56;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};
