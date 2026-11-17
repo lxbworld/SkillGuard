@@ -11,17 +11,16 @@ number in this file without a revision is a number nobody should quote.
 | | |
 |---|---|
 | branch | `main`, level with `origin/main` |
-| version | `0.1.3` (crate + `RULE_SET_VERSION`) |
+| version | `0.1.4` (crate + `RULE_SET_VERSION`) |
 | `SCAN_LOGIC_REVISION` | **56** |
 | rules | 55 |
 | tests | 360 pass, 0 fail (`cargo test --all-targets`) |
 | clippy / fmt | `-D warnings` clean / clean |
 | `cargo deny` | advisories, bans, licenses, sources all ok, `ignore = []` |
 | CI | green on `7c4ed6b` (linux, windows, cargo-deny, Action self-test) |
-| tag | `v0.1.3` = `352b55a`, 10 release assets |
+| tag | `v0.1.4` = `4b8bbf8`, 10 release assets |
 
-`v0.1.3` is cut at revision **54**, so the released binary and `main` agree. The
-two revisions before it (52 parser, 53 line kinds) also ship here.
+`v0.1.4` is cut at revision **56**, so the released binary and `main` agree.
 
 ## The corpus (revision 53)
 
