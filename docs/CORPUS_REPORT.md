@@ -61,6 +61,16 @@
 > run (GOLD-v8 confirms it, 48% precision, and the `remote-install` fixture
 > requires it) — so `PI_*` and `DL_*` behaviour is unchanged in `SKILL.md`.
 >
+> **Revision 57 makes suppression see the whole line.** `raw` was a 200-character
+> display cap while the regexes ran on the full haystack, so every suppression
+> decision past the cap was made on a prefix that did not contain the match — in
+> both directions: a "cannot read or exfiltrate it" negation hid past char 200
+> and fired anyway, and a hardening skill quoting `"ignore previous
+> instructions,"` as the thing to *refuse* fired too. Matched text, which comes
+> from the lowercased haystack, is now located case-insensitively, so quoted
+> specimens suppress at all. 8,673 -> 8,538 findings; 21 GOLD-v13 rows
+> disappeared and all 21 were false positives.
+>
 > **Revision 56 changes no behaviour**: four `PI_*` claims now state what they do
 > *not* detect, because GOLD-v12 left them at 0/8..2/8 with both annotators
 > *agreeing* — the failure was the claim's scope, not measurement noise. Findings
@@ -302,8 +312,8 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 |---|---|---|---|
 | `LICENSE_MISSING` | 1148 | 5442 | 21.1% |
 | `NET_DOMAIN_LITERAL` | 363 | 5442 | 6.7% |
-| `SHELL_EXEC` | 343 | 5442 | 6.3% |
-| `PI_DESCRIPTION_MISMATCH` | 208 | 5442 | 3.8% |
+| `SHELL_EXEC` | 328 | 5442 | 6.0% |
+| `PI_DESCRIPTION_MISMATCH` | 207 | 5442 | 3.8% |
 | `NET_FETCH_CALL` | 163 | 5442 | 3.0% |
 | `FS_PATH_ESCAPE` | 138 | 5442 | 2.5% |
 | `FS_RECURSIVE_WALK` | 133 | 5442 | 2.4% |
@@ -314,34 +324,34 @@ Prevalence(R) = skills with at least one finding for R / scanned skills.
 | `NET_HTTP_CLIENT` | 53 | 5442 | 1.0% |
 | `LICENSE_RESTRICTIVE` | 52 | 5442 | 1.0% |
 | `OBFUSC_TRACKING_PIXEL` | 33 | 5442 | 0.6% |
-| `PI_CONCEALMENT` | 29 | 5442 | 0.5% |
 | `NET_DYNAMIC_URL` | 24 | 5442 | 0.4% |
 | `MISMATCH_OVER_DECLARED` | 22 | 5442 | 0.4% |
 | `SECRET_PATH_READ` | 15 | 5442 | 0.3% |
+| `PI_CONCEALMENT` | 12 | 5442 | 0.2% |
 | `PERSIST_AGENT_CONFIG` | 10 | 5442 | 0.2% |
-| `PI_INJECTION_OVERRIDE` | 10 | 5442 | 0.2% |
 | `SECRET_ENV_DUMP` | 10 | 5442 | 0.2% |
-| `PI_EXFIL_INSTRUCTION` | 7 | 5442 | 0.1% |
 | `DEP_CUSTOM_REGISTRY` | 6 | 5442 | 0.1% |
-| `PI_SYSTEM_IMPERSONATION` | 6 | 5442 | 0.1% |
 | `SHELL_EVAL` | 5 | 5442 | 0.1% |
-| `DL_REMOTE_INSTALL` | 4 | 5442 | 0.1% |
 | `FS_SENSITIVE_PATH` | 4 | 5442 | 0.1% |
+| `PERSIST_HOOK` | 4 | 5442 | 0.1% |
 | `SECRET_GENERIC_ASSIGN` | 4 | 5442 | 0.1% |
 | `SHELL_PRIVILEGE_ESCALATION` | 4 | 5442 | 0.1% |
 | `DEP_UNPINNED_SCRIPT` | 3 | 5442 | 0.1% |
+| `DL_REMOTE_INSTALL` | 3 | 5442 | 0.1% |
 | `FS_MODE_UNRESOLVED` | 3 | 5442 | 0.1% |
-| `PERSIST_HOOK` | 3 | 5442 | 0.1% |
+| `PI_SYSTEM_IMPERSONATION` | 3 | 5442 | 0.1% |
 | `SECRET_PROVIDER_TOKEN` | 3 | 5442 | 0.1% |
 | `DL_UNTRUSTED_DOMAIN` | 2 | 5442 | 0.0% |
 | `PERSIST_CRON` | 2 | 5442 | 0.0% |
 | `PERSIST_SHELL_RC` | 2 | 5442 | 0.0% |
+| `PI_INJECTION_OVERRIDE` | 2 | 5442 | 0.0% |
 | `SHELL_DESTRUCTIVE` | 2 | 5442 | 0.0% |
 | `DL_CHAIN_FETCH_EXECUTE` | 1 | 5442 | 0.0% |
 | `DL_PASSWORD_ARCHIVE` | 1 | 5442 | 0.0% |
 | `DL_PIPE_TO_SHELL` | 1 | 5442 | 0.0% |
 | `LICENSE_MISMATCH` | 1 | 5442 | 0.0% |
 | `OBFUSC_ZERO_WIDTH` | 1 | 5442 | 0.0% |
+| `PI_EXFIL_INSTRUCTION` | 1 | 5442 | 0.0% |
 
 ## Declaration rate (H6)
 
@@ -374,36 +384,36 @@ Every headline figure must be reported per stratum (protocol §4.2); without str
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| L3 | 5442 | 0 | `LICENSE_MISSING` 21.1%, `NET_DOMAIN_LITERAL` 6.7%, `SHELL_EXEC` 6.3%, `PI_DESCRIPTION_MISMATCH` 3.8%, `NET_FETCH_CALL` 3.0% |
+| L3 | 5442 | 0 | `LICENSE_MISSING` 21.1%, `NET_DOMAIN_LITERAL` 6.7%, `SHELL_EXEC` 6.0%, `PI_DESCRIPTION_MISMATCH` 3.8%, `NET_FETCH_CALL` 3.0% |
 ### by `size`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| 32k_128k | 720 | 0 | `NET_DOMAIN_LITERAL` 18.3%, `SHELL_EXEC` 16.5%, `LICENSE_MISSING` 14.6%, `PI_DESCRIPTION_MISMATCH` 9.9%, `FS_PATH_ESCAPE` 8.8% |
-| 8k_32k | 1537 | 0 | `LICENSE_MISSING` 24.7%, `NET_DOMAIN_LITERAL` 5.0%, `SHELL_EXEC` 4.2%, `PI_DESCRIPTION_MISMATCH` 3.4%, `FS_PATH_ESCAPE` 2.6% |
-| gt_128k | 306 | 0 | `SHELL_EXEC` 47.4%, `NET_DOMAIN_LITERAL` 42.8%, `FS_RECURSIVE_WALK` 24.8%, `PI_DESCRIPTION_MISMATCH` 24.8%, `NET_FETCH_CALL` 20.9% |
+| 32k_128k | 720 | 0 | `NET_DOMAIN_LITERAL` 18.3%, `SHELL_EXEC` 15.3%, `LICENSE_MISSING` 14.6%, `PI_DESCRIPTION_MISMATCH` 9.9%, `FS_PATH_ESCAPE` 8.8% |
+| 8k_32k | 1537 | 0 | `LICENSE_MISSING` 24.7%, `NET_DOMAIN_LITERAL` 5.0%, `SHELL_EXEC` 4.1%, `PI_DESCRIPTION_MISMATCH` 3.4%, `FS_PATH_ESCAPE` 2.6% |
+| gt_128k | 306 | 0 | `SHELL_EXEC` 46.1%, `NET_DOMAIN_LITERAL` 42.8%, `FS_RECURSIVE_WALK` 24.8%, `PI_DESCRIPTION_MISMATCH` 24.8%, `NET_FETCH_CALL` 20.9% |
 | lt_8k | 2879 | 0 | `LICENSE_MISSING` 21.8%, `PARSE_FAILED` 1.1%, `NET_DOMAIN_LITERAL` 0.8%, `MISMATCH_OVER_DECLARED` 0.5%, `SHELL_EXEC` 0.5% |
 ### by `scripts`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| js | 305 | 0 | `NET_DOMAIN_LITERAL` 46.6%, `FS_PATH_ESCAPE` 33.4%, `SHELL_EXEC` 28.9%, `PI_DESCRIPTION_MISMATCH` 26.6%, `NET_FETCH_CALL` 23.6% |
-| none | 4498 | 0 | `LICENSE_MISSING` 22.5%, `PARSE_FAILED` 1.3%, `OBFUSC_TRACKING_PIXEL` 0.4%, `LICENSE_RESTRICTIVE` 0.4%, `PI_CONCEALMENT` 0.4% |
+| js | 305 | 0 | `NET_DOMAIN_LITERAL` 46.6%, `FS_PATH_ESCAPE` 33.4%, `SHELL_EXEC` 28.5%, `PI_DESCRIPTION_MISMATCH` 26.6%, `NET_FETCH_CALL` 23.6% |
+| none | 4498 | 0 | `LICENSE_MISSING` 22.5%, `PARSE_FAILED` 1.3%, `OBFUSC_TRACKING_PIXEL` 0.4%, `LICENSE_RESTRICTIVE` 0.4%, `MISMATCH_OVER_DECLARED` 0.2% |
 | other | 5 | 0 | `NET_DOMAIN_LITERAL` 40.0%, `PI_DESCRIPTION_MISMATCH` 40.0%, `FS_HOME_ACCESS` 20.0%, `MISMATCH_UNDER_DECLARED` 20.0%, `NET_DYNAMIC_URL` 20.0% |
-| python | 424 | 0 | `SHELL_EXEC` 37.3%, `NET_DOMAIN_LITERAL` 34.4%, `FS_RECURSIVE_WALK` 19.8%, `LICENSE_MISSING` 18.2%, `NET_FETCH_CALL` 16.0% |
-| shell | 210 | 0 | `SHELL_EXEC` 46.2%, `NET_DOMAIN_LITERAL` 34.3%, `PI_DESCRIPTION_MISMATCH` 26.2%, `LICENSE_MISSING` 23.3%, `NET_HTTP_CLIENT` 23.3% |
+| python | 424 | 0 | `SHELL_EXEC` 34.9%, `NET_DOMAIN_LITERAL` 34.4%, `FS_RECURSIVE_WALK` 19.8%, `LICENSE_MISSING` 18.2%, `NET_FETCH_CALL` 16.0% |
+| shell | 210 | 0 | `SHELL_EXEC` 44.3%, `NET_DOMAIN_LITERAL` 34.3%, `PI_DESCRIPTION_MISMATCH` 26.2%, `LICENSE_MISSING` 23.3%, `NET_HTTP_CLIENT` 23.3% |
 ### by `declared`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| none | 5056 | 0 | `LICENSE_MISSING` 21.2%, `NET_DOMAIN_LITERAL` 6.6%, `SHELL_EXEC` 6.1%, `PI_DESCRIPTION_MISMATCH` 3.5%, `NET_FETCH_CALL` 2.9% |
-| present | 386 | 0 | `MISMATCH_UNDER_DECLARED` 19.7%, `LICENSE_MISSING` 19.4%, `SHELL_EXEC` 9.6%, `PI_DESCRIPTION_MISMATCH` 8.3%, `NET_DOMAIN_LITERAL` 7.0% |
+| none | 5056 | 0 | `LICENSE_MISSING` 21.2%, `NET_DOMAIN_LITERAL` 6.6%, `SHELL_EXEC` 5.8%, `PI_DESCRIPTION_MISMATCH` 3.5%, `NET_FETCH_CALL` 2.9% |
+| present | 386 | 0 | `MISMATCH_UNDER_DECLARED` 19.7%, `LICENSE_MISSING` 19.4%, `SHELL_EXEC` 9.1%, `PI_DESCRIPTION_MISMATCH` 8.3%, `NET_DOMAIN_LITERAL` 7.0% |
 ### by `license`
 
 | value | n | failed | top rules |
 |---|---|---|---|
-| absent | 4797 | 0 | `LICENSE_MISSING` 23.9%, `NET_DOMAIN_LITERAL` 5.6%, `SHELL_EXEC` 4.3%, `PI_DESCRIPTION_MISMATCH` 3.4%, `FS_PATH_ESCAPE` 2.5% |
-| present | 645 | 0 | `SHELL_EXEC` 21.4%, `NET_DOMAIN_LITERAL` 14.7%, `FS_RECURSIVE_WALK` 10.4%, `FS_HOME_ACCESS` 7.9%, `NET_FETCH_CALL` 7.6% |
+| absent | 4797 | 0 | `LICENSE_MISSING` 23.9%, `NET_DOMAIN_LITERAL` 5.6%, `SHELL_EXEC` 4.1%, `PI_DESCRIPTION_MISMATCH` 3.4%, `FS_PATH_ESCAPE` 2.5% |
+| present | 645 | 0 | `SHELL_EXEC` 20.3%, `NET_DOMAIN_LITERAL` 14.7%, `FS_RECURSIVE_WALK` 10.4%, `FS_HOME_ACCESS` 7.9%, `NET_FETCH_CALL` 7.6% |
 
 ## Precision and recall (GOLD)
 
@@ -416,7 +426,7 @@ Gate G4: precision >= 0.85 and recall >= 0.60, per rule (no micro-average).
 | `DL_CHAIN_FETCH_EXECUTE` | 1 | 0 | 0 | 100.0% | 100.0% | pass |
 | `DL_PASSWORD_ARCHIVE` | 0 | 1 | 0 | 0.0% | n/a | below |
 | `DL_PIPE_TO_SHELL` | 0 | 1 | 0 | 0.0% | n/a | below |
-| `DL_REMOTE_INSTALL` | 3 | 1 | 0 | 75.0% | 100.0% | below |
+| `DL_REMOTE_INSTALL` | 3 | 0 | 0 | 100.0% | 100.0% | pass |
 | `DL_UNTRUSTED_DOMAIN` | 2 | 0 | 0 | 100.0% | 100.0% | pass |
 | `FS_ABSOLUTE_PATH` | 5 | 3 | 0 | 62.5% | 100.0% | below |
 | `FS_HOME_ACCESS` | 8 | 0 | 0 | 100.0% | 100.0% | pass |
@@ -435,17 +445,17 @@ Gate G4: precision >= 0.85 and recall >= 0.60, per rule (no micro-average).
 | `PERSIST_CRON` | 1 | 1 | 0 | 50.0% | 100.0% | below |
 | `PERSIST_HOOK` | 1 | 2 | 0 | 33.3% | 100.0% | below |
 | `PERSIST_SHELL_RC` | 0 | 2 | 0 | 0.0% | n/a | below |
-| `PI_CONCEALMENT` | 3 | 5 | 0 | 37.5% | 100.0% | below |
-| `PI_EXFIL_INSTRUCTION` | 1 | 6 | 0 | 14.3% | 100.0% | below |
-| `PI_INJECTION_OVERRIDE` | 0 | 8 | 0 | 0.0% | n/a | below |
-| `PI_SYSTEM_IMPERSONATION` | 0 | 6 | 0 | 0.0% | n/a | below |
+| `PI_CONCEALMENT` | 3 | 0 | 0 | 100.0% | 100.0% | pass |
+| `PI_EXFIL_INSTRUCTION` | 1 | 0 | 0 | 100.0% | 100.0% | pass |
+| `PI_INJECTION_OVERRIDE` | 0 | 2 | 0 | 0.0% | n/a | below |
+| `PI_SYSTEM_IMPERSONATION` | 0 | 3 | 0 | 0.0% | n/a | below |
 | `SECRET_ENV_DUMP` | 7 | 1 | 0 | 87.5% | 100.0% | pass |
 | `SECRET_GENERIC_ASSIGN` | 3 | 1 | 0 | 75.0% | 100.0% | below |
 | `SECRET_PATH_READ` | 7 | 1 | 0 | 87.5% | 100.0% | pass |
 | `SECRET_PROVIDER_TOKEN` | 3 | 0 | 0 | 100.0% | 100.0% | pass |
 | `SHELL_DESTRUCTIVE` | 1 | 1 | 0 | 50.0% | 100.0% | below |
 | `SHELL_EVAL` | 5 | 0 | 0 | 100.0% | 100.0% | pass |
-| `SHELL_EXEC` | 6 | 2 | 0 | 75.0% | 100.0% | below |
+| `SHELL_EXEC` | 6 | 1 | 0 | 85.7% | 100.0% | pass |
 | `SHELL_PRIVILEGE_ESCALATION` | 4 | 0 | 0 | 100.0% | 100.0% | pass |
 
 If precision falls short, publish the measured value as an upper bound on true prevalence rather than widening the definition to hit a target.

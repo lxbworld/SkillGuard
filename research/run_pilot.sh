@@ -161,6 +161,16 @@ fi
 > run (GOLD-v8 confirms it, 48% precision, and the `remote-install` fixture
 > requires it) — so `PI_*` and `DL_*` behaviour is unchanged in `SKILL.md`.
 >
+> **Revision 57 makes suppression see the whole line.** `raw` was a 200-character
+> display cap while the regexes ran on the full haystack, so every suppression
+> decision past the cap was made on a prefix that did not contain the match — in
+> both directions: a "cannot read or exfiltrate it" negation hid past char 200
+> and fired anyway, and a hardening skill quoting `"ignore previous
+> instructions,"` as the thing to *refuse* fired too. Matched text, which comes
+> from the lowercased haystack, is now located case-insensitively, so quoted
+> specimens suppress at all. 8,673 -> 8,538 findings; 21 GOLD-v13 rows
+> disappeared and all 21 were false positives.
+>
 > **Revision 56 changes no behaviour**: four `PI_*` claims now state what they do
 > *not* detect, because GOLD-v12 left them at 0/8..2/8 with both annotators
 > *agreeing* — the failure was the claim's scope, not measurement noise. Findings
