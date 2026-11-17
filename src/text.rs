@@ -327,12 +327,30 @@ pub fn classify_lines(input: &str) -> Vec<LineKind> {
             continue;
         }
         // An odd number of triple quotes on a line opens a multi-line string.
-        // An even number (including a balanced `x = """a"""`) is data or code,
-        // and `Code` is the right answer: the line is one the program acts on.
-        let opened = ["\"\"\"", "'''"]
-            .iter()
-            .find(|q| t.matches(**q).count() % 2 == 1)
-            .copied();
+        // An even number is normally data or code — `x = """a"""` is a value —
+        // but a line that *starts* with the delimiter is a one-line docstring:
+        // `"""Enables `python -m x` invocation."""` is prose the program does
+        // not act on, and it read as code, so a `python -m …` mention inside it
+        // fired `SHELL_EXEC` (GOLD-v17).
+        let triple_quote: &str = "\"\"\"";
+        let single_quote: &str = "'''";
+        let opened = if t.starts_with(triple_quote) || t.starts_with(single_quote) {
+            let q = if t.starts_with(triple_quote) {
+                triple_quote
+            } else {
+                single_quote
+            };
+            if t.matches(q).count() % 2 == 1 {
+                Some(q)
+            } else {
+                None
+            }
+        } else {
+            [triple_quote, single_quote]
+                .iter()
+                .find(|q| t.matches(**q).count() % 2 == 1)
+                .copied()
+        };
         match opened {
             Some(q) => {
                 out.push(LineKind::Docstring);

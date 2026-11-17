@@ -12,9 +12,9 @@ number in this file without a revision is a number nobody should quote.
 |---|---|
 | branch | `main`, level with `origin/main` |
 | version | `0.1.4` (crate + `RULE_SET_VERSION`) |
-| `SCAN_LOGIC_REVISION` | **56** |
+| `SCAN_LOGIC_REVISION` | **60** |
 | rules | 55 |
-| tests | 360 pass, 0 fail (`cargo test --all-targets`) |
+| tests | 366 pass, 0 fail (`cargo test --all-targets`) |
 | clippy / fmt | `-D warnings` clean / clean |
 | `cargo deny` | advisories, bans, licenses, sources all ok, `ignore = []` |
 | CI | green on `7c4ed6b` (linux, windows, cargo-deny, Action self-test) |
@@ -31,17 +31,24 @@ cache. `docs/CORPUS_REPORT.md` regenerates identically from it.
 |---|---|
 | skills scanned | 5,442 |
 | declare permissions | 386 (7.1%) |
-| findings | 8,673 |
+| findings | 7,528 |
 | `MISMATCH_UNDER_DECLARED` | 76 of 386 declared (19.7%) |
 | `PI_DESCRIPTION_MISMATCH` | 212 of 5,442 (3.9%), i.e. 54.9% of declared |
 | `PARSE_FAILED` | 76 (1.4%) |
 | top rule | `LICENSE_MISSING` 1,148 skills (21.1%) |
 
-## The precision table (GOLD-v13)
+## The precision table (GOLD-v17)
 
-192 rows, 36 rules, κ **0.780** over two different model families
-(`deepseek-v4.1-flash` vs `z-ai/glm-5.3-flash`), 17 disagreements adjudicated.
-**20 of 36 rules pass G4** (precision ≥ 0.85), 15 of them at 100%.
+373 rows at 25 per rule (rev 59's draw), κ **0.770** over two different model
+families (`deepseek-v4.1-flash` vs `z-ai/glm-5.3-flash`), 23 disagreements
+adjudicated. **21 of 36 rules pass G4** (precision ≥ 0.85). The sample-size
+round exposed what 8-row draws hid: `SHELL_EXEC` measured 14/25, not the
+near-perfect figure the small draw suggested, and three sweeps (rev 57–60)
+suppressed the shapes it named — 8,673 → 7,528 findings overall. The
+re-draw at rev 60, GOLD-v18, failed its gate at κ 0.718 with raw agreement
+barely moved (92.5%) — kappa is prevalence-fragile at this draw size, and the
+disagreements sat on the two boundary families the guide cannot settle with a
+sentence. Kept as the record; GOLD-v17 remains the published table.
 
 Not a human GOLD set. `research/PROTOCOL.md` G3 asks for two humans; no human has
 ever labelled anything here (issue #11).

@@ -1137,6 +1137,33 @@ pub fn rule_count() -> usize {
 /// character classes (`w./-`) and attribute accesses (`json.dumps`) as file
 /// paths. No text rule changed, but the declared-vs-observed findings and the
 /// corpus cache both carry the old (wrong) capabilities, so the revision moves.
+/// rev 60: the shapes GOLD-v17 measured. `const { execFile } = await
+/// import("child_process")` is an import; `which powershell.exe 2>/dev/null`
+/// probes rather than invokes; a line that *starts* with a triple quote is a
+/// one-line docstring even though its quote count is even (it read as code and
+/// a `python -m` mention inside it fired); compliance guidance that flags
+/// copyleft licenses names them in order to review them (-14
+/// `LICENSE_RESTRICTIVE`); and an image inside markdown inline code does not
+/// render, so it does not fetch. Example *hosts* were tried for the pixel rule
+/// and measured wrong — four true positives came back — so the host list is
+/// recorded here as rejected. 7,549 -> 7,528 findings; three GOLD-v17 rows
+/// disappeared, all false positives.
+/// rev 59 (final form): plus the `subprocess.…` arm — an application spawn
+/// (`soffice`) is not "another interpreter" without a marker on the line
+/// (`python`, `.sh`, `shell=True`, `sys.executable`, …). -769 `SHELL_EXEC`
+/// findings; one v15 true positive lost, an opaque `subprocess.run(cmd)`, and
+/// GOLD-v15/v16 split on exactly that row, so the instability is recorded
+/// rather than tuned away.
+/// rev 59: the shapes GOLD-v15's larger draw measured. `subprocess.run` of an
+/// application is not an interpreter without a marker on the line (-88-class
+/// win: the pattern's own branch was name-not-call again); a hook *event* is
+/// emitted, not installed; a chained subscript walks a config; `[ -e … ]` tests
+/// one; a help line's parenthetical example mentions a scheduler; parameter
+/// defaults inherit the environment; a quoted *sentence* about a credential
+/// file is a message, not a reference (vocabulary decides — the first cut lost
+/// `"cat ~/.ssh/id_rsa && …"`, a staged command quoted with spaces); `.top` is
+/// a Three.js property as often as a TLD (-193 `NET_DOMAIN_LITERAL`). 8,523 ->
+/// 8,318 findings; six GOLD-v15 rows disappeared, all false positives.
 /// rev 58: text only. `FS_ABSOLUTE_PATH`'s message said "accessed" while the
 /// line-level matcher sees a *reference* — GOLD-v14's twelve disagreements were
 /// that one word. Findings are unchanged.
@@ -1180,7 +1207,7 @@ pub fn rule_count() -> usize {
 /// `PARSE_FAILED` 71 -> 76 on the pilot corpus, and every finding that depends on
 /// a declaration (`MISMATCH_*`, `LICENSE_*`) is downstream of that. Without the
 /// bump a warm cache would keep serving the old parser's results.
-pub const SCAN_LOGIC_REVISION: u32 = 58;
+pub const SCAN_LOGIC_REVISION: u32 = 60;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};

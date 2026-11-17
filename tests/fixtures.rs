@@ -285,6 +285,58 @@ fn a_link_local_address_is_not_a_contacted_endpoint() {
 }
 
 #[test]
+fn a_spawn_of_an_application_is_not_an_interpreter() {
+    // GOLD-v15: sixteen of twenty-five `SHELL_EXEC` rows were
+    // `subprocess.run(["soffice"] + args, env=env)` — the pattern's own
+    // `subprocess.…` branch matching a spawn of something that is not an
+    // interpreter. Without an interpreter marker on the line it is suppressed;
+    // `suspicious/interpreter-spawn` pins the other direction.
+    let out = scan_fixture("safe", "measured-shapes");
+    assert!(
+        !rules(&out).contains("SHELL_EXEC"),
+        "spawning an application is not an interpreter: {:#?}",
+        out.findings
+    );
+    let out = scan_fixture("suspicious", "interpreter-spawn");
+    assert_trips(&out, &["SHELL_EXEC"]);
+}
+
+#[test]
+fn hook_events_and_config_reads_are_not_installations() {
+    // GOLD-v15: `emit('UserPromptSubmit', text)` fires an event, `config
+    // ["hooks"]["FileChanged"][0]` walks a config, and `[ -e … ]` tests for
+    // one. A file-level write flag cannot see the difference; the line does.
+    let out = scan_fixture("safe", "measured-shapes");
+    let all = rules(&out);
+    let noisy: Vec<&String> = all.iter().filter(|r| r.starts_with("PERSIST_")).collect();
+    assert!(
+        noisy.is_empty(),
+        "no persistence rule applies to an event or a read: {:#?}",
+        out.findings
+    );
+}
+
+#[test]
+fn a_quoted_message_about_a_file_is_not_a_reference() {
+    // GOLD-v15: `"credentials.json missing client_id"` is an error message,
+    // not a read. The discriminator is message vocabulary, not whitespace —
+    // the first cut lost `"cat ~/.ssh/id_rsa && cat …"`, a staged command that
+    // is quoted with spaces too, and `suspicious/staged-commands` pins it.
+    let out = scan_fixture("safe", "measured-shapes");
+    assert!(
+        !rules(&out).contains("SECRET_PATH_READ"),
+        "an error message is not a reference: {:#?}",
+        out.findings
+    );
+    let out = scan_fixture("suspicious", "staged-commands");
+    assert!(
+        rules(&out).contains("SECRET_PATH_READ"),
+        "a staged command that reads key files must fire: {:#?}",
+        out.findings
+    );
+}
+
+#[test]
 fn a_discussion_of_injection_is_not_an_injection() {
     // GOLD-v13 measured the `PI_*` family at 0/8..2/8 with both annotators in
     // exact agreement: the detector fired on the *grammar* of security writing,

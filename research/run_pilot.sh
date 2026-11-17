@@ -127,26 +127,42 @@ fi
 > flagged every non-English `PI_DESCRIPTION_MISMATCH`, and unstemmed verbs
 > (`execution` did not match `execute`). Each fix is a regression test.
 >
-> ## GOLD-v13
+> ## GOLD-v17
 >
-> The precision column below is measured against `research/gold/GOLD-v13.jsonl`:
-> 192 line-level findings across 36 rules at `SCAN_LOGIC_REVISION = 56`, eight
-> per rule in hash order, one judgment per skill and rule. Two annotators from
-> **different model families** labelled them blind to each other —
+> The precision column below is measured against `research/gold/GOLD-v17.jsonl`:
+> 373 line-level findings across 36 rules at **25 per rule** (the sample-size
+> round; earlier rounds drew 8), one judgment per skill and rule. Two annotators
+> from **different model families** labelled them blind to each other —
 > `command-code/deepseek-v4.1-flash` and `command-code/z-ai/glm-5.3-flash` —
 > **no human annotated this set**, and neither annotator wrote the rules.
-> Cohen's kappa is **0.780** over the 192 rows (gate 0.75); the 17 disagreements
+> Cohen's kappa is **0.770** over the 373 rows (gate 0.75); the 23 disagreements
 > were adjudicated by a third session shown both verdicts, and every rule figure
-> below is per rule, never micro-averaged. **20 of 36 measured rules reach the
+> below is per rule, never micro-averaged. **21 of 36 measured rules reach the
 > 0.85 gate.**
 >
-> This round exists because two sessions of *one* model is not independence: they
-> share blind spots and agree on a wrong label as readily as a right one.
-> GOLD-v8 measured that by re-labelling GOLD-v6's unchanged 209 rows with a second
-> family — kappa fell from 0.845 to **0.723**, below the gate. GOLD-v9 then failed
-> at 0.593 and exposed a defect in this project's own annotation instruction
-> rather than in the rules: it said documentation is not an instance without
-> saying what a `SKILL.md` body is. Both failed rounds are kept as the record.
+> The re-draw at rev 60, GOLD-v18, failed its gate (κ 0.718) with raw
+> agreement barely moved — kappa is prevalence-fragile at this draw size, and
+> the disagreements sat on the two boundary families (`PI_CONCEALMENT`'s
+> do-not-tell rows, image-syntax and quoted-path specimens) that a sentence in
+> the guide cannot settle. It is kept as the record; the table below is the one
+> from the round that passed its gate. Rev 60's three further suppression
+> shapes removed 21 findings after this round; all three GOLD-v17 rows that
+> disappeared were false positives.
+>
+> Getting here took two failed rounds that are kept as the record. GOLD-v14
+> (κ 0.723) failed on one question twelve of its thirty-seven disagreements
+> asked: is a path that is constructed, exported or listed "accessed by absolute
+> path"? The claim was wrong, not the annotators — the rule now says
+> "referenced" (rev 58). GOLD-v16 (κ 0.556) failed because the rev-59
+> `subprocess.…` arm had silently not been applied, twelve `subprocess.run`
+> rows stayed in the draw and split the annotators; the guide was sharpened
+> again. GOLD-v15 (κ 0.772) and GOLD-v17 (κ 0.770) passed on the same draw size.
+>
+> The bigger draw measured what 8-row draws hid. `SHELL_EXEC` is 14/25 — its own
+> `subprocess.…` branch had been matching any spawn as "another interpreter" —
+> and revisions 57–60 suppressed the shapes the rounds named, taking the corpus
+> from 8,673 to 7,528 findings with every lost row checked to be a false
+> positive before it was allowed to stay lost.
 >
 > **Revision 53 is a line-kind model (T14), and it removes findings rather
 > than adding them.** A docstring or block comment describes behaviour; it does

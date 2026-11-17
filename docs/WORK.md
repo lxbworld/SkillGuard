@@ -20,30 +20,36 @@ with `recall unknown`, which is the honest state but not a useful one.
 
 Two annotators would also close #11; one gets precision for 36 rules but no κ.
 
-### 1. Suppress the `PI_*` discussion grammar, not just its vocabulary
+## Ready to start, no human needed
 
-Narrowing the claims (rev 56) raised annotator agreement from 0.762 to 0.780 and
-left precision exactly where it was. `PI_INJECTION_OVERRIDE` is 0/8 with both
-annotators in **exact agreement**: they are not confused about the claim, the
-detector fires on the wrong shape.
+Nothing. The queue below this line is either done or blocked on a person.
 
-`discusses_the_attack` matches words ("injection", "jailbreak", "payloads that
-override") and misses the shapes a writeup about attacks uses: a markdown table of
-categories, a reference document enumerating payloads, a `.yaml` of system prompts
-*to detect*. That is a suppression change in the same family as revisions 54 and
-55 — fixture first, then measure that no true positive is lost.
+One open question a future round should settle first: at ~92% raw agreement,
+the κ gate is prevalence-fragile (GOLD-v17 0.770 vs GOLD-v18 0.718 on
+same-sized draws from adjacent revisions). A future GOLD round should state its
+draw composition (per-rule n, rows in known-boundary families) alongside the
+gate, or the boundary families (`PI_CONCEALMENT`, `OBFUSC_TRACKING_PIXEL`
+specimens, quoted-path specimens) need a fixture-settled definition.
 
-Affected: `PI_INJECTION_OVERRIDE`, `PI_SYSTEM_IMPERSONATION`, `PI_CONCEALMENT`,
-`PI_EXFIL_INSTRUCTION`. Do not expect a wording change to help; it was tried.
+### Done since `7c4ed6b`
 
-### 2. Sample size, if and only if after 1
-
-The residual from #10 that is genuinely about `n`: 1–8 labels per rule lets one
-finding swing a rule by double digits. `research/build_gold.py --per-rule 25`
-produces roughly 900 rows per round. Worth doing **after** the claims are narrow,
-because a bigger draw of ambiguous rows buys precision for an ambiguous number.
-
-Cost: ~1 hour of model time per round, two rounds if the adjudication is split.
+- **`PI_*` grammar suppression (rev 57).** Narrowing the claims (rev 56) fixed
+  agreement, not precision; the suppression now covers the shapes: quoted
+  specimens (located case-insensitively), `//` comments in example code,
+  prompt-format fragments, technique-enumeration labels, and three pattern
+  narrowings (`without consent`, `do not log secrets`, bare `upload
+  credentials`).
+- **Suppression sees the whole line (rev 57).** `raw` was the 200-character
+  display cap while the regexes ran on the full haystack — the same defect the
+  rev 50 evidence bug had on the display side, and it cut both ways.
+- **The sample-size round (rev 58–60, GOLD-v14 … v17).** `--per-rule 25`
+  exposed what 8-row draws hid; two guide fixes and three scanner sweeps came
+  out of it; two failed rounds (v14 0.723, v16 0.556) are kept as the record.
+  `SHELL_EXEC` measured 14/25 and its own `subprocess.…` branch was
+  name-not-call; `FS_ABSOLUTE_PATH` now says "referenced" (its old
+  "accessed" cost twelve annotator disagreements); `.top` is a JavaScript
+  property as often as a TLD; compliance guidance that flags copyleft licences
+  names them in order to review them.
 
 ## Blocked on a person, not on work
 
