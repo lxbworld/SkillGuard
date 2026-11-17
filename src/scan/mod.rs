@@ -537,9 +537,15 @@ fn apply_text_rules(rel: &str, kind: ArtifactKind, norm: &Normalized, out: &mut 
                 .find(&hay)
                 .map(|m| m.as_str().to_owned())
                 .unwrap_or_default();
+            // Suppression sees the *full* line. `raw` is the 200-character
+            // display cap; the regex above ran on the full haystack, so a match
+            // past the cap was suppressed (or not) by a prefix that does not
+            // contain it. The exfiltration sentence in
+            // `3iQ-Corp/skills/anthropic/claude-api` hid its "exfiltrate it" —
+            // and its own "cannot ... exfiltrate" negation — past char 200.
             if suppress_match_in(
                 rule.spec.id,
-                &line.raw,
+                &line.raw_full,
                 &matched,
                 kind.is_executable(),
                 writes_somewhere,
@@ -769,11 +775,13 @@ fn in_a_printed_literal(line: &str) -> bool {
         "log::",
         "eprintln!",
         "raise ",
+        "throw ",
         "assert ",
         "echo \"",
         "echo '",
         "printf ",
         "write-host",
+        "write-error",
         "os.stderr.write",
     ];
     PRINTERS.iter().any(|p| t.starts_with(p))
@@ -898,9 +906,16 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
     // `Path.home() / ".ssh" / "id_rsa"`), so quote parity would hide real
     // reads and writes.
     let doc_in_docs = !executable && doc;
-    // Rules about a *command* suppress on a quoted match anywhere, but on
-    // markdown structure only in documentation.
-    let command_in_docs = quoted || (!executable && structure);
+    // Rules about a *command* suppress on a quoted match, on markdown structure
+    // in documentation — except a *staged* payload. `var c='curl … | bash'` in
+    // an installer is the payload itself; the raw_full fix (rev 57) made that
+    // quote visible on long lines for the first time and suppressed a fixture
+    // whose whole point is that the command sits past the display cap. The
+    // staged shape is recognisable: the literal around the match carries a URL
+    // and the match itself carries the pipe into an interpreter. A prose
+    // mention (`fail "Neither curl nor wget available."`) has neither.
+    let command_in_docs =
+        (quoted && !staged_payload(raw_line, matched)) || (!executable && structure);
     match rule {
         // An npm/pip/cargo integrity hash is base64, but it is not a payload.
         // A token, cookie or API key is a credential, and the SECRET_* rules
@@ -1062,7 +1077,13 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         // reported as a pipe-to-shell and as a destructive command.
         "DL_PIPE_TO_SHELL" | "SHELL_DESTRUCTIVE" | "SHELL_EVAL" | "NET_HTTP_CLIENT"
         | "NET_FETCH_CALL" | "PERSIST_CRON" => {
-            looks_like_test(&line) || looks_like_usage(&line) || command_in_docs
+            looks_like_test(&line)
+                || looks_like_usage(&line)
+                || command_in_docs
+                // A match inside a detection-pattern table in executable code:
+                // the corpus's scanner-skills hold hundreds of these strings,
+                // and the raw_full fix (rev 57) made them all visible at once.
+                || (executable && literal_is_regex(raw_line, matched))
         }
         // A remote-install command quoted inside a message is advice, not an
         // install: `echo "⚠️ yt-dlp not found. Install: pip install … && chmod
@@ -1070,7 +1091,15 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         // pip install git+https://…'` both fired. GOLD-v5 rated both false
         // positives and the bare command in a SKILL.md a true positive, which
         // is exactly the string-versus-instruction line `command_in_docs` draws.
-        "DL_REMOTE_INSTALL" => command_in_docs,
+        "DL_REMOTE_INSTALL" => {
+            command_in_docs
+                // GOLD-v5's two shapes are both *printed* advice, in an
+                // executable file too: `echo "… Install: pip install …"` and
+                // `throw '… Install manually: …'`. The message is for the
+                // operator; the skill installs nothing.
+                || in_a_printed_literal(raw_line)
+                || looks_like_test(&line)
+        }
         // A read of a sensitive path is a path claim, not a command one.
         "SECRET_PATH_READ" => looks_like_test(&line) || doc_in_docs,
         // `printenv` with no argument dumps every variable; `printenv HOME`
@@ -1146,6 +1175,14 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
                     && (t.starts_with("import ")
                         || t.starts_with("from ")
                         || line.contains("require(")))
+                // `Write-Error "[plan-it] no plan.html found. Run: pwsh
+                // scripts\init-plan.ps1 <template>"` is advice printed at the
+                // operator, not an invocation (same shape as GOLD-v5's echo).
+                || in_a_printed_literal(raw_line)
+                // A scanner's own pattern table: `("child_process_exec",
+                // r"""\b(?:child_process\.exec|execSync|exec)\s*\(""", …)`
+                // matches every interpreter word it exists to detect.
+                || literal_is_regex(raw_line, matched)
         }
         // A quoted phrase, a heading, a list item or a table cell is
         // documentation *about* the pattern, not an instruction to the agent.
@@ -1156,10 +1193,28 @@ fn suppress_match(rule: &str, raw_line: &str, matched: &str, executable: bool) -
         "PI_CONCEALMENT"
         | "PI_EXFIL_INSTRUCTION"
         | "PI_INJECTION_OVERRIDE"
-        | "PI_SYSTEM_IMPERSONATION"
-        | "PERSIST_HOOK" => {
-            doc || discusses_the_attack(&line) || looks_like_test(&line) || looks_like_usage(&line)
+        | "PI_SYSTEM_IMPERSONATION" => {
+            doc
+                || discusses_the_attack(&line)
+                || looks_like_test(&line)
+                || looks_like_usage(&line)
+                // `// Send token to your backend` is a comment in example
+                // code: it documents the legitimate call below it (GOLD-v13,
+                // four findings).
+                || raw_line.trim_start().starts_with("//")
+                || is_prompt_specimen(raw_line, &m)
+                // Technique-enumeration labels: `→ Embed hidden instruction …`
+                // and `**Pattern (Rear Hatch):** Hidden command prefix …`
+                // catalogue attacks; they do not issue them.
+                || raw_line.trim_start().starts_with('→')
+                || line.contains("**pattern")
         }
+        // PERSIST_HOOK's claim is a hook *installed*, so its suppression is
+        // write-based and lives in `suppress_match_in`, where the file-level
+        // write flag is visible. It sat in this group before, and once the
+        // case-insensitive find made quoted literals visible (rev 57), the
+        // quoted JSON keys of a heredoc installation suppressed the very
+        // finding `tests/fixtures/malicious/persistence` pins.
         _ => false,
     }
 }
@@ -1184,9 +1239,28 @@ fn discusses_the_attack(line: &str) -> bool {
         "attacker",
         "exfiltrat",
         "threat model",
+        // GOLD-v13: a writeup *describes* the attacker's moves in the third
+        // person. A skill issuing the instruction never calls its own payload
+        // malicious, never reports a violation, and never discusses payloads
+        // in the plural as a category.
+        "malicious",
+        "violation",
+        "payload",
     ]
     .iter()
     .any(|t| line.contains(t))
+}
+
+/// Is the line a *specimen* of a prompt-format fragment rather than an
+/// instruction? A SQL schema column, a chat-template token on its own line.
+fn is_prompt_specimen(line: &str, matched: &str) -> bool {
+    let t = line.trim_start();
+    // A DDL column definition: `[system] TEXT,` in a schema file (GOLD-v13).
+    matched.eq_ignore_ascii_case("[system]")
+        && (t.contains(" text") || t.contains("text,") || t.contains("integer"))
+        // A line that is only chat-template tokens is a specimen fragment; an
+        // injection carries text beyond the token.
+        || (t.starts_with("<|") && t.ends_with("|>") && !t[2..t.len() - 2].contains(' '))
 }
 
 /// Does the path this match names belong to agent configuration?
@@ -1228,7 +1302,7 @@ fn is_documentation_structure(line: &str) -> bool {
 /// "../../../bin/x.js")` no: the literal is relative, and a variable prefix does
 /// not make it absolute.
 fn quoted_literal_is_anchored(line: &str, matched: &str) -> bool {
-    let Some(hit) = line.find(matched) else {
+    let Some(hit) = find_ci(line, matched.trim()) else {
         return false;
     };
     // Walk back to the opening quote, then look at what follows it.
@@ -1243,8 +1317,21 @@ fn quoted_literal_is_anchored(line: &str, matched: &str) -> bool {
         || after.get(1..2) == Some(":")
 }
 
+/// [`text::find_ignoring_ascii_case`] returns a *character* offset; suppression
+/// helpers slice bytes, so this converts.
+fn find_ci(line: &str, needle: &str) -> Option<usize> {
+    let chars = text::find_ignoring_ascii_case(line, needle)?;
+    line.char_indices()
+        .nth(chars)
+        .map(|(b, _)| b)
+        .or(Some(line.len()))
+}
+
 fn is_quoted_example(line: &str, matched: &str) -> bool {
-    let Some(pos) = line.find(matched) else {
+    // `matched` comes from the lowercased haystack, so a case-sensitive find
+    // misses `"Ignore all previous instructions"` entirely and the quoted
+    // specimen was never suppressed (GOLD-v13, `Content: "Ignore …"`).
+    let Some(pos) = find_ci(line, matched.trim()) else {
         return false;
     };
     let before = &line[..pos];
@@ -1259,6 +1346,125 @@ fn is_quoted_example(line: &str, matched: &str) -> bool {
         .any(|q| before.matches(*q).count() % 2 == 1)
 }
 
+/// Is the string literal around `matched` a regular expression, not a command?
+///
+/// The corpus is full of *security scanners as skills*: source files whose
+/// pattern tables are strings like `r"""(?:curl|wget)\s+[^|]*\|\s*(?:bash|sh)"""`.
+/// Every command rule in this file matches the word `curl` inside such a table.
+/// A staged payload — `var c='curl … | bash'` — is plain text; a detection
+/// pattern cannot be written without regex syntax. So the discriminator is the
+/// metacharacters in the literal around the match, and a shell pipe alone must
+/// not count (`|` is part of the payloads these rules look for).
+fn literal_is_regex(line: &str, matched: &str) -> bool {
+    // A line can carry the same word twice — a pattern-table *name* and the
+    // pattern itself: `("child_process_exec", r"""\b(?:child_process\.exec…)"""`.
+    // The first occurrence sits in a plain quoted name; the second is the
+    // regex. Any occurrence in a regex-shaped literal decides.
+    let needle = matched.trim();
+    let mut from = 0;
+    while let Some(at) = find_ci(&line[from..], needle) {
+        let at = from + at;
+        from = at + needle.len().max(1);
+        // The literal extends from the last quote before the match to the next
+        // quote of the same kind after it. No quote, no literal: `curl -sL
+        // "$api_url" | …` has none before the match, and treating the whole
+        // line as one literal made `[^\"]` deeper in the line look like a
+        // regex around a bare command.
+        let Some((open_at, run)) = opening_quote_run(line, at) else {
+            continue;
+        };
+        let after = &line[at + needle.len()..];
+        let close = after
+            .find(&line[open_at..open_at + run])
+            .unwrap_or(after.len());
+        let literal = &line[open_at + run..at + needle.len() + close];
+        let regex_shaped = literal.contains("(?:")
+            || literal.contains("[^")
+            || literal.contains("\\w")
+            || literal.contains("\\d")
+            || literal.contains("\\s")
+            || literal.contains("\\b")
+            || literal.contains("\\.")
+            || literal.contains("\\(")
+            || literal.contains("\\+")
+            || literal.contains("*?")
+            || literal
+                .split('|')
+                .any(|alt| alt.trim_start().starts_with('\\'));
+        if regex_shaped {
+            return true;
+        }
+    }
+    false
+}
+
+/// The quote-run that opens the literal containing position `at`, as
+/// (start, length). A run of the same quote character counts as one opener —
+/// Python pattern tables open with `"""`. `None` when no quote precedes `at`.
+fn opening_quote_run(line: &str, at: usize) -> Option<(usize, usize)> {
+    let bytes = line.as_bytes();
+    let mut i = at.min(bytes.len());
+    while i > 0 {
+        let c = bytes[i - 1];
+        if c == b'"' || c == b'\'' || c == b'`' {
+            let mut start = i - 1;
+            while start > 0 && bytes[start - 1] == c {
+                start -= 1;
+            }
+            let run = (i - start).min(3);
+            return Some((start, run));
+        }
+        i -= 1;
+    }
+    None
+}
+
+/// Is the quoted literal around `matched` a *staged* command rather than a
+/// mention? The literal carries a URL and the match carries the pipe into an
+/// interpreter, which is a download-and-execute chain sitting in a string —
+/// the payload `tests/fixtures/suspicious/long-line-command` pins.
+fn staged_payload(line: &str, matched: &str) -> bool {
+    if !matched.contains('|') {
+        return false;
+    }
+    let Some(at) = find_ci(line, matched[..matched.len().min(40)].trim()) else {
+        return false;
+    };
+    let Some((open_at, run)) = opening_quote_run(line, at) else {
+        return false;
+    };
+    let after = &line[at + matched.len()..];
+    let close = after
+        .find(&line[open_at..open_at + run])
+        .unwrap_or(after.len());
+    let literal = &line[open_at + run..at + matched.len() + close];
+    literal.contains("://")
+}
+
+/// Does `word` occur in `line` at a word boundary?
+///
+/// `"sh "` also sits inside `install.sh | bash`, which made a minified
+/// installer's payload line read as a usage line and suppressed the very
+/// finding the line-kind model was built to catch. A word boundary is the
+/// difference: `install.sh` is a filename, `sh install.sh` is an invocation.
+fn contains_word(line: &str, word: &str) -> bool {
+    let bytes = line.as_bytes();
+    let mut from = 0;
+    while let Some(i) = line[from..].find(word) {
+        let at = from + i;
+        let end = at + word.len();
+        let before_ok =
+            at == 0 || !(bytes[at - 1].is_ascii_alphanumeric() || bytes[at - 1] == b'.');
+        // `python3` still counts as `python`; a filename like `pythons` does not.
+        let after_ok = end >= bytes.len() || !bytes[end].is_ascii_alphabetic();
+        if before_ok && after_ok {
+            return true;
+        }
+        from = at + 1;
+    }
+    false
+}
+
 /// Does the line document how to run something (a usage line in a docstring)?
 fn looks_like_usage(line: &str) -> bool {
     let t = line.trim_start();
@@ -1268,7 +1474,9 @@ fn looks_like_usage(line: &str) -> bool {
         || line.contains("example:")
         // A numbered documentation list (`3. Credential files (...)`).
         || (t.chars().next().is_some_and(|c| c.is_ascii_digit()) && t.contains(". "))
-        || ((line.contains("python") || line.contains("node") || line.contains("sh "))
+        || ((contains_word(line, "python")
+            || contains_word(line, "node")
+            || contains_word(line, "sh "))
             && line.contains('<')
             && line.contains('>'))
 }

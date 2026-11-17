@@ -531,7 +531,7 @@ pub fn evidence_window(raw_full: &str, raw: &str, matched: &str) -> String {
 /// The match text comes from a lowercased haystack and the line does not, so the
 /// comparison has to ignore case. Only ASCII is folded: non-ASCII case folding
 /// can change the character count, and this offset indexes characters.
-fn find_ignoring_ascii_case(hay: &str, needle: &str) -> Option<usize> {
+pub fn find_ignoring_ascii_case(hay: &str, needle: &str) -> Option<usize> {
     let h: Vec<char> = hay.chars().collect();
     let n: Vec<char> = needle.chars().collect();
     if n.is_empty() || n.len() > h.len() {

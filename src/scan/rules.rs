@@ -623,12 +623,17 @@ static TABLE: &[RuleSpec] = &[
         kinds: ANY,
         patterns: &[
             r"(?i)\b(?:do\s+not|don't|never)\s+(?:tell|mention|inform|reveal|disclose|show|alert)\s+(?:this\s+)?(?:to\s+)?(?:the\s+)?user",
-            r"(?i)\bwithout\s+(?:the\s+)?user'?s?\s+(?:knowledge|awareness|consent|permission)",
+            // `Never install it without the user's consent` is the *ethical*
+            // instruction and was GOLD-v13's false positive; knowledge and
+            // awareness are the concealment shapes.
+            r"(?i)\bwithout\s+(?:the\s+)?user'?s?\s+(?:knowledge|awareness)",
             // `silently` alone is ordinary prose ("it silently skips"), and it
             // was the single largest source of false positives on real data
             // (530 findings, nearly all documentation).
             r"(?i)\bhidden\s+(?:from\s+the\s+user|instruction|command|payload)",
-            r"(?i)\bdo\s+not\s+log\b",
+            // `do not log secrets` is credential hygiene; the claim is
+            // hiding *activity*, so the object has to be one.
+            r"(?i)\bdo\s+not\s+log\s+(?:this|the)\s+(?:command|output|result|action|activity|request|response|error|prompt|session)\b",
             r"(?i)\bconceal(?:ed|ing)?\s+(?:from|the|this)\b",
         ],
         message: "An instruction telling the agent to conceal what it did; describing the detector is not one",
@@ -648,7 +653,11 @@ static TABLE: &[RuleSpec] = &[
             r"(?i)\bexfiltrate\s+(?:it|them|this|the\s+\w+)\b",
             // A table row "Upload file" is not "upload the credentials". Require
             // a determiner and a sensitive object.
-            r"(?i)\bupload\s+(?:the\s+|your\s+|all\s+)?(?:contents?|credentials?|keys?|tokens?|secrets?|private\s+keys?)\b",
+            // "signed upload credentials" is an S3 noun phrase, not an
+            // instruction (GOLD-v13). A bare object needs a destination;
+            // with a determiner the verb phrase is complete on its own.
+            r"(?i)\bupload\s+(?:the\s+|your\s+|all\s+|their\s+)?(?:contents?|credentials?|keys?|tokens?|secrets?|private\s+keys?)\s+to\b",
+            r"(?i)\bupload\s+(?:the\s+|your\s+|all\s+|their\s+)(?:contents?|credentials?|keys?|tokens?|secrets?|private\s+keys?)\b",
             r"(?i)\btransmit\s+(?:the\s+)?(?:contents?|credentials?|secrets?|keys?)\b",
             r"(?i)\bsend\s+(?:the\s+)?(?:api[_ -]?key|token|credentials?|secrets?|ssh\s+key)\s+(?:to|toward)\b",
             r"(?i)\b(?:post|send)\s+[^\n]{0,60}(?:webhook\.site|ngrok\.io|ngrok-free|pipedream\.net|requestbin)",
@@ -1124,6 +1133,21 @@ pub fn rule_count() -> usize {
 /// character classes (`w./-`) and attribute accesses (`json.dumps`) as file
 /// paths. No text rule changed, but the declared-vs-observed findings and the
 /// corpus cache both carry the old (wrong) capabilities, so the revision moves.
+/// rev 57: the suppression *saw* the whole line for the first time. `raw` was a
+/// 200-character display cap while the regex ran on the full haystack, so a
+/// match past the cap was suppressed by a prefix that did not contain it — and
+/// an honest match past the cap was suppressed by one that did. On top of that:
+/// quoted specimen matching went case-insensitive (`matched` comes from the
+/// lowercased haystack and `find` missed `"Ignore all previous instructions"`),
+/// a command inside a string literal is suppressed as a *specimen* only when the
+/// literal is a regex table or printed advice, staged payloads
+/// (`var c='curl … | bash'`) keep firing, printed usage hints stop being
+/// invocations (-88 `SHELL_EXEC`), and the `PI_*` family gains grammar-level
+/// suppressions: `//` comments in example code, prompt-format fragments,
+/// technique-enumeration labels, `without consent` and `do not log secrets`
+/// dropped from `PI_CONCEALMENT`'s patterns, and a bare `upload credentials`
+/// now needs a destination. 8,673 -> 8,538 findings; 21 GOLD-v13 rows
+/// disappeared and all 21 were false positives.
 /// rev 56: no behaviour changed. Four `PI_*` claims now say what they do *not*
 /// detect ("describing the detector is not one"), because GOLD-v12 left them at
 /// 0/8..2/8 with both annotators *agreeing* on those labels — so the failure was
@@ -1149,7 +1173,7 @@ pub fn rule_count() -> usize {
 /// `PARSE_FAILED` 71 -> 76 on the pilot corpus, and every finding that depends on
 /// a declaration (`MISMATCH_*`, `LICENSE_*`) is downstream of that. Without the
 /// bump a warm cache would keep serving the old parser's results.
-pub const SCAN_LOGIC_REVISION: u32 = 56;
+pub const SCAN_LOGIC_REVISION: u32 = 57;
 
 pub fn fingerprint() -> String {
     use sha2::{Digest, Sha256};
